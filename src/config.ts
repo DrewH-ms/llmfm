@@ -19,13 +19,17 @@ export type LlmfmConfig = {
 
 export type ConfigStore = {
   current(): LlmfmConfig;
-  /** Toggles a handle's mute state and persists it. Returns the new state. */
-  toggleMute(handle: string): boolean;
+  /** Idempotent by design: a toggle can land inverted when two clients race or a key
+   *  repeats, and the caller always knows the state it wants. */
+  setMute(options: { session: SessionHandle; muted: boolean; preferLabel: boolean }): void;
   /** Re-reads the file if it changed on disk, so hand edits apply without a restart. */
   start(): void;
   stop(): void;
   onChange(listener: () => void): () => void;
 };
+
+/** Just enough of a session to name it. Keeps this module free of session state. */
+export type SessionHandle = { label: string; sessionId: string };
 
 const DEFAULT_CONFIG: LlmfmConfig = { muted: [], promptGap: DEFAULT_PROMPT_GAP };
 
@@ -127,15 +131,18 @@ export function createConfigStore(): ConfigStore {
 
   return {
     current: (): LlmfmConfig => config,
-    toggleMute(handle: string): boolean {
-      const trimmed = handle.trim();
-      if (trimmed.length === 0) return false;
-      const existing = config.muted.find((rule) => rule.toLowerCase() === trimmed.toLowerCase());
-      const muted = existing
-        ? config.muted.filter((rule) => rule !== existing)
-        : [...config.muted, trimmed];
-      write({ ...config, muted });
-      return existing === undefined;
+    setMute(options: { session: SessionHandle; muted: boolean; preferLabel: boolean }): void {
+      const { session, muted, preferLabel } = options;
+      // Clearing every rule that matches, rather than the one we would have written, is
+      // what makes unmuting work against a rule the user typed by hand.
+      const remaining = config.muted.filter((rule) => !matchesHandle(rule, session));
+      const next = muted
+        ? [...remaining, preferLabel ? session.label : handleFor(session)]
+        : remaining;
+      if (next.length === config.muted.length && next.every((rule, i) => rule === config.muted[i])) {
+        return;
+      }
+      write({ ...config, muted: next });
     },
     start(): void {
       if (timer) return;

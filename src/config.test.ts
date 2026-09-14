@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleFor, matchesHandle } from './config.ts';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createConfigStore, handleFor, matchesHandle } from './config.ts';
 
 const SESSION = { label: 'Rasa', sessionId: 'cb75a9e8-1234-5678-9abc-def012345678' };
 const OTHER = { label: 'Rasa', sessionId: 'a83b9096-1234-5678-9abc-def012345678' };
@@ -49,4 +52,49 @@ test('a session with no cwd does not print its id twice', () => {
   const fileOnly = { label: 'cedd6c59', sessionId: 'cedd6c59-1111-2222-3333-444455556666' };
   assert.equal(handleFor(fileOnly), 'cedd6c59');
   assert.ok(matchesHandle(handleFor(fileOnly), fileOnly));
+});
+
+test('setMute is idempotent and persists the durable form', (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'llmfm-test-'));
+  const previous = process.env.COPILOT_HOME;
+  process.env.COPILOT_HOME = home;
+  t.after(() => {
+    if (previous === undefined) delete process.env.COPILOT_HOME;
+    else process.env.COPILOT_HOME = previous;
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  const store = createConfigStore();
+  const session = { label: 'Rasa', sessionId: 'db68be72-1111-2222-3333-444455556666' };
+
+  // preferLabel is what keeps a rule working after a restart, when the id has changed.
+  store.setMute({ session, muted: true, preferLabel: true });
+  assert.deepEqual(store.current().muted, ['Rasa']);
+
+  // Repeating the same call must not stack duplicate rules; a key repeat sends it twice.
+  store.setMute({ session, muted: true, preferLabel: true });
+  assert.deepEqual(store.current().muted, ['Rasa']);
+
+  store.setMute({ session, muted: false, preferLabel: true });
+  assert.deepEqual(store.current().muted, []);
+});
+
+test('unmuting clears a rule the user wrote in another form', (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'llmfm-test-'));
+  const previous = process.env.COPILOT_HOME;
+  process.env.COPILOT_HOME = home;
+  t.after(() => {
+    if (previous === undefined) delete process.env.COPILOT_HOME;
+    else process.env.COPILOT_HOME = previous;
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  const session = { label: 'Rasa', sessionId: 'db68be72-1111-2222-3333-444455556666' };
+  const store = createConfigStore();
+  store.setMute({ session, muted: true, preferLabel: false });
+  assert.deepEqual(store.current().muted, ['Rasa (db68be72)']);
+
+  // Unmuting must clear whatever form matches, not just the form it would have written.
+  store.setMute({ session, muted: false, preferLabel: true });
+  assert.deepEqual(store.current().muted, []);
 });

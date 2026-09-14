@@ -63,7 +63,17 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     onSetMode: (mode) => orchestrator.setMode(mode),
     onSetFade: (seconds) => orchestrator.setFadeSeconds(seconds),
     onSimulate: ({ running }) => (running ? simulation.start() : simulation.stop()),
-    onToggleMute: (handle) => config.toggleMute(handle),
+    onSetMute({ sessionId, muted }) {
+      const session = registry.list().find((entry) => entry.sessionId === sessionId);
+      if (!session) return;
+      // Persist the folder name where it is unambiguous: session ids change on every
+      // restart, so a rule keyed on one would quietly stop applying tomorrow. Fall back to
+      // the fuller handle only when another live session shares the label.
+      const preferLabel = !registry
+        .list()
+        .some((other) => other.sessionId !== sessionId && other.label === session.label);
+      config.setMute({ session, muted, preferLabel });
+    },
     state,
   });
 

@@ -9,7 +9,7 @@ export type ApiHandlers = {
   onSetMode(mode: GateMode): void;
   onSetFade(seconds: number): void;
   onSimulate(options: { running: boolean }): void;
-  onToggleMute(handle: string): void;
+  onSetMute(options: { sessionId: string; muted: boolean }): void;
   state(): DaemonState;
 };
 
@@ -66,17 +66,19 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
     if (req.method === 'POST' && url.pathname === '/mute') {
       void readBody(req).then((body) => {
         // The dashboard is a separate process and its payload is as untrusted as a hook's.
-        let handle = '';
+        let sessionId = '';
+        let muted = false;
         try {
           const payload: unknown = JSON.parse(body);
           if (typeof payload === 'object' && payload !== null) {
-            const candidate = (payload as Record<string, unknown>)['handle'];
-            if (typeof candidate === 'string') handle = candidate;
+            const record = payload as Record<string, unknown>;
+            if (typeof record['sessionId'] === 'string') sessionId = record['sessionId'];
+            muted = record['muted'] === true;
           }
         } catch {
-          handle = '';
+          sessionId = '';
         }
-        if (handle) handlers.onToggleMute(handle);
+        if (sessionId) handlers.onSetMute({ sessionId, muted });
         res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(handlers.state()));
       });
