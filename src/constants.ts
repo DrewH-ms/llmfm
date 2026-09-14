@@ -9,6 +9,7 @@ export const HOOK_EVENTS = [
   'userPromptSubmitted',
   'preToolUse',
   'postToolUse',
+  'postToolUseFailure',
   'agentStop',
   'sessionEnd',
   'notification',

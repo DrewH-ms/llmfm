@@ -43,8 +43,11 @@ export function outcomeOf(event: HookEvent): SessionOutcome | null {
     case 'sessionStart':
     case 'userPromptSubmitted':
     case 'preToolUse':
-    // A tool completing means work resumed after a permission or elicitation dialog.
+    // A tool finishing means work resumed after a permission or elicitation dialog.
+    // The failure case matters just as much: a denied permission or a crashed tool must
+    // still release the part, or the session stays silent until the turn ends.
     case 'postToolUse':
+    case 'postToolUseFailure':
       return 'working';
     case 'agentStop':
       return 'awaiting-input';

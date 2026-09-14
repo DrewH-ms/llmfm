@@ -1,11 +1,13 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { HOOK_EVENTS } from './constants.ts';
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const HOOK_CONFIG_NAME = 'llmfm.json';
-const SCRIPT_PATH_TOKEN = 'HOOK_SCRIPT_PATH';
+/** The CLI kills a hook that outruns this, and it runs on every tool call. */
+const HOOK_TIMEOUT_SECONDS = 5;
 
 export function copilotHooksDir(): string {
   const home = process.env.COPILOT_HOME ?? join(process.env.USERPROFILE ?? homedir(), '.copilot');
@@ -16,14 +18,21 @@ export function installedHookPath(): string {
   return join(copilotHooksDir(), HOOK_CONFIG_NAME);
 }
 
+/** Generated from `HOOK_EVENTS` rather than kept as a template beside it: a hand-edited
+ *  config silently drifts from the events the daemon actually understands, and the symptom
+ *  is a part that never un-mutes rather than anything that looks like a missing hook. */
 export function installHooks(): string {
-  const template = readFileSync(join(PROJECT_ROOT, 'hooks', 'llmfm.command.json'), 'utf8');
   const scriptPath = join(PROJECT_ROOT, 'hooks', 'notify.js');
-  const config = template.replaceAll(SCRIPT_PATH_TOKEN, JSON.stringify(scriptPath).slice(1, -1));
+  const hooks = Object.fromEntries(
+    HOOK_EVENTS.map((event) => [
+      event,
+      [{ type: 'command', exec: 'node', args: [scriptPath, event], timeoutSec: HOOK_TIMEOUT_SECONDS }],
+    ]),
+  );
 
   const target = installedHookPath();
   mkdirSync(copilotHooksDir(), { recursive: true });
-  writeFileSync(target, config);
+  writeFileSync(target, `${JSON.stringify({ version: 1, hooks }, null, 2)}\n`);
   return target;
 }
 
