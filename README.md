@@ -1,6 +1,6 @@
-# Agent Orchestra
+# LLMFM
 
-**Hold music for your coding agent.** A local daemon plays a MIDI score through the
+**Radio for your coding agents.** A local daemon plays a MIDI score through the
 Windows system synthesizer while your Copilot CLI agents are working, and falls silent
 when one needs you. Sound means "still going". Silence means "you're up".
 
@@ -16,8 +16,8 @@ CLI behaves exactly as normal.
 
 ```powershell
 npm install
-node bin/orchestra.ts install   # install the Copilot CLI hooks
-node bin/orchestra.ts start     # run the daemon
+node bin/llmfm.ts install   # install the Copilot CLI hooks
+node bin/llmfm.ts start     # run the daemon
 ```
 
 Then **open a new Copilot CLI session**. Hooks are loaded once at session start, so a
@@ -26,7 +26,7 @@ terminal that was already open will not report to the daemon.
 To stop observing entirely:
 
 ```powershell
-node bin/orchestra.ts uninstall
+node bin/llmfm.ts uninstall
 ```
 
 Uninstall removes only our own hook file and restores the prior state.
@@ -35,21 +35,21 @@ Uninstall removes only our own hook file and restores the prior state.
 
 | Command | Purpose |
 | --- | --- |
-| `node bin/orchestra.ts start [track.mid]` | Run the daemon |
-| `node bin/orchestra.ts install` | Install the Copilot CLI hooks |
-| `node bin/orchestra.ts uninstall` | Remove them |
-| `node bin/orchestra.ts status` | Report daemon and hook state |
-| `node bin/orchestra.ts tracks` | List bundled tracks |
+| `node bin/llmfm.ts start [track.mid]` | Run the daemon |
+| `node bin/llmfm.ts install` | Install the Copilot CLI hooks |
+| `node bin/llmfm.ts uninstall` | Remove them |
+| `node bin/llmfm.ts status` | Report daemon and hook state |
+| `node bin/llmfm.ts tracks` | List bundled tracks |
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AGENT_ORCHESTRA_URL` | `http://127.0.0.1:7777` | Where hooks post events. Needed when the CLI runs across a network boundary (WSL, dev container). |
-| `AGENT_ORCHESTRA_PORT` | `7777` | Port the daemon listens on |
-| `AGENT_ORCHESTRA_SESSION` | unset | Pin audio to a single session id. Scope is otherwise machine-wide. |
-| `AGENT_ORCHESTRA_WATCH_FILE` | `1` | Set to `0` to ignore `open-sessions-state.json` and rely on hooks alone |
-| `AGENT_ORCHESTRA_LOG` | unset | Set to `1` to log hook event names and short session ids. Never logs payload contents. |
+| `LLMFM_URL` | `http://127.0.0.1:7777` | Where hooks post events. Needed when the CLI runs across a network boundary (WSL, dev container). |
+| `LLMFM_PORT` | `7777` | Port the daemon listens on |
+| `LLMFM_SESSION` | unset | Pin audio to a single session id. Scope is otherwise machine-wide. |
+| `LLMFM_WATCH_FILE` | `1` | Set to `0` to ignore `open-sessions-state.json` and rely on hooks alone |
+| `LLMFM_LOG` | unset | Set to `1` to log hook event names and short session ids. Never logs payload contents. |
 
 ## Sessions started before the hooks were installed
 
@@ -59,9 +59,9 @@ cannot see a mid-turn permission prompt. Such a session reads as *working* for i
 turn, which keeps the music playing while it is actually waiting on you.
 
 Since scope is machine-wide, one pre-install session is enough to hold the music on. Open
-a fresh session after installing, or pin audio with `AGENT_ORCHESTRA_SESSION`.
+a fresh session after installing, or pin audio with `LLMFM_SESSION`.
 
-`node bin/orchestra.ts status` shows each session's `source`; `hook` is fully tracked,
+`node bin/llmfm.ts status` shows each session's `source`; `hook` is fully tracked,
 `file` is the degraded case above.
 
 ## How it works

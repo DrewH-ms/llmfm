@@ -1,4 +1,4 @@
-// Forwards a raw Copilot CLI hook payload to the Agent Orchestra daemon.
+// Forwards a raw Copilot CLI hook payload to the LLMFM daemon.
 //
 // Stays plain JavaScript and imports nothing from the project: type stripping and module
 // resolution cost startup time the CLI's hook timeout does not have to spare.
@@ -9,7 +9,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 
-const DAEMON_URL = process.env.AGENT_ORCHESTRA_URL || 'http://127.0.0.1:7777';
+const DAEMON_URL = process.env.LLMFM_URL || 'http://127.0.0.1:7777';
 const REQUEST_TIMEOUT_MS = 200;
 const WATCHDOG_MARGIN_MS = 50;
 

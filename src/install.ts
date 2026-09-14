@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const HOOK_CONFIG_NAME = 'agent-orchestra.json';
+const HOOK_CONFIG_NAME = 'llmfm.json';
 const SCRIPT_PATH_TOKEN = 'HOOK_SCRIPT_PATH';
 
 export function copilotHooksDir(): string {
@@ -17,7 +17,7 @@ export function installedHookPath(): string {
 }
 
 export function installHooks(): string {
-  const template = readFileSync(join(PROJECT_ROOT, 'hooks', 'agent-orchestra.command.json'), 'utf8');
+  const template = readFileSync(join(PROJECT_ROOT, 'hooks', 'llmfm.command.json'), 'utf8');
   const scriptPath = join(PROJECT_ROOT, 'hooks', 'notify.js');
   const config = template.replaceAll(SCRIPT_PATH_TOKEN, JSON.stringify(scriptPath).slice(1, -1));
 

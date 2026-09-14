@@ -1,17 +1,17 @@
 {
-  "name": "agent-orchestra",
+  "name": "llmfm",
   "version": "0.1.0",
   "private": true,
-  "description": "Hold music for your coding agent",
+  "description": "Radio for your coding agents — the music stops when they need you",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
   },
   "scripts": {
-    "start": "node bin/orchestra.ts start",
-    "tui": "node bin/orchestra.ts tui",
-    "install-hooks": "node bin/orchestra.ts install",
-    "uninstall-hooks": "node bin/orchestra.ts uninstall",
+    "start": "node bin/llmfm.ts start",
+    "tui": "node bin/llmfm.ts tui",
+    "install-hooks": "node bin/llmfm.ts install",
+    "uninstall-hooks": "node bin/llmfm.ts uninstall",
     "typecheck": "tsc --noEmit",
     "test": "node --test src/**/*.test.ts"
   },

@@ -1,6 +1,6 @@
-export const DAEMON_PORT = Number(process.env.AGENT_ORCHESTRA_PORT) || 7777;
+export const DAEMON_PORT = Number(process.env.LLMFM_PORT) || 7777;
 export const DAEMON_HOST = '127.0.0.1';
-export const DAEMON_URL = process.env.AGENT_ORCHESTRA_URL ?? `http://${DAEMON_HOST}:${DAEMON_PORT}`;
+export const DAEMON_URL = process.env.LLMFM_URL ?? `http://${DAEMON_HOST}:${DAEMON_PORT}`;
 
 /** Events the hook config subscribes to. The name is passed explicitly as argv[2]
  *  because several payloads carry no event-name field. */
@@ -51,15 +51,15 @@ export const HOOK_AUTHORITY_MS = 5000;
 
 /** Pins audio to one session. Scope is otherwise machine-wide, which is correct in use
  *  but makes single-session behaviour impossible to demonstrate or test in isolation. */
-export const FOCUS_SESSION_ID = process.env.AGENT_ORCHESTRA_SESSION ?? null;
+export const FOCUS_SESSION_ID = process.env.LLMFM_SESSION ?? null;
 /** The open-sessions file is corroboration; turning it off isolates hook behaviour. */
-export const WATCH_OPEN_SESSIONS = process.env.AGENT_ORCHESTRA_WATCH_FILE !== '0';
+export const WATCH_OPEN_SESSIONS = process.env.LLMFM_WATCH_FILE !== '0';
 
 export const HOOK_REQUEST_TIMEOUT_MS = 200;
 
 /** Logs event names and short session ids only — never payload contents, which carry
  *  prompt text. Opt-in, for confirming which events the CLI actually fires. */
-export const LOG_EVENTS = process.env.AGENT_ORCHESTRA_LOG === '1';
+export const LOG_EVENTS = process.env.LLMFM_LOG === '1';
 
 export const SIMULATION_STEP_MS = 4000;
 export const SIMULATION_LABELS = ['api-service', 'web-client', 'infra', 'docs'] as const;

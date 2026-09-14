@@ -70,7 +70,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   });
   const watcher = WATCH_OPEN_SESSIONS ? watchOpenSessions(registry) : null;
 
-  console.log(`Agent Orchestra listening on http://127.0.0.1:7777`);
+  console.log(`LLMFM listening on http://127.0.0.1:7777`);
   console.log(midiStatus.ready ? `MIDI out: ${midiStatus.device}` : `MIDI unavailable: ${midiStatus.error}`);
   if (trackFile) console.log(`Track: ${trackFile}`);
 
