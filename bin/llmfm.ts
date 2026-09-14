@@ -9,7 +9,8 @@ const USAGE = `LLMFM — radio for your coding agents
   node bin/llmfm.ts install             install Copilot CLI hooks
   node bin/llmfm.ts uninstall           remove them
   node bin/llmfm.ts status              report daemon and hook state
-  node bin/llmfm.ts tracks              list bundled tracks`;
+  node bin/llmfm.ts tracks              list bundled tracks
+  node bin/llmfm.ts tui                 live dashboard, run in a second terminal`;
 
 async function reportStatus(): Promise<void> {
   const hookPath = installedHookPath();
@@ -49,6 +50,11 @@ switch (command) {
     break;
   case 'tracks':
     for (const track of listTracks()) console.log(track);
+    break;
+  // Imported for its side effects: the dashboard takes over the terminal on load, and it
+  // is loaded lazily so the other commands never pay for it or touch raw mode.
+  case 'tui':
+    await import('../tui/dashboard.ts');
     break;
   default:
     console.log(USAGE);
