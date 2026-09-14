@@ -85,9 +85,10 @@ export function createSessionRegistry(): SessionRegistry {
         if (previous?.source === 'simulation') continue;
         // The file's flag only flips at turn boundaries, so a recent hook reading outranks it.
         if (previous?.source === 'hook' && now - previous.updatedAt < HOOK_AUTHORITY_MS) continue;
-        // Its authority is directional: it can see a turn end, but never a mid-turn block,
-        // so it may clear `working` but may not restore it over a blocked session.
-        if (entry.working && previous?.blockedMidTurn) continue;
+        // Its authority is directional: it sees only that a session is busy, never why,
+        // so a background process reads the same as a working agent. It may silence a
+        // session it believes idle, but may never restore one the hooks have silenced.
+        if (entry.working && previous?.source === 'hook') continue;
         if (previous && previous.working === entry.working) continue;
 
         const cwd = previous?.cwd ?? null;
