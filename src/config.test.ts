@@ -1,0 +1,52 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { handleFor, matchesHandle } from './config.ts';
+
+const SESSION = { label: 'Rasa', sessionId: 'cb75a9e8-1234-5678-9abc-def012345678' };
+const OTHER = { label: 'Rasa', sessionId: 'a83b9096-1234-5678-9abc-def012345678' };
+
+test('the printed handle is what the user can type back', () => {
+  assert.equal(handleFor(SESSION), 'Rasa (cb75a9e8)');
+  assert.ok(matchesHandle(handleFor(SESSION), SESSION));
+});
+
+test('a folder label mutes every session in that folder', () => {
+  // The point of the label form: session ids change on every restart, so a rule keyed on
+  // one would silently stop applying the next morning.
+  assert.ok(matchesHandle('Rasa', SESSION));
+  assert.ok(matchesHandle('Rasa', OTHER));
+});
+
+test('a full handle mutes only the session it names', () => {
+  assert.ok(matchesHandle('Rasa (cb75a9e8)', SESSION));
+  assert.equal(matchesHandle('Rasa (cb75a9e8)', OTHER), false);
+});
+
+test('a session id prefix matches, but a short fragment never does', () => {
+  assert.ok(matchesHandle('cb75a9e8', SESSION));
+  assert.ok(matchesHandle('cb75', SESSION));
+  // Three characters would collide constantly and mute sessions the user never named.
+  assert.equal(matchesHandle('cb7', SESSION), false);
+});
+
+test('matching ignores case and surrounding whitespace', () => {
+  assert.ok(matchesHandle('  rasa  ', SESSION));
+  assert.ok(matchesHandle('RASA (CB75A9E8)', SESSION));
+});
+
+test('an empty rule matches nothing', () => {
+  // A blank line left in the config must not silence the whole orchestra.
+  assert.equal(matchesHandle('', SESSION), false);
+  assert.equal(matchesHandle('   ', SESSION), false);
+});
+
+test('an unrelated label does not match', () => {
+  assert.equal(matchesHandle('llmfm', SESSION), false);
+});
+
+test('a session with no cwd does not print its id twice', () => {
+  // File-sourced sessions carry no cwd, so their label is already the short id.
+  const fileOnly = { label: 'cedd6c59', sessionId: 'cedd6c59-1111-2222-3333-444455556666' };
+  assert.equal(handleFor(fileOnly), 'cedd6c59');
+  assert.ok(matchesHandle(handleFor(fileOnly), fileOnly));
+});

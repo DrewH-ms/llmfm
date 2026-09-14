@@ -53,6 +53,37 @@ Uninstall removes only our own hook file and restores the prior state.
 | `LLMFM_SUBAGENTS` | unset | Set to `1` to let sub-agents hold voices. By default they are ignored, so a fleet of background agents does not keep the music playing over the one session that is actually waiting on you. Requires `LLMFM_WATCH_FILE`. |
 | `LLMFM_LOG` | unset | Set to `1` to log hook event names and short session ids. Never logs payload contents. |
 
+### Muting sessions
+
+`~/.copilot/llmfm.config.json` is re-read about once a second, so edits apply mid-piece.
+Press `m` in the dashboard to toggle the highlighted session, or write it by hand:
+
+```json
+{
+  "muted": ["Rasa", "api-service (cb75a9e8)"],
+  "promptGap": "silent"
+}
+```
+
+A rule matches the folder name, the full handle the dashboard prints, or a session id
+prefix of four characters or more. Prefer the **folder name**: session ids change every
+restart, so a rule keyed on one quietly stops applying tomorrow.
+
+A muted session releases its voice for someone else rather than sounding like an agent
+that stopped, and it stays listed in the dashboard so you can find it again.
+
+### `promptGap` — the one thing the CLI will not tell us
+
+When you approve a permission prompt, the CLI emits **no event**. The next signal is the
+tool *finishing*. So between approving and completion, nothing distinguishes "still
+waiting on you" from "working hard". Neither setting is free:
+
+- `silent` (default) — the part stays quiet until the tool completes. Silence never lies
+  about needing you, but a long approved command sounds exactly like a blocked one. The
+  dashboard marks these `BLOCKED?` so the screen can say what the audio cannot.
+- `resume` — the part rejoins a few seconds after the prompt. Long commands sound right,
+  but step away mid-prompt and the music returns while you are still needed.
+
 ## Sessions started before the hooks were installed
 
 Hooks are loaded once, at session start. A session opened before `install` never reports

@@ -61,12 +61,34 @@ export const WATCH_OPEN_SESSIONS = process.env.LLMFM_WATCH_FILE !== '0';
  *  a fleet of them keeps the orchestra playing while the session you are watching waits
  *  on you. Requires the open-sessions file, which is the only thing that can tell them
  *  apart. */
-export const IGNORE_SUBAGENTS = WATCH_OPEN_SESSIONS && process.env.LLMFM_SUBAGENTS !== 'include';
+export const IGNORE_SUBAGENTS =
+  WATCH_OPEN_SESSIONS && !['1', 'include'].includes(process.env.LLMFM_SUBAGENTS ?? '');
 /** How long a hook session may go unlisted before it is taken for a sub-agent. The file
  *  lags a new session by a poll or two, and a real session must never be misread. */
 export const SUBAGENT_GRACE_MS = 6000;
 
 export const HOOK_REQUEST_TIMEOUT_MS = 200;
+
+/** Where mute rules live. Beside the hook config rather than in the repo, because muting
+ *  is a property of this machine's sessions, not of the project. */
+export const CONFIG_FILE_NAME = 'llmfm.config.json';
+/** Polled, not watched: the file is edited by hand and by the dashboard, and an atomic
+ *  rename blinds fs.watch the same way it does for the open-sessions file. */
+export const CONFIG_POLL_MS = 1000;
+/** Enough of a session id to be unambiguous in practice while staying typeable. */
+export const HANDLE_ID_LENGTH = 8;
+
+/** What to do between approving a permission prompt and the tool finishing. The CLI fires
+ *  nothing when a prompt is answered, so this gap is genuinely unobservable:
+ *  - `silent` keeps the part muted, never playing while you are truly needed, at the cost
+ *    of a false alarm for the length of the command.
+ *  - `resume` trades that away: long commands sound right, but stepping away mid-prompt
+ *    means the music returns and the alert is lost. */
+export const PROMPT_GAP_MODES = ['silent', 'resume'] as const;
+export type PromptGapMode = (typeof PROMPT_GAP_MODES)[number];
+export const DEFAULT_PROMPT_GAP: PromptGapMode = 'silent';
+/** How long `resume` waits before assuming a prompt was answered. */
+export const PROMPT_GAP_RESUME_MS = 8000;
 
 /** Logs event names and short session ids only — never payload contents, which carry
  *  prompt text. Opt-in, for confirming which events the CLI actually fires. */

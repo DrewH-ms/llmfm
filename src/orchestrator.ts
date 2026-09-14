@@ -2,11 +2,14 @@ import {
   DEFAULT_FADE_SECONDS,
   FOCUS_SESSION_ID,
   IGNORE_SUBAGENTS,
+  PROMPT_GAP_RESUME_MS,
   SUBAGENT_GRACE_MS,
   VOICE_RESPLIT_DEBOUNCE_MS,
 } from './constants.ts';
 import type { GateMode } from './constants.ts';
 import { assignVoices } from './assignment.ts';
+import { handleFor, isMuted } from './config.ts';
+import type { ConfigStore } from './config.ts';
 import { buildVoiceTree } from './voices.ts';
 import type { Mixer } from './mixer.ts';
 import type { Scheduler } from './scheduler.ts';
@@ -30,8 +33,9 @@ export function createOrchestrator(options: {
   registry: SessionRegistry;
   mixer: Mixer;
   scheduler: Scheduler;
+  config: ConfigStore;
 }): Orchestrator {
-  const { registry, mixer, scheduler } = options;
+  const { registry, mixer, scheduler, config } = options;
 
   let score: Score | null = null;
   let tree: VoiceTree | null = null;
@@ -41,7 +45,17 @@ export function createOrchestrator(options: {
   let voiceCount = 0;
   let coarsenTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const shouldSound = (working: boolean): boolean => (mode === 'reward' ? working : !working);
+  const shouldSound = (session: Session): boolean => {
+    // Nothing is emitted when a permission prompt is answered, so a session can sit
+    // blocked-looking while the tool it authorised runs. `resume` guesses the prompt was
+    // answered; the default keeps faith with silence meaning "needed".
+    const stale =
+      config.current().promptGap === 'resume' &&
+      session.blockedMidTurn &&
+      Date.now() - session.updatedAt >= PROMPT_GAP_RESUME_MS;
+    const working = session.working || stale;
+    return mode === 'reward' ? working : !working;
+  };
 
   /** A sub-agent fires hooks but is never listed by the CLI, and it never waits on the
    *  user, so counting it would keep the orchestra playing over the silence that is the
@@ -52,9 +66,15 @@ export function createOrchestrator(options: {
     !session.listedByCli &&
     now - session.startedAt >= SUBAGENT_GRACE_MS;
 
+  /** Sessions that may hold a voice. A muted session is deliberately excluded here rather
+   *  than gated silent, so it frees its voice for someone else instead of sounding like an
+   *  agent that stopped. */
   const gatingSessions = (): Session[] => {
     const now = Date.now();
-    const sessions = registry.list().filter((session) => !isSubAgent(session, now));
+    const muteRules = config.current();
+    const sessions = registry
+      .list()
+      .filter((session) => !isSubAgent(session, now) && !isMuted(muteRules, session));
     if (!FOCUS_SESSION_ID) return sessions;
     return sessions.filter((session) => session.sessionId === FOCUS_SESSION_ID);
   };
@@ -115,7 +135,7 @@ export function createOrchestrator(options: {
       if (!voice) continue;
       for (const partId of voice.partIds) {
         voicedParts.add(partId);
-        if (shouldSound(session.working)) audibleParts.add(partId);
+        if (shouldSound(session)) audibleParts.add(partId);
       }
     }
 
@@ -154,10 +174,15 @@ export function createOrchestrator(options: {
     },
     fadeSeconds: (): number => fade,
     sessionViews(): SessionView[] {
-      const sessions = gatingSessions();
-      const assignment = currentAssignment(sessions);
-      return sessions.map((session) => {
+      const now = Date.now();
+      const muteRules = config.current();
+      // Muted sessions are listed even though they hold no voice: hiding one would leave
+      // no way to find it again and unmute it.
+      const visible = registry.list().filter((session) => !isSubAgent(session, now));
+      const assignment = currentAssignment(gatingSessions());
+      return visible.map((session) => {
         const voice = assignment.bySession.get(session.sessionId);
+        const muted = isMuted(muteRules, session);
         return {
           sessionId: session.sessionId,
           working: session.working,
@@ -166,8 +191,10 @@ export function createOrchestrator(options: {
           source: session.source,
           blockedMidTurn: session.blockedMidTurn,
           updatedAt: session.updatedAt,
+          handle: handleFor(session),
+          muted,
           voiceName: voice?.name ?? null,
-          audible: voice !== undefined && shouldSound(session.working),
+          audible: !muted && voice !== undefined && shouldSound(session),
         };
       });
     },

@@ -11,6 +11,7 @@ import { watchOpenSessions } from './open-sessions.ts';
 import { parseHookEvent } from './intake.ts';
 import { loadScore } from './score.ts';
 import { createSimulation } from './simulate.ts';
+import { createConfigStore } from './config.ts';
 import { WATCH_OPEN_SESSIONS, LOG_EVENTS } from './constants.ts';
 import type { DaemonState } from './types.ts';
 
@@ -30,7 +31,8 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const mixer = createMixer(midi);
   const scheduler = createScheduler({ midi, mixer });
   const registry = createSessionRegistry();
-  const orchestrator = createOrchestrator({ registry, mixer, scheduler });
+  const config = createConfigStore();
+  const orchestrator = createOrchestrator({ registry, mixer, scheduler, config });
   const simulation = createSimulation(registry);
 
   const trackFile = options.track ?? listTracks()[0];
@@ -61,6 +63,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     onSetMode: (mode) => orchestrator.setMode(mode),
     onSetFade: (seconds) => orchestrator.setFadeSeconds(seconds),
     onSimulate: ({ running }) => (running ? simulation.start() : simulation.stop()),
+    onToggleMute: (handle) => config.toggleMute(handle),
     state,
   });
 
@@ -68,6 +71,12 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     orchestrator.refresh();
     api.broadcast();
   });
+  // A hand edit to the config must take effect mid-piece, not at the next restart.
+  const unsubscribeConfig = config.onChange(() => {
+    orchestrator.refresh();
+    api.broadcast();
+  });
+  config.start();
   const watcher = WATCH_OPEN_SESSIONS ? watchOpenSessions(registry) : null;
 
   console.log(`LLMFM listening on http://127.0.0.1:7777`);
@@ -77,6 +86,8 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   return {
     async stop(): Promise<void> {
       unsubscribe();
+      unsubscribeConfig();
+      config.stop();
       watcher?.stop();
       simulation.stop();
       scheduler.stop();

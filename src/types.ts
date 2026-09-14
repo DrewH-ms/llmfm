@@ -90,6 +90,10 @@ export type SessionView = Pick<
   Session,
   'sessionId' | 'working' | 'cwd' | 'label' | 'source' | 'blockedMidTurn' | 'updatedAt'
 > & {
+  /** What a user types to mute this session, e.g. "Rasa (cb75a9e8)". */
+  handle: string;
+  /** True when a config rule currently mutes this session; it then holds no voice. */
+  muted: boolean;
   /** Null when the session is unvoiced. */
   voiceName: string | null;
   audible: boolean;
