@@ -1,13 +1,13 @@
 ---
-description: Project context and code-quality dos and don'ts for Agent Orchestra. Read by Copilot code review and the coding/chat/CLI agents.
+description: Project context and code-quality dos and don'ts for LLMFM. Read by Copilot code review and the coding/chat/CLI agents.
 applyTo: "**/*.ts,**/*.js"
 ---
 
-# Agent Orchestra
+# LLMFM
 
 ## Project context
 
-Agent Orchestra is a hackathon project with a **three-day budget and a single
+LLMFM is a hackathon project with a **three-day budget and a single
 developer**. There is no team to coordinate with and no existing production surface to
 stay compatible with.
 
@@ -46,7 +46,7 @@ Copilot CLI configuration, and observes their sessions. Accordingly:
 If a task seems to require crossing one of these lines, stop and raise it rather than
 finding a way around.
 
-## Project knowledge lives in `Hackathon/context.md`
+## Project knowledge lives in `../context.md`
 
 `context.md` (one directory above the project root) is the running record of what has
 actually been verified about this project: hook payload shapes, platform quirks,
