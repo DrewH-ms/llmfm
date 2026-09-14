@@ -21,7 +21,8 @@ node bin/llmfm.ts start     # run the daemon
 ```
 
 Then **open a new Copilot CLI session**. Hooks are loaded once at session start, so a
-terminal that was already open will not report to the daemon.
+terminal that was already open will not report to the daemon. Resuming an existing
+session in a new terminal also works — resume starts a fresh process, which loads hooks.
 
 To stop observing entirely:
 
@@ -59,7 +60,8 @@ cannot see a mid-turn permission prompt. Such a session reads as *working* for i
 turn, which keeps the music playing while it is actually waiting on you.
 
 Since scope is machine-wide, one pre-install session is enough to hold the music on. Open
-a fresh session after installing, or pin audio with `LLMFM_SESSION`.
+a fresh session after installing, resume the existing one in a new terminal, or pin audio
+with `LLMFM_SESSION`.
 
 `node bin/llmfm.ts status` shows each session's `source`; `hook` is fully tracked,
 `file` is the degraded case above.
