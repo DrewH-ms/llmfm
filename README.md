@@ -50,6 +50,7 @@ Uninstall removes only our own hook file and restores the prior state.
 | `LLMFM_PORT` | `7777` | Port the daemon listens on |
 | `LLMFM_SESSION` | unset | Pin audio to a single session id. Scope is otherwise machine-wide. |
 | `LLMFM_WATCH_FILE` | `1` | Set to `0` to ignore `open-sessions-state.json` and rely on hooks alone |
+| `LLMFM_SUBAGENTS` | unset | Set to `1` to let sub-agents hold voices. By default they are ignored, so a fleet of background agents does not keep the music playing over the one session that is actually waiting on you. Requires `LLMFM_WATCH_FILE`. |
 | `LLMFM_LOG` | unset | Set to `1` to log hook event names and short session ids. Never logs payload contents. |
 
 ## Sessions started before the hooks were installed

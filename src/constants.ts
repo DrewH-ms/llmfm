@@ -55,6 +55,16 @@ export const FOCUS_SESSION_ID = process.env.LLMFM_SESSION ?? null;
 /** The open-sessions file is corroboration; turning it off isolates hook behaviour. */
 export const WATCH_OPEN_SESSIONS = process.env.LLMFM_WATCH_FILE !== '0';
 
+/** Sub-agents fire hooks but are never listed as open sessions, so a session the CLI does
+ *  not list is one the user is not sitting in front of. Counting them dilutes the signal:
+ *  a fleet of them keeps the orchestra playing while the session you are watching waits
+ *  on you. Requires the open-sessions file, which is the only thing that can tell them
+ *  apart. */
+export const IGNORE_SUBAGENTS = WATCH_OPEN_SESSIONS && process.env.LLMFM_SUBAGENTS !== 'include';
+/** How long a hook session may go unlisted before it is taken for a sub-agent. The file
+ *  lags a new session by a poll or two, and a real session must never be misread. */
+export const SUBAGENT_GRACE_MS = 6000;
+
 export const HOOK_REQUEST_TIMEOUT_MS = 200;
 
 /** Logs event names and short session ids only — never payload contents, which carry

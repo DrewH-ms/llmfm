@@ -59,6 +59,8 @@ export function createSessionRegistry(): SessionRegistry {
           outcome === null
             ? (previous?.blockedMidTurn ?? false)
             : event.name === 'notification' && outcome === 'awaiting-input',
+        listedByCli: seenInFile.has(event.sessionId),
+        startedAt: previous?.startedAt ?? Date.now(),
         updatedAt: Date.now(),
       };
       sessions.set(event.sessionId, next);
@@ -83,6 +85,12 @@ export function createSessionRegistry(): SessionRegistry {
         seenInFile.add(entry.sessionId);
         const previous = sessions.get(entry.sessionId);
         if (previous?.source === 'simulation') continue;
+        // Being listed at all is the fact that separates a session the user is sitting in
+        // front of from a sub-agent, so it is recorded even when nothing else changed.
+        if (previous && !previous.listedByCli) {
+          sessions.set(entry.sessionId, { ...previous, listedByCli: true });
+          changed = true;
+        }
         // The file's flag only flips at turn boundaries, so a recent hook reading outranks it.
         if (previous?.source === 'hook' && now - previous.updatedAt < HOOK_AUTHORITY_MS) continue;
         // Its authority is directional: it sees only that a session is busy, never why,
@@ -99,6 +107,8 @@ export function createSessionRegistry(): SessionRegistry {
           label: labelOf({ cwd, sessionId: entry.sessionId }),
           source: 'file',
           blockedMidTurn: false,
+          listedByCli: true,
+          startedAt: previous?.startedAt ?? now,
           updatedAt: now,
         });
         changed = true;
@@ -131,6 +141,8 @@ export function createSessionRegistry(): SessionRegistry {
         label: options.label,
         source: 'simulation',
         blockedMidTurn: false,
+        listedByCli: false,
+        startedAt: previous?.startedAt ?? Date.now(),
         updatedAt: Date.now(),
       });
       if (

@@ -1,9 +1,14 @@
-import { DEFAULT_FADE_SECONDS, FOCUS_SESSION_ID } from './constants.ts';
+import {
+  DEFAULT_FADE_SECONDS,
+  FOCUS_SESSION_ID,
+  IGNORE_SUBAGENTS,
+  SUBAGENT_GRACE_MS,
+} from './constants.ts';
 import type { GateMode } from './constants.ts';
 import type { Mixer } from './mixer.ts';
 import type { Scheduler } from './scheduler.ts';
 import type { SessionRegistry } from './sessions.ts';
-import type { Score, SessionView } from './types.ts';
+import type { Score, Session, SessionView } from './types.ts';
 
 export type Orchestrator = {
   bindScore(score: Score): void;
@@ -31,8 +36,18 @@ export function createOrchestrator(options: {
 
   const shouldSound = (working: boolean): boolean => (mode === 'reward' ? working : !working);
 
-  const gatingSessions = () => {
-    const sessions = registry.list();
+  /** A sub-agent fires hooks but is never listed by the CLI, and it never waits on the
+   *  user, so counting it would keep the orchestra playing over the silence that is the
+   *  whole signal. New sessions are spared until the file has had time to list them. */
+  const isSubAgent = (session: Session, now: number): boolean =>
+    IGNORE_SUBAGENTS &&
+    session.source === 'hook' &&
+    !session.listedByCli &&
+    now - session.startedAt >= SUBAGENT_GRACE_MS;
+
+  const gatingSessions = (): Session[] => {
+    const now = Date.now();
+    const sessions = registry.list().filter((session) => !isSubAgent(session, now));
     if (!FOCUS_SESSION_ID) return sessions;
     return sessions.filter((session) => session.sessionId === FOCUS_SESSION_ID);
   };
@@ -72,7 +87,13 @@ export function createOrchestrator(options: {
     fadeSeconds: (): number => fade,
     sessionViews(): SessionView[] {
       return gatingSessions().map((session) => ({
-        ...session,
+        sessionId: session.sessionId,
+        working: session.working,
+        cwd: session.cwd,
+        label: session.label,
+        source: session.source,
+        blockedMidTurn: session.blockedMidTurn,
+        updatedAt: session.updatedAt,
         voiceName: null,
         audible: shouldSound(session.working),
       }));

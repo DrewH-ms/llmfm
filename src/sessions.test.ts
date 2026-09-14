@@ -90,3 +90,46 @@ test('a repeated permission prompt leaves the session blocked exactly once', (t)
 
   assert.equal(workingOf(registry), true, 'approval must resume after a duplicate prompt');
 });
+
+test('a session the file never lists stays unlisted, marking it a sub-agent', () => {
+  const registry = createSessionRegistry();
+
+  registry.applyHookEvent(hookEvent('userPromptSubmitted'));
+  const session = registry.list().find((entry) => entry.sessionId === SESSION_ID);
+  assert.ok(session);
+
+  assert.equal(session.listedByCli, false, 'hooks alone never prove the CLI listed it');
+  assert.equal(session.source, 'hook');
+});
+
+test('the file listing a hook session upgrades it even when nothing else changed', () => {
+  const registry = createSessionRegistry();
+
+  registry.applyHookEvent(hookEvent('userPromptSubmitted'));
+  // Same working state the hook already set, so the entry is otherwise a no-op. The
+  // listing itself is the news: it is what separates a real session from a sub-agent.
+  registry.applyFileState([{ sessionId: SESSION_ID, working: true }]);
+
+  const session = registry.list().find((entry) => entry.sessionId === SESSION_ID);
+  assert.ok(session);
+  assert.equal(session.listedByCli, true, 'the flag must not go stale behind a no-op');
+});
+
+test('startedAt is fixed for the lifetime of a session', (t) => {
+  t.mock.timers.enable({ apis: ['Date'] });
+  const registry = createSessionRegistry();
+
+  registry.applyHookEvent(hookEvent('userPromptSubmitted'));
+  const first = registry.list()[0];
+  assert.ok(first);
+
+  // A busy sub-agent refreshes updatedAt constantly; ageing off updatedAt would mean it
+  // never aged out at all.
+  t.mock.timers.tick(60_000);
+  registry.applyHookEvent(hookEvent('postToolUse'));
+
+  const later = registry.list()[0];
+  assert.ok(later);
+  assert.equal(later.startedAt, first.startedAt);
+  assert.notEqual(later.updatedAt, first.updatedAt);
+});

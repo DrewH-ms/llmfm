@@ -23,6 +23,12 @@ export type Session = {
   /** Set when a `notification` hook reported a mid-turn block. The open-sessions file
    *  only flips at turn boundaries, so it cannot see this state and must not clear it. */
   blockedMidTurn: boolean;
+  /** Whether the CLI has ever listed this session as an open one. Sub-agents fire hooks
+   *  but are never listed, which is the only way to tell them from a session the user is
+   *  actually sitting in front of. */
+  listedByCli: boolean;
+  /** When the session was first observed. Fixed for its lifetime, unlike `updatedAt`. */
+  startedAt: number;
   updatedAt: number;
 };
 
@@ -77,7 +83,13 @@ export type DaemonState = {
   sessions: SessionView[];
 };
 
-export type SessionView = Session & {
+/** What the daemon puts on the wire. Deliberately not `Session & …`: `listedByCli` and
+ *  `startedAt` exist only to arbitrate between the two signals, and clients that render
+ *  them would be reading internal bookkeeping as if it meant something to the listener. */
+export type SessionView = Pick<
+  Session,
+  'sessionId' | 'working' | 'cwd' | 'label' | 'source' | 'blockedMidTurn' | 'updatedAt'
+> & {
   /** Null when the session is unvoiced. */
   voiceName: string | null;
   audible: boolean;
