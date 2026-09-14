@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      { "type": "command", "exec": "node", "args": ["HOOK_SCRIPT_PATH", "sessionStart"], "timeoutSec": 5 }
+    ],
+    "userPromptSubmitted": [
+      { "type": "command", "exec": "node", "args": ["HOOK_SCRIPT_PATH", "userPromptSubmitted"], "timeoutSec": 5 }
+    ],
+    "preToolUse": [
+      { "type": "command", "exec": "node", "args": ["HOOK_SCRIPT_PATH", "preToolUse"], "timeoutSec": 5 }
+    ],
+    "postToolUse": [
+      { "type": "command", "exec": "node", "args": ["HOOK_SCRIPT_PATH", "postToolUse"], "timeoutSec": 5 }
+    ],
+    "agentStop": [
+      { "type": "command", "exec": "node", "args": ["HOOK_SCRIPT_PATH", "agentStop"], "timeoutSec": 5 }
+    ],
+    "sessionEnd": [
+      { "type": "command", "exec": "node", "args": ["HOOK_SCRIPT_PATH", "sessionEnd"], "timeoutSec": 5 }
+    ],
+    "notification": [
+      { "type": "command", "exec": "node", "args": ["HOOK_SCRIPT_PATH", "notification"], "timeoutSec": 5 }
+    ]
+  }
+}

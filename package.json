@@ -1,0 +1,25 @@
+{
+  "name": "agent-orchestra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hold music for your coding agent",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node bin/orchestra.ts start",
+    "tui": "node bin/orchestra.ts tui",
+    "install-hooks": "node bin/orchestra.ts install",
+    "uninstall-hooks": "node bin/orchestra.ts uninstall",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@tonejs/midi": "^2.0.28"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0"
+  }
+}

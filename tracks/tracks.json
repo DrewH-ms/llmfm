@@ -1,0 +1,13 @@
+{
+  "tracks": [
+    {
+      "file": "beethoven5.mid",
+      "title": "Symphony No. 5 in C minor, Op. 67",
+      "composer": "Ludwig van Beethoven",
+      "composed": 1808,
+      "copyright": "Public domain — the composition entered the public domain long ago.",
+      "provenance": "Carried forward from the project prototype.",
+      "note": "Placeholder while the curated library is assembled. Romantic orchestration doubles lines and rests often, so individual parts read less clearly when gated than counterpoint-heavy repertoire does."
+    }
+  ]
+}
