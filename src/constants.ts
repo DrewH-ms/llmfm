@@ -63,3 +63,49 @@ export const LOG_EVENTS = process.env.LLMFM_LOG === '1';
 
 export const SIMULATION_STEP_MS = 4000;
 export const SIMULATION_LABELS = ['api-service', 'web-client', 'infra', 'docs'] as const;
+
+/** The coarsest grouping a listener can still name by ear, and so the top level of the
+ *  voice tree. */
+export const SECTIONS = [
+  'Strings',
+  'Woodwinds',
+  'Brass',
+  'Percussion',
+  'Keyboard',
+  'Voices',
+  'Other',
+] as const;
+export type SectionName = (typeof SECTIONS)[number];
+
+/** Inclusive GM program ranges mapped onto sections, first match winning; anything
+ *  unmatched is 'Other', and channel 9 is percussion whatever its program says.
+ *
+ *  These deliberately cut across the GM family boundaries. Timpani (47) sits at the end
+ *  of the string range, the harp (46) beside it reads as keyboard, and the tuned
+ *  percussion block (8-15) reads as percussion — grouping by what a listener hears
+ *  matters more here than grouping by the spec. */
+export const SECTION_PROGRAM_RANGES = [
+  { section: 'Percussion', from: 8, to: 15 },
+  { section: 'Percussion', from: 47, to: 47 },
+  { section: 'Percussion', from: 112, to: 119 },
+  { section: 'Keyboard', from: 0, to: 7 },
+  { section: 'Keyboard', from: 16, to: 23 },
+  { section: 'Keyboard', from: 46, to: 46 },
+  { section: 'Strings', from: 40, to: 45 },
+  { section: 'Strings', from: 48, to: 51 },
+  { section: 'Voices', from: 52, to: 54 },
+  { section: 'Brass', from: 56, to: 63 },
+  { section: 'Woodwinds', from: 64, to: 79 },
+] as const satisfies readonly { section: SectionName; from: number; to: number }[];
+
+export const FALLBACK_SECTION: SectionName = 'Other';
+
+/** Fraction of the piece a node must be sounding in to be offered as a voice. Below it
+ *  the rests are long enough that a silent part reads as a blocked agent rather than as
+ *  the music, which inverts the signal. */
+export const MIN_VOICE_CONTINUITY = 0.6;
+/** Resolution at which continuity is measured: roughly a bar at orchestral tempo. */
+export const CONTINUITY_WINDOW_SECONDS = 4;
+/** How long a changed session count must hold before the tree re-splits, so opening a
+ *  terminal does not immediately rearrange the texture. */
+export const VOICE_RESPLIT_DEBOUNCE_MS = 3000;

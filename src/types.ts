@@ -82,3 +82,36 @@ export type SessionView = Session & {
   voiceName: string | null;
   audible: boolean;
 };
+
+/** A node in the voice tree: the parts that gate together as one audible line.
+ *
+ *  A voice may be a whole section, a single instrument, or one part, depending on how far
+ *  the tree has subdivided. Aggregating upward is what keeps a voice legible: a section
+ *  is still sounding while any of its instruments are, so its silence means an agent
+ *  stopped rather than that the music happens to rest. */
+export type Voice = {
+  voiceId: string;
+  /** What the listener is told to listen for, e.g. 'Strings' or 'Violin I'. */
+  name: string;
+  partIds: string[];
+  /** Root-to-node voice ids. A session hashes to a path rather than a leaf, so it keeps
+   *  its branch as the tree subdivides and only ever narrows within it. */
+  path: string[];
+};
+
+export type VoiceTree = {
+  /** The voices to offer for a given number of live sessions, subdividing only as far as
+   *  that count requires. Returns at least one voice for any score that has a part. */
+  voicesFor(sessionCount: number): Voice[];
+  /** Parts too sparse to carry a session: their rests would read as a blocked agent.
+   *  They never hold a voice, and sound whenever any voice does, so they colour the
+   *  texture without making a claim about an agent. */
+  backingPartIds: string[];
+};
+
+export type VoiceAssignment = {
+  /** Voice per session id. A session past the tree's capacity is absent. */
+  bySession: Map<string, Voice>;
+  /** Tracked and shown to the user, but silent: no voice was left to give. */
+  unvoicedSessionIds: string[];
+};
