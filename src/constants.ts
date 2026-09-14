@@ -57,5 +57,9 @@ export const WATCH_OPEN_SESSIONS = process.env.AGENT_ORCHESTRA_WATCH_FILE !== '0
 
 export const HOOK_REQUEST_TIMEOUT_MS = 200;
 
+/** Logs event names and short session ids only — never payload contents, which carry
+ *  prompt text. Opt-in, for confirming which events the CLI actually fires. */
+export const LOG_EVENTS = process.env.AGENT_ORCHESTRA_LOG === '1';
+
 export const SIMULATION_STEP_MS = 4000;
 export const SIMULATION_LABELS = ['api-service', 'web-client', 'infra', 'docs'] as const;

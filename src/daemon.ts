@@ -11,12 +11,13 @@ import { watchOpenSessions } from './open-sessions.ts';
 import { parseHookEvent } from './intake.ts';
 import { loadScore } from './score.ts';
 import { createSimulation } from './simulate.ts';
-import { WATCH_OPEN_SESSIONS } from './constants.ts';
+import { WATCH_OPEN_SESSIONS, LOG_EVENTS } from './constants.ts';
 import type { DaemonState } from './types.ts';
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TRACKS_DIR = join(PROJECT_ROOT, 'tracks');
 const MIDI_FILE_PATTERN = /\.midi?$/i;
+const SESSION_ID_LOG_LENGTH = 8;
 
 export type Daemon = { stop(): Promise<void> };
 
@@ -50,6 +51,11 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const api = await startApi({
     onHookEvent({ name, body }) {
       const event = parseHookEvent({ name, body });
+      if (LOG_EVENTS) {
+        const id = event ? event.sessionId.slice(0, SESSION_ID_LOG_LENGTH) : '????????';
+        const kind = event?.notificationType ? ` type=${event.notificationType}` : '';
+        console.log(`[hook] ${name}${kind} session=${id}${event ? '' : ' UNPARSED'}`);
+      }
       if (event) registry.applyHookEvent(event);
     },
     onSetMode: (mode) => orchestrator.setMode(mode),

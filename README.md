@@ -49,6 +49,20 @@ Uninstall removes only our own hook file and restores the prior state.
 | `AGENT_ORCHESTRA_PORT` | `7777` | Port the daemon listens on |
 | `AGENT_ORCHESTRA_SESSION` | unset | Pin audio to a single session id. Scope is otherwise machine-wide. |
 | `AGENT_ORCHESTRA_WATCH_FILE` | `1` | Set to `0` to ignore `open-sessions-state.json` and rely on hooks alone |
+| `AGENT_ORCHESTRA_LOG` | unset | Set to `1` to log hook event names and short session ids. Never logs payload contents. |
+
+## Sessions started before the hooks were installed
+
+Hooks are loaded once, at session start. A session opened before `install` never reports
+through them, so it is tracked only through `open-sessions-state.json` — and that file
+cannot see a mid-turn permission prompt. Such a session reads as *working* for its whole
+turn, which keeps the music playing while it is actually waiting on you.
+
+Since scope is machine-wide, one pre-install session is enough to hold the music on. Open
+a fresh session after installing, or pin audio with `AGENT_ORCHESTRA_SESSION`.
+
+`node bin/orchestra.ts status` shows each session's `source`; `hook` is fully tracked,
+`file` is the degraded case above.
 
 ## How it works
 
