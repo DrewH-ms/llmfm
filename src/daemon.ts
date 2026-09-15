@@ -14,7 +14,7 @@ import { playStartupMotif } from './motif.ts';
 import type { StartupMotif } from './motif.ts';
 import { createSimulation } from './simulate.ts';
 import { createConfigStore } from './config.ts';
-import { WATCH_OPEN_SESSIONS, LOG_EVENTS } from './constants.ts';
+import { WATCH_OPEN_SESSIONS, LOG_EVENTS, DEFAULT_TRACK } from './constants.ts';
 import type { DaemonState } from './types.ts';
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -28,6 +28,13 @@ export function listTracks(): string[] {
   return readdirSync(TRACKS_DIR).filter((file) => MIDI_FILE_PATTERN.test(file));
 }
 
+/** Falls back to whatever is present so a stripped-down or user-supplied tracks folder
+ *  still starts, rather than failing because one named file is missing. */
+function defaultTrack(): string | undefined {
+  const tracks = listTracks();
+  return tracks.find((file) => file === DEFAULT_TRACK) ?? tracks[0];
+}
+
 export async function startDaemon(options: { track?: string } = {}): Promise<Daemon> {
   const midi = createMidiOut();
   const mixer = createMixer(midi);
@@ -39,7 +46,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   let motif: StartupMotif | null = null;
   let stopping = false;
 
-  const trackFile = options.track ?? listTracks()[0];
+  const trackFile = options.track ?? defaultTrack();
   const midiStatus = await midi.start();
   const score = trackFile ? loadScore(join(TRACKS_DIR, trackFile)) : null;
 

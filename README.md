@@ -126,7 +126,17 @@ MIDI messages are sent to the synthesizer already installed on your machine. The
 synthesizer's sample data (`gm.dls`) is never read, copied, extracted, or redistributed —
 that is what its licence requires, and it is why there is nothing to download.
 
-Bundled music is public domain. See `tracks/tracks.json` for provenance.
+Bundled music comes from the [Mutopia Project](https://www.mutopiaproject.org/), which
+states a licence per file. Some files are public domain; others are Creative Commons
+Attribution or Attribution-ShareAlike and are redistributed with the credit their licence
+requires. **See [`tracks/ATTRIBUTION.md`](tracks/ATTRIBUTION.md) for the credits**, and
+`tracks/tracks.json` for the full provenance record — source URL, stated licence, and the
+date retrieved — of every file.
+
+A public-domain composition does not imply a public-domain sequence: a MIDI file of a
+Beethoven symphony is its own copyrightable work. Only files whose licence is stated by
+the publisher are shipped. `tools/curate-tracks.ts` fetches the library and records that
+provenance; it is run by hand, and the daemon itself never touches the network.
 
 ## Privacy
 

@@ -16,8 +16,11 @@ export type Mixer = {
   /** Fades a part toward audible or silent. Safe to call repeatedly with the same target. */
   setPartAudible(options: { partId: string; audible: boolean; fadeSeconds: number }): void;
   isPartAudible(partId: string): boolean;
-  /** True when at least one part is above silence — the transport's run condition. */
+  /** Whether anything is still making sound, fade-outs in progress included. This, not the
+   *  gate, is the transport's run condition: pausing on the gate cuts the fade short. */
   anyAudible(): boolean;
+  /** Whether any part is gated on, ignoring where its fade has got to. */
+  anyGateOpen(): boolean;
   /** Overall scale over every part, 0–100. Takes effect on sounding parts at once. */
   setMasterVolume(volume: number): void;
   /** Immediate: silences every channel and clears hanging notes. */
@@ -107,10 +110,21 @@ export function createMixer(midi: MidiOut): Mixer {
     },
 
     isPartAudible(partId: string): boolean {
-      return parts.get(partId)?.audible ?? false;
+      const mix = parts.get(partId);
+      if (!mix) return false;
+      // Mid fade-out a part is still sounding, and must keep taking notes or there is
+      // nothing left for the fade to act on and the gate closes as an abrupt cut.
+      return mix.audible || mix.level > 0;
     },
 
     anyAudible(): boolean {
+      for (const mix of parts.values()) {
+        if (mix.audible || mix.level > 0) return true;
+      }
+      return false;
+    },
+
+    anyGateOpen(): boolean {
       for (const mix of parts.values()) {
         if (mix.audible) return true;
       }

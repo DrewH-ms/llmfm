@@ -1,5 +1,7 @@
 import {
   DEFAULT_FADE_SECONDS,
+  SETTLE_MARGIN_MS,
+  BLOCK_SETTLE_MS,
   FOCUS_SESSION_ID,
   IGNORE_SUBAGENTS,
   MS_PER_MINUTE,
@@ -16,6 +18,8 @@ import type { Mixer } from './mixer.ts';
 import type { Scheduler } from './scheduler.ts';
 import type { SessionRegistry } from './sessions.ts';
 import type { Score, Session, SessionView, Voice, VoiceAssignment, VoiceTree } from './types.ts';
+
+const MS_PER_SECOND = 1000;
 
 export type Orchestrator = {
   bindScore(score: Score): void;
@@ -45,6 +49,8 @@ export function createOrchestrator(options: {
   /** How far the voice tree is currently subdivided. */
   let voiceCount = 0;
   let coarsenTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Re-checks the transport once a fade-out has actually reached silence. */
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
   const shouldSound = (session: Session): boolean => {
     // Nothing is emitted when a permission prompt is answered, so a session can sit
@@ -55,9 +61,16 @@ export function createOrchestrator(options: {
       session.blockedMidTurn &&
       session.blockedSince !== null &&
       Date.now() - session.blockedSince >= PROMPT_GAP_RESUME_MS;
-    const working = session.working || stale;
+    const working = session.working || stale || settling(session);
     return mode === 'reward' ? working : !working;
   };
+
+  /** A block too young to trust yet. See BLOCK_SETTLE_MS: the prompt may already have been
+   *  answered for the user, in which case silencing now only chops the music. */
+  const settling = (session: Session): boolean =>
+    session.blockedMidTurn &&
+    session.blockedSince !== null &&
+    Date.now() - session.blockedSince < BLOCK_SETTLE_MS;
 
   /** A sub-agent fires hooks but is never listed by the CLI, and it never waits on the
    *  user, so counting it would keep the orchestra playing over the silence that is the
@@ -183,8 +196,29 @@ export function createOrchestrator(options: {
     // `mute` keeps the transport running through the silence. It costs the resume-in-place
     // effect, and exists because nothing else can work once we are riding audio we do not
     // own: there is no pausing another application's stream.
-    if (mixer.anyAudible() || config.current().silenceMode === 'mute') scheduler.play();
-    else scheduler.pause();
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = null;
+    }
+    // A block still inside its settle window has to be revisited, or a prompt the user
+    // really is waiting on would never silence its part.
+    const pending = sessions
+      .filter(settling)
+      .map((session) => BLOCK_SETTLE_MS - (Date.now() - (session.blockedSince ?? 0)));
+    const soonest = pending.length > 0 ? Math.max(0, Math.min(...pending)) : null;
+
+    if (mixer.anyAudible() || config.current().silenceMode === 'mute') {
+      scheduler.play();
+      // Pausing the moment the gate shuts would cut the notes the fade still needs, so the
+      // transport runs on and the decision is retaken once the ramp has reached zero.
+      const wait = !mixer.anyGateOpen() ? fade * MS_PER_SECOND + SETTLE_MARGIN_MS : null;
+      const delay =
+        soonest === null ? wait : wait === null ? soonest : Math.min(soonest, wait);
+      if (delay !== null) settleTimer = setTimeout(refresh, delay + SETTLE_MARGIN_MS);
+    } else {
+      scheduler.pause();
+      if (soonest !== null) settleTimer = setTimeout(refresh, soonest + SETTLE_MARGIN_MS);
+    }
   };
 
   return {

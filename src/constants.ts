@@ -41,6 +41,15 @@ export const FADE_STEP_HZ = 30;
 export const DEFAULT_FADE_SECONDS = 1;
 /** Resuming uses a shorter fade so a reply feels immediate. */
 export const RESUME_FADE_SECONDS = 0.4;
+/** Slack added to a fade before the transport is allowed to pause, so the last ramp step
+ *  has certainly been sent rather than being cut off by a timer racing it. */
+export const SETTLE_MARGIN_MS = 120;
+/** How long a mid-turn block must hold before it is allowed to silence a part.
+ *  `permission_prompt` fires whether or not the prompt actually stops the agent: where a
+ *  tool is pre-approved the notification lands and work continues within the same second,
+ *  which chopped the music into 1-2s dropouts. A block that matters lasts until a human
+ *  acts, so waiting costs nothing real and discards every prompt answered for them. */
+export const BLOCK_SETTLE_MS = 1500;
 export const MIN_NOTE_DURATION_SECONDS = 0.05;
 
 export const GATE_MODES = ['reward', 'alert'] as const;
@@ -111,6 +120,11 @@ export const MASTER_VOLUME_STEP = 5;
  *  the fraction to this power flattens it back to about "half the number, half as loud",
  *  and leaves 100 exactly where it is today. */
 export const MASTER_VOLUME_CURVE_EXPONENT = 0.75;
+
+/** The track loaded when none is chosen. Named rather than taken as the first file in the
+ *  directory: the motif is lifted from whatever is loaded, so a track added under an
+ *  earlier-sorting name would silently replace both the music and the startup sting. */
+export const DEFAULT_TRACK = 'mutopia-beethoven-symphony5-1.mid';
 
 /** Note onsets of the score's opening lifted for the startup sting: the three repeated
  *  notes and the held one that answers them. */

@@ -7,6 +7,7 @@ import {
   SECTION_PROGRAM_RANGES,
 } from './constants.ts';
 import type { SectionName } from './constants.ts';
+import { labelWithOrdinal, parsePartName } from './part-names.ts';
 import type { Part, Score, ScoredNote, Voice, VoiceTree } from './types.ts';
 
 /** GM patch names, used to label an instrument whose parts carry no name in common. */
@@ -51,6 +52,8 @@ const SECTION_VOICE_PREFIX = 'section';
 const INSTRUMENT_VOICE_PREFIX = 'instrument';
 const PART_VOICE_PREFIX = 'part';
 const VOICE_ID_SEPARATOR = '-';
+/** Grouping key for parts whose names name no instrument, so they still group by patch. */
+const PROGRAM_KEY_PREFIX = 'program';
 
 /** Onsets closer together than this are heard as the same attack, and so as a doubling. */
 const ONSET_QUANTUM_SECONDS = 0.05;
@@ -81,12 +84,25 @@ type VoiceNode = {
  *  on to decide whether one is merely doubling the other. */
 type OnsetShape = Map<number, Set<number>>;
 
-function sectionOf(part: Part): SectionName {
-  if (part.percussion || part.channel === PERCUSSION_CHANNEL) return PERCUSSION_SECTION;
+/** Where a part's section came from. Reported so the curation tooling can measure how
+ *  often a real file's GM programs are load-bearing, and how often they are absent. */
+export const SECTION_SOURCES = ['percussion', 'name', 'program', 'fallback'] as const;
+export type SectionSource = (typeof SECTION_SOURCES)[number];
+
+/** Track names outrank GM programs here: an engraver that emits MIDI as a by-product
+ *  leaves every track on program 0, which would file a whole string quartet under
+ *  Keyboard, whereas a name that resolves to an instrument is never that wrong. */
+export function classifyPart(part: Part): { section: SectionName; source: SectionSource } {
+  if (part.percussion || part.channel === PERCUSSION_CHANNEL) {
+    return { section: PERCUSSION_SECTION, source: 'percussion' };
+  }
+  const named = parsePartName(part.name).section;
+  if (named) return { section: named, source: 'name' };
   const range = SECTION_PROGRAM_RANGES.find(
     (candidate) => part.program >= candidate.from && part.program <= candidate.to,
   );
-  return range ? range.section : FALLBACK_SECTION;
+  if (range) return { section: range.section, source: 'program' };
+  return { section: FALLBACK_SECTION, source: 'fallback' };
 }
 
 function continuityOf(notes: ScoredNote[], duration: number): number {
@@ -135,10 +151,27 @@ function meanPitchOf(notes: ScoredNote[]): number {
   return total / notes.length;
 }
 
-function instrumentName(parts: Part[], program: number): string {
+/** A name that carries nothing is worse than no name: told to listen for "one:" or "RH",
+ *  a listener has nothing to find. The GM patch is then the better label, even where it
+ *  was too coarse to have settled the section. */
+function partLabel(part: Part): string {
+  const parsed = parsePartName(part.name);
+  if (parsed.placeholder) return GM_PROGRAM_NAMES[part.program] ?? parsed.label;
+  return parsed.label;
+}
+
+function instrumentKey(part: Part): string {
+  const { instrument } = parsePartName(part.name);
+  return instrument ?? `${PROGRAM_KEY_PREFIX}${VOICE_ID_SEPARATOR}${part.program}`;
+}
+
+function instrumentName(parts: Part[]): string {
   const [first, ...rest] = parts;
-  if (first && rest.every((part) => part.name === first.name)) return first.name;
-  return GM_PROGRAM_NAMES[program] ?? first?.name ?? String(program);
+  if (!first) return FALLBACK_SECTION;
+  const { instrument } = parsePartName(first.name);
+  if (instrument) return instrument;
+  if (rest.every((part) => partLabel(part) === partLabel(first))) return partLabel(first);
+  return GM_PROGRAM_NAMES[first.program] ?? partLabel(first);
 }
 
 function slug(value: string): string {
@@ -148,12 +181,26 @@ function slug(value: string): string {
 function partNode(part: Part): VoiceNode {
   return {
     voiceId: `${PART_VOICE_PREFIX}${VOICE_ID_SEPARATOR}${part.partId}`,
-    name: part.name,
+    name: partLabel(part),
     partIds: [part.partId],
     path: [],
     children: [],
     notes: part.notes,
   };
+}
+
+/** Two desks of the same instrument reach us indistinguishable whenever the score named
+ *  neither, and half-named whenever it named only some. Either way the whole group is
+ *  renumbered by track order, because a listener counting desks needs the numbering to be
+ *  complete before it means anything. */
+function numberedParts(parts: Part[]): VoiceNode[] {
+  const nodes = parts.map(partNode);
+  const distinct = new Set(nodes.map((node) => node.name));
+  if (distinct.size === nodes.length) return nodes;
+  return nodes.map((node, index) => ({
+    ...node,
+    name: labelWithOrdinal(instrumentName(parts), index + 1),
+  }));
 }
 
 function groupNode(options: {
@@ -198,22 +245,23 @@ function descendants(node: VoiceNode): VoiceNode[] {
 function sectionNodes(parts: Part[]): VoiceNode[] {
   const bySection = new Map<SectionName, Part[]>();
   for (const part of parts) {
-    const section = sectionOf(part);
+    const section = classifyPart(part).section;
     bySection.set(section, [...(bySection.get(section) ?? []), part]);
   }
 
   const ordered = SECTIONS.filter((section) => bySection.has(section));
   return ordered.map((section) => {
     const members = bySection.get(section) ?? [];
-    const byProgram = new Map<number, Part[]>();
+    const byInstrument = new Map<string, Part[]>();
     for (const part of members) {
-      byProgram.set(part.program, [...(byProgram.get(part.program) ?? []), part]);
+      const key = instrumentKey(part);
+      byInstrument.set(key, [...(byInstrument.get(key) ?? []), part]);
     }
-    const instruments = [...byProgram].map(([program, programParts]) =>
+    const instruments = [...byInstrument].map(([key, instrumentParts]) =>
       groupNode({
-        voiceId: [INSTRUMENT_VOICE_PREFIX, slug(section), program].join(VOICE_ID_SEPARATOR),
-        name: instrumentName(programParts, program),
-        children: programParts.map(partNode),
+        voiceId: [INSTRUMENT_VOICE_PREFIX, slug(section), slug(key)].join(VOICE_ID_SEPARATOR),
+        name: instrumentName(instrumentParts),
+        children: numberedParts(instrumentParts),
       }),
     );
     return groupNode({
