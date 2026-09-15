@@ -85,9 +85,10 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   });
 
   const unsubscribe = registry.onChange(() => {
-    // A session arriving means the orchestra has something to say; the sting yields to it
-    // rather than playing over the first notes of the real performance.
-    motif?.cancel();
+    // Only real work cuts the sting short. Merely registering sessions does not: the file
+    // watcher lists every open terminal within a poll of startup, which would truncate the
+    // motif to its first note on any machine that had a session open.
+    if (registry.list().some((session) => session.working)) motif?.cancel();
     orchestrator.refresh();
     api.broadcast();
   });

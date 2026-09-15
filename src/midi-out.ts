@@ -11,6 +11,8 @@ import {
   MIDI_NOTE_ON,
   MIDI_CONTROL_CHANGE,
   MIDI_PROGRAM_CHANGE,
+  CC_ALL_NOTES_OFF,
+  CC_ALL_SOUND_OFF,
 } from './constants.ts';
 
 const BRIDGE_SCRIPT = path.join(import.meta.dirname, '..', 'bridge', 'midi-bridge.ps1');
@@ -132,6 +134,13 @@ export function noteOn(
 
 export function noteOff(midi: MidiOut, options: { channel: number; note: number }): void {
   midi.send((MIDI_NOTE_OFF | (options.channel & CHANNEL_MASK)) | (options.note << DATA1_SHIFT));
+}
+
+/** A channel held at zero volume keeps sounding whatever was on when the level fell, so
+ *  silence is only real once both all-notes-off and all-sound-off have been sent. */
+export function silenceChannel(midi: MidiOut, channel: number): void {
+  controlChange(midi, { channel, controller: CC_ALL_NOTES_OFF, value: 0 });
+  controlChange(midi, { channel, controller: CC_ALL_SOUND_OFF, value: 0 });
 }
 
 export function controlChange(

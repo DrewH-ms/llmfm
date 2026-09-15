@@ -1,11 +1,12 @@
 import {
-  CC_ALL_NOTES_OFF,
-  CC_ALL_SOUND_OFF,
   CC_CHANNEL_VOLUME,
+  DEFAULT_MASTER_VOLUME,
   FADE_STEP_HZ,
+  MASTER_VOLUME_CURVE_EXPONENT,
+  MASTER_VOLUME_MAX,
   MAX_MIDI_VALUE,
 } from './constants.ts';
-import { controlChange, programChange } from './midi-out.ts';
+import { controlChange, programChange, silenceChannel } from './midi-out.ts';
 import type { MidiOut } from './midi-out.ts';
 import type { Score } from './types.ts';
 
@@ -17,6 +18,8 @@ export type Mixer = {
   isPartAudible(partId: string): boolean;
   /** True when at least one part is above silence — the transport's run condition. */
   anyAudible(): boolean;
+  /** Overall scale over every part, 0–100. Takes effect on sounding parts at once. */
+  setMasterVolume(volume: number): void;
   /** Immediate: silences every channel and clears hanging notes. */
   silenceAll(): void;
   stop(): void;
@@ -32,22 +35,27 @@ type PartMix = {
 
 const MS_PER_SECOND = 1000;
 
+/** The CC7 value for a part sitting at `level` (0–1) under `masterVolume` (0–100). This is
+ *  the single point where a level becomes a MIDI value, so it also enforces the range: a
+ *  gated-off part stays silent at any master volume, and master 100 is unscaled. */
+export function channelVolume(options: { level: number; masterVolume: number }): number {
+  const level = Number.isFinite(options.level) ? Math.min(Math.max(options.level, 0), 1) : 0;
+  const volume = Number.isFinite(options.masterVolume) ? options.masterVolume : MASTER_VOLUME_MAX;
+  const master = Math.min(Math.max(volume, 0), MASTER_VOLUME_MAX) / MASTER_VOLUME_MAX;
+  const value = Math.round(level * master ** MASTER_VOLUME_CURVE_EXPONENT * MAX_MIDI_VALUE);
+  return Math.min(Math.max(value, 0), MAX_MIDI_VALUE);
+}
+
 export function createMixer(midi: MidiOut): Mixer {
   const parts = new Map<string, PartMix>();
+  let masterVolume = DEFAULT_MASTER_VOLUME;
 
   const sendLevel = (mix: PartMix): void => {
     controlChange(midi, {
       channel: mix.channel,
       controller: CC_CHANNEL_VOLUME,
-      value: Math.round(mix.level * MAX_MIDI_VALUE),
+      value: channelVolume({ level: mix.level, masterVolume }),
     });
-  };
-
-  /** A channel left at zero volume keeps sounding notes that were on when the fade began,
-   *  so silence is only real once both all-notes-off and all-sound-off have been sent. */
-  const clearChannel = (channel: number): void => {
-    controlChange(midi, { channel, controller: CC_ALL_NOTES_OFF, value: 0 });
-    controlChange(midi, { channel, controller: CC_ALL_SOUND_OFF, value: 0 });
   };
 
   const cancelFade = (mix: PartMix): void => {
@@ -92,7 +100,7 @@ export function createMixer(midi: MidiOut): Mixer {
           if (step < steps) return;
           mix.level = target;
           cancelFade(mix);
-          if (target === 0) clearChannel(mix.channel);
+          if (target === 0) silenceChannel(midi, mix.channel);
         },
         (options.fadeSeconds * MS_PER_SECOND) / steps,
       );
@@ -109,19 +117,24 @@ export function createMixer(midi: MidiOut): Mixer {
       return false;
     },
 
+    setMasterVolume(volume: number): void {
+      masterVolume = volume;
+      for (const mix of parts.values()) sendLevel(mix);
+    },
+
     silenceAll(): void {
       for (const mix of parts.values()) {
         cancelFade(mix);
         mix.level = 0;
         sendLevel(mix);
-        clearChannel(mix.channel);
+        silenceChannel(midi, mix.channel);
       }
     },
 
     stop(): void {
       for (const mix of parts.values()) {
         cancelFade(mix);
-        clearChannel(mix.channel);
+        silenceChannel(midi, mix.channel);
       }
       parts.clear();
     },
