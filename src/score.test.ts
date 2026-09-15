@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadScore, remapProgram } from './score.ts';
+import { loadScore, remapProgram, isOrchestral } from './score.ts';
 
 const TRACKS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), 'tracks');
 const SOLO_VIOLIN = 40;
@@ -27,6 +27,76 @@ test('a solo concerto part keeps the patch its score chose', () => {
 test('a single desk without plurality is left alone', () => {
   for (const name of ['Violino I', 'Violin', 'Cello', 'Contrabass']) {
     assert.equal(remapProgram(name, SOLO_VIOLIN), SOLO_VIOLIN, name);
+  }
+});
+
+const CORIOLAN_PARTS = [
+  'flauti', 'oboi', 'clarinetti', 'fagotti', 'corni', 'trombe', 'timpani',
+  'violino1', 'violino2', 'viole', 'violoncello', 'contrabasso',
+];
+const QUARTET_PARTS = ['violino1', 'violino2', 'viola', 'violoncello'];
+const BAROQUE_CONCERTO_PARTS = [
+  'flauto', 'violino principale', 'violino', 'viola', 'violoncello', 'contrabasso', 'cembalo',
+];
+
+test('an orchestra is told apart from an ensemble by its wind complement', () => {
+  assert.equal(isOrchestral(CORIOLAN_PARTS), true);
+  assert.equal(isOrchestral(QUARTET_PARTS), false);
+  assert.equal(isOrchestral(BAROQUE_CONCERTO_PARTS), false);
+  assert.equal(isOrchestral(['oboe', 'clarinet', 'bassoon']), false, 'winds alone are not an orchestra');
+  assert.equal(isOrchestral([]), false);
+});
+
+/** The gap the plurality rule left: in a full orchestra the singular names are desks, and
+ *  they are most of the strings. */
+test('a singular string name is a desk inside an orchestra', () => {
+  for (const name of ['violino1', 'violino2', 'violoncello', 'contrabasso']) {
+    assert.equal(remapProgram(name, SOLO_VIOLIN, true), STRING_ENSEMBLE, name);
+  }
+});
+
+test('the same name in a quartet is left alone', () => {
+  for (const name of QUARTET_PARTS) {
+    assert.equal(remapProgram(name, SOLO_VIOLIN, false), SOLO_VIOLIN, name);
+  }
+});
+
+test('a name saying solo wins even inside an orchestra', () => {
+  for (const name of ['Violino solo', 'Solo Violin', 'Violoncello Solo']) {
+    assert.equal(remapProgram(name, SOLO_VIOLIN, true), SOLO_VIOLIN, name);
+  }
+});
+
+test('chamber music keeps its solo patches when actually loaded', () => {
+  const chamber = [
+    'mutopia-mozart-quartet-kv387.mid',
+    'mutopia-haydn-quartet-op76-4.mid',
+    'mutopia-mozart-eine-kleine-nachtmusik.mid',
+    'mutopia-bach-brandenburg5-3.mid',
+    'mutopia-bach-violin-concerto-e-major.mid',
+  ];
+  for (const file of chamber) {
+    for (const part of loadScore(join(TRACKS_DIR, file)).parts) {
+      assert.equal(
+        part.program,
+        part.scoredProgram,
+        `${file}/${part.name} was remapped; chamber scoring must keep the patch it chose`,
+      );
+    }
+  }
+});
+
+test('the orchestral strings of a real score do reach the section patch', () => {
+  // The negative case above passes trivially if the flag is never wired into loadScore.
+  const parts = loadScore(join(TRACKS_DIR, 'mutopia-beethoven-coriolan-overture.mid')).parts;
+  const strings = parts.filter((part) => /violino|viole|violoncello|contrabasso/i.test(part.name));
+  assert.equal(strings.length, 5, 'the five string desks were found');
+  for (const part of strings) {
+    assert.equal(part.program, STRING_ENSEMBLE, `${part.name} sounds as a section`);
+  }
+  const winds = parts.filter((part) => /flauti|oboi|clarinetti|fagotti/i.test(part.name));
+  for (const part of winds) {
+    assert.equal(part.program, part.scoredProgram, `${part.name} was left alone`);
   }
 });
 
@@ -58,12 +128,14 @@ test('every bundled part keeps the program its file chose alongside the one it s
   const files = readdirSync(TRACKS_DIR).filter((file) => /\.midi?$/i.test(file));
   assert.ok(files.length > 0, 'no tracks to check');
   for (const file of files) {
-    for (const part of loadScore(join(TRACKS_DIR, file)).parts) {
+    const parts = loadScore(join(TRACKS_DIR, file)).parts;
+    const orchestral = isOrchestral(parts.map((part) => part.name));
+    for (const part of parts) {
       assert.equal(typeof part.scoredProgram, 'number', `${file}/${part.name}`);
       if (part.program !== part.scoredProgram) {
         assert.equal(
           part.program,
-          remapProgram(part.name, part.scoredProgram),
+          remapProgram(part.name, part.scoredProgram, orchestral),
           `${file}/${part.name} was remapped by something other than its name`,
         );
       }

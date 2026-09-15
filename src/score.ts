@@ -71,16 +71,49 @@ const PLURAL_TOKENS = new Set([
 ]);
 const SOLO_TOKENS = new Set(['solo', 'soli', 'solist', 'soloist']);
 
+/** Whether the score as a whole is an orchestra, which is what decides if a singular
+ *  string name is a desk or a soloist. The discriminator is a wind complement: an
+ *  orchestra doubles winds against a body of strings, while a quartet, a string
+ *  serenade and a baroque concerto have at most a soloist or two above the strings.
+ *  Counting whole sections rather than listing scorings keeps it to one rule, and both
+ *  thresholds must be met — three winds with one violin is a wind serenade, and four
+ *  strings with no winds is chamber music. */
+const MIN_ORCHESTRAL_WINDS = 3;
+const MIN_ORCHESTRAL_STRINGS = 3;
+const ORCHESTRAL_SECTIONS = new Set(['Woodwinds', 'Brass', 'Percussion']);
+
+/** LilyPond glues a desk number straight onto the instrument (`violino1`), which leaves
+ *  no word boundary for the name parser to find. Splitting letter from digit here keeps
+ *  that spelling out of `part-names.ts`, where it would widen a shared parser for one
+ *  engraver's habit. */
+const readable = (name: string): string => name.replace(/([a-z])(\d)/gi, '$1 $2');
+
+export function isOrchestral(names: readonly string[]): boolean {
+  let winds = 0;
+  let strings = 0;
+  for (const name of names) {
+    const parsed = parsePartName(readable(name));
+    if (parsed.instrument === null) continue;
+    if (parsed.section !== null && ORCHESTRAL_SECTIONS.has(parsed.section)) winds += 1;
+    if (SECTION_STRINGS.has(parsed.instrument)) strings += 1;
+  }
+  return winds >= MIN_ORCHESTRAL_WINDS && strings >= MIN_ORCHESTRAL_STRINGS;
+}
+
 /** Returns the program to sound the part with, which is the original unless the name is
- *  evidence that the file's own choice misrepresents it. */
-export function remapProgram(name: string, program: number): number {
-  const tokens = normalizePartName(name).split(' ');
+ *  evidence that the file's own choice misrepresents it. `orchestral` comes from the
+ *  score around the part: inside an orchestra a lone `violino1` is the first desk, and
+ *  outside one it may well be the only violin playing. */
+export function remapProgram(name: string, program: number, orchestral = false): number {
+  const tokens = normalizePartName(readable(name)).split(' ');
   if (tokens.some((token) => SOLO_TOKENS.has(token))) return program;
 
-  const parsed = parsePartName(name);
+  const parsed = parsePartName(readable(name));
   if (parsed.instrument === 'Horn') return FRENCH_HORN_PROGRAM;
   if (parsed.instrument !== null && SECTION_STRINGS.has(parsed.instrument)) {
-    if (tokens.some((token) => PLURAL_TOKENS.has(token))) return STRING_SECTION_PROGRAM;
+    if (orchestral || tokens.some((token) => PLURAL_TOKENS.has(token))) {
+      return STRING_SECTION_PROGRAM;
+    }
   }
   return program;
 }
@@ -110,13 +143,14 @@ export function loadScore(filePath: string): Score {
     .map((track, index) => ({ track, index }))
     .filter(({ track }) => track.notes.length > 0);
   const channelOf = melodicChannels(voiced.filter(({ track }) => !track.instrument.percussion));
+  const orchestral = isOrchestral(voiced.map(({ track, index }) => partName(track, index)));
 
   const parts = voiced.map(({ track, index }): Part => {
     const percussion = track.instrument.percussion;
     const channel = percussion ? PERCUSSION_CHANNEL : (channelOf.get(index) ?? OVERFLOW_CHANNEL);
     const name = partName(track, index);
     const scored = track.instrument.number;
-    const program = percussion ? scored : remapProgram(name, scored);
+    const program = percussion ? scored : remapProgram(name, scored, orchestral);
     const id = partId(name, scored, index);
     return {
       partId: id,
