@@ -52,7 +52,8 @@ export function createOrchestrator(options: {
     const stale =
       config.current().promptGap === 'resume' &&
       session.blockedMidTurn &&
-      Date.now() - session.updatedAt >= PROMPT_GAP_RESUME_MS;
+      session.blockedSince !== null &&
+      Date.now() - session.blockedSince >= PROMPT_GAP_RESUME_MS;
     const working = session.working || stale;
     return mode === 'reward' ? working : !working;
   };
@@ -190,6 +191,7 @@ export function createOrchestrator(options: {
           label: session.label,
           source: session.source,
           blockedMidTurn: session.blockedMidTurn,
+          blockedSince: session.blockedSince,
           updatedAt: session.updatedAt,
           handle: handleFor(session),
           muted,

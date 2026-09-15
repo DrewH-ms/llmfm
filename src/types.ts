@@ -23,6 +23,10 @@ export type Session = {
   /** Set when a `notification` hook reported a mid-turn block. The open-sessions file
    *  only flips at turn boundaries, so it cannot see this state and must not clear it. */
   blockedMidTurn: boolean;
+  /** When the current mid-turn block began, or null when not blocked. Distinct from
+   *  `updatedAt`, which any unrelated event refreshes — including a second `notification`
+   *  for the same prompt. Age measured from `updatedAt` would reset while the block stood. */
+  blockedSince: number | null;
   /** Whether the CLI has ever listed this session as an open one. Sub-agents fire hooks
    *  but are never listed, which is the only way to tell them from a session the user is
    *  actually sitting in front of. */
@@ -88,7 +92,7 @@ export type DaemonState = {
  *  them would be reading internal bookkeeping as if it meant something to the listener. */
 export type SessionView = Pick<
   Session,
-  'sessionId' | 'working' | 'cwd' | 'label' | 'source' | 'blockedMidTurn' | 'updatedAt'
+  'sessionId' | 'working' | 'cwd' | 'label' | 'source' | 'blockedMidTurn' | 'blockedSince' | 'updatedAt'
 > & {
   /** What a user types to mute this session, e.g. "Rasa (cb75a9e8)". */
   handle: string;

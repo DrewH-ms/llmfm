@@ -17,10 +17,14 @@ function elapseHookAuthority(t: TestContext): void {
   t.mock.timers.tick(HOOK_AUTHORITY_MS + 1);
 }
 
-function workingOf(registry: ReturnType<typeof createSessionRegistry>): boolean {
+function sessionOf(registry: ReturnType<typeof createSessionRegistry>) {
   const session = registry.list().find((entry) => entry.sessionId === SESSION_ID);
   assert.ok(session, 'session should still be tracked');
-  return session.working;
+  return session;
+}
+
+function workingOf(registry: ReturnType<typeof createSessionRegistry>): boolean {
+  return sessionOf(registry).working;
 }
 
 test('the file may not restore a session the hooks have silenced', (t) => {
@@ -132,4 +136,32 @@ test('startedAt is fixed for the lifetime of a session', (t) => {
   assert.ok(later);
   assert.equal(later.startedAt, first.startedAt);
   assert.notEqual(later.updatedAt, first.updatedAt);
+});
+
+test('a repeated prompt notification does not restart the block clock', (t) => {
+  t.mock.timers.enable({ apis: ['Date'] });
+  const registry = createSessionRegistry();
+
+  registry.applyHookEvent(hookEvent('userPromptSubmitted'));
+  registry.applyHookEvent(hookEvent('notification', 'permission_prompt'));
+  const first = sessionOf(registry).blockedSince;
+  assert.ok(first !== null);
+
+  // The CLI re-announces the same pending prompt. Taking the age from updatedAt here
+  // would report the block as new, hiding precisely the long wait it exists to surface.
+  t.mock.timers.tick(30_000);
+  registry.applyHookEvent(hookEvent('notification', 'permission_prompt'));
+
+  assert.equal(sessionOf(registry).blockedSince, first);
+});
+
+test('clearing a block clears the block clock', (t) => {
+  t.mock.timers.enable({ apis: ['Date'] });
+  const registry = createSessionRegistry();
+
+  registry.applyHookEvent(hookEvent('userPromptSubmitted'));
+  registry.applyHookEvent(hookEvent('notification', 'permission_prompt'));
+  registry.applyHookEvent(hookEvent('postToolUse'));
+
+  assert.equal(sessionOf(registry).blockedSince, null);
 });

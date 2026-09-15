@@ -49,19 +49,24 @@ export function createSessionRegistry(): SessionRegistry {
 
       const cwd = event.cwd ?? previous?.cwd ?? null;
       const working = outcome === null ? (previous?.working ?? false) : outcome === 'working';
+      const now = Date.now();
+      const blockedMidTurn =
+        outcome === null
+          ? (previous?.blockedMidTurn ?? false)
+          : event.name === 'notification' && outcome === 'awaiting-input';
       const next: Session = {
         sessionId: event.sessionId,
         working,
         cwd,
         label: labelOf({ cwd, sessionId: event.sessionId }),
         source: 'hook',
-        blockedMidTurn:
-          outcome === null
-            ? (previous?.blockedMidTurn ?? false)
-            : event.name === 'notification' && outcome === 'awaiting-input',
+        blockedMidTurn,
+        // Held across a repeated prompt: one prompt can fire `notification` twice, and
+        // restarting the clock there would hide exactly the long block it exists to show.
+        blockedSince: blockedMidTurn ? (previous?.blockedSince ?? now) : null,
         listedByCli: seenInFile.has(event.sessionId),
-        startedAt: previous?.startedAt ?? Date.now(),
-        updatedAt: Date.now(),
+        startedAt: previous?.startedAt ?? now,
+        updatedAt: now,
       };
       sessions.set(event.sessionId, next);
 
@@ -107,6 +112,7 @@ export function createSessionRegistry(): SessionRegistry {
           label: labelOf({ cwd, sessionId: entry.sessionId }),
           source: 'file',
           blockedMidTurn: false,
+        blockedSince: null,
           listedByCli: true,
           startedAt: previous?.startedAt ?? now,
           updatedAt: now,
@@ -141,6 +147,7 @@ export function createSessionRegistry(): SessionRegistry {
         label: options.label,
         source: 'simulation',
         blockedMidTurn: false,
+        blockedSince: null,
         listedByCli: false,
         startedAt: previous?.startedAt ?? Date.now(),
         updatedAt: Date.now(),

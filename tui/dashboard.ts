@@ -22,18 +22,29 @@ const FG_CYAN = `${ESC}36m`;
 const FG_GREY = `${ESC}90m`;
 const BADGE_SOUNDING = `${ESC}30;102m`;
 const BADGE_SILENT = `${ESC}90;100m`;
+const BADGE_MUTED = `${ESC}90;40m`;
 
 const FALLBACK_COLUMNS = 80;
 const FALLBACK_ROWS = 24;
 const MIN_COLUMNS = 32;
 const MAX_COLUMNS = 120;
 const VOICE_COLUMN_WIDTH = 16;
-const LABEL_COLUMN_WIDTH = 16;
+/** Wide enough for a handle's disambiguating id suffix, which truncation must not eat. */
+const HANDLE_COLUMN_WIDTH = 22;
 const BADGE_TEXT_SOUNDING = ' SOUNDING ';
 const BADGE_TEXT_SILENT = '  silent  ';
+const BADGE_TEXT_MUTED = '  muted   ';
+const TAG_BLOCKED = 'BLOCKED?';
+const CURSOR_SELECTED = '▸';
+const CURSOR_UNSELECTED = ' ';
 const MARKER_SOUNDING = '█ ';
 const MARKER_SILENT = '· ';
+/** Blank, not a third glyph: the column means "is this part sounding", and a muted row
+ *  is answering a question we have deliberately stopped asking. */
+const MARKER_MUTED = '  ';
 const UNVOICED_TEXT = '(unvoiced)';
+const MORE_ABOVE = 'above';
+const MORE_BELOW = 'below';
 const PROGRESS_FILLED = '█';
 const PROGRESS_EMPTY = '░';
 const PROGRESS_MIN_WIDTH = 8;
@@ -57,12 +68,17 @@ const FADE_MAX_SECONDS = 10;
 
 const KEY_QUIT = 'q';
 const KEY_INTERRUPT = '\u0003';
-const KEY_TOGGLE_MODE = 'm';
+const KEY_TOGGLE_MODE = 'g';
 const KEY_TOGGLE_SIMULATION = 's';
+const KEY_TOGGLE_MUTE = 'm';
 const KEYS_FADE_UP = ['+', '='] as const;
 const KEYS_FADE_DOWN = ['-', '_'] as const;
-const KEY_HINTS = '[m] mode   [-/+] fade   [s] simulate   [q] quit';
-
+/** Both the cursor-key and application-keypad forms: a raw TTY emits either. */
+const KEYS_SELECT_PREVIOUS = ['\u001b[A', '\u001bOA', 'k'] as const;
+const KEYS_SELECT_NEXT = ['\u001b[B', '\u001bOB', 'j'] as const;
+const KEY_HINTS =
+  '[↑/↓ jk] select   [m] mute   [g] mode   [-/+] fade   [s] simulate   [q] quit';
+const COMMAND_FAILURE_NOTICE = 'daemon rejected command:';
 const EXIT_FAILURE = 1;
 
 const LINK_LIVE = 'live';
@@ -75,6 +91,15 @@ type LinkState = (typeof LINK_STATES)[number];
 type Segment = { text: string; style: string };
 
 type Snapshot = { state: DaemonState; receivedAt: number };
+
+/** Everything a frame is drawn from. `selectedSessionId` is held by id because each SSE
+ *  frame delivers a fresh session array whose order may change. */
+type View = {
+  snapshot: Snapshot | null;
+  link: LinkState;
+  selectedSessionId: string | null;
+  notice: string | null;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -100,13 +125,29 @@ function parseMidi(value: unknown): MidiStatus | null {
 function parseSession(value: unknown): SessionView | null {
   if (!isRecord(value)) return null;
   const { sessionId, working, cwd, label, blockedMidTurn, updatedAt, voiceName, audible } = value;
+  const { handle, muted, blockedSince } = value;
   const source = SESSION_SOURCES.find((candidate) => candidate === value['source']);
   if (typeof sessionId !== 'string' || typeof label !== 'string' || !source) return null;
   if (typeof working !== 'boolean' || typeof blockedMidTurn !== 'boolean') return null;
   if (typeof audible !== 'boolean' || typeof updatedAt !== 'number') return null;
+  if (typeof handle !== 'string' || typeof muted !== 'boolean') return null;
+  if (blockedSince !== null && typeof blockedSince !== 'number') return null;
   if (cwd !== null && typeof cwd !== 'string') return null;
   if (voiceName !== null && typeof voiceName !== 'string') return null;
-  return { sessionId, working, cwd, label, source, blockedMidTurn, updatedAt, voiceName, audible };
+  return {
+    sessionId,
+    working,
+    cwd,
+    label,
+    source,
+    blockedSince,
+    blockedMidTurn,
+    updatedAt,
+    voiceName,
+    audible,
+    handle,
+    muted,
+  };
 }
 
 /** Narrows a daemon payload, which arrives as text over SSE and so is untrusted here. */
@@ -176,19 +217,63 @@ function progressBar(transport: TransportState, width: number): string {
   return `${PROGRESS_FILLED.repeat(filled)}${PROGRESS_EMPTY.repeat(span - filled)}`;
 }
 
-function sessionLine(session: SessionView): Segment[] {
-  const badge = session.audible ? BADGE_TEXT_SOUNDING : BADGE_TEXT_SILENT;
-  return [
-    { text: session.audible ? MARKER_SOUNDING : MARKER_SILENT, style: session.audible ? FG_GREEN : FG_GREY },
-    { text: fit(session.label, LABEL_COLUMN_WIDTH), style: session.audible ? STYLE_BOLD : STYLE_DIM },
-    { text: ' ', style: STYLE_NONE },
+/** How long a session has claimed to be blocked. The claim is sticky — an approved
+ *  permission prompt produces no event — so its age is the only evidence the user has
+ *  that `BLOCKED?` may already be stale. */
+function blockedTag(blockedSince: number | null): string {
+  if (blockedSince === null) return ` ${TAG_BLOCKED}`;
+  const seconds = Math.max(Math.floor((Date.now() - blockedSince) / MS_PER_SECOND), 0);
+  const age =
+    seconds < SECONDS_PER_MINUTE
+      ? `${seconds}s`
+      : `${Math.floor(seconds / SECONDS_PER_MINUTE)}m`;
+  return ` ${TAG_BLOCKED} ${age}`;
+}
+
+/** Lays the row out tag-first: `BLOCKED?` says why a part is silent, which the audio
+ *  cannot, so the voice name yields its width to it. A muted session makes no claim
+ *  about its agent, so it carries no tag. */
+function sessionLine(options: { session: SessionView; selected: boolean; width: number }): Segment[] {
+  const { session, selected, width } = options;
+  const tags: Segment[] = [];
+  if (session.blockedMidTurn && !session.muted) {
+    tags.push({ text: blockedTag(session.blockedSince), style: FG_YELLOW });
+  }
+
+  const badge = session.muted
+    ? BADGE_TEXT_MUTED
+    : session.audible
+      ? BADGE_TEXT_SOUNDING
+      : BADGE_TEXT_SILENT;
+  const marker = session.muted ? MARKER_MUTED : session.audible ? MARKER_SOUNDING : MARKER_SILENT;
+  const tagWidth = tags.reduce((total, tag) => total + tag.text.length, 0);
+  const fixed = CURSOR_SELECTED.length + marker.length + HANDLE_COLUMN_WIDTH + 1 + badge.length;
+  const voiceWidth = clamp(width - fixed - tagWidth - 1, 0, VOICE_COLUMN_WIDTH);
+
+  const segments: Segment[] = [
     {
-      text: fit(session.voiceName ?? UNVOICED_TEXT, VOICE_COLUMN_WIDTH),
-      style: session.voiceName ? FG_CYAN : STYLE_DIM,
+      text: selected ? CURSOR_SELECTED : CURSOR_UNSELECTED,
+      style: selected ? FG_CYAN : STYLE_NONE,
+    },
+    { text: marker, style: session.audible ? FG_GREEN : FG_GREY },
+    {
+      text: fit(session.handle, HANDLE_COLUMN_WIDTH),
+      style: session.muted ? STYLE_DIM : session.audible || selected ? STYLE_BOLD : STYLE_DIM,
     },
     { text: ' ', style: STYLE_NONE },
-    { text: badge, style: session.audible ? BADGE_SOUNDING : BADGE_SILENT },
   ];
+  if (voiceWidth > 0) {
+    segments.push({
+      text: fit(session.voiceName ?? UNVOICED_TEXT, voiceWidth),
+      style: session.voiceName && !session.muted ? FG_CYAN : STYLE_DIM,
+    });
+    segments.push({ text: ' ', style: STYLE_NONE });
+  }
+  segments.push({
+    text: badge,
+    style: session.muted ? BADGE_MUTED : session.audible ? BADGE_SOUNDING : BADGE_SILENT,
+  });
+  return segments.concat(tags);
 }
 
 function transportSegments(transport: TransportState, width: number): Segment[] {
@@ -200,14 +285,22 @@ function transportSegments(transport: TransportState, width: number): Segment[] 
   ];
 }
 
-function buildLines(snapshot: Snapshot | null, link: LinkState): string[] {
+/** A failure replaces the key hints rather than sharing the line: at 80 columns the
+ *  hints already fill it, and the notice would be the part that gets ellipsized. */
+function footerLine(notice: string | null, width: number): string {
+  if (notice) return composeLine([{ text: notice, style: FG_RED }], width);
+  return composeLine([{ text: KEY_HINTS, style: STYLE_DIM }], width);
+}
+
+function buildLines(view: View): string[] {
+  const { snapshot, link, selectedSessionId, notice } = view;
   const width = clamp(process.stdout.columns ?? FALLBACK_COLUMNS, MIN_COLUMNS, MAX_COLUMNS);
   if (!snapshot) {
     return [
       composeLine([{ text: 'LLMFM', style: STYLE_BOLD }], width),
       composeLine([{ text: link, style: FG_RED }], width),
       '',
-      composeLine([{ text: KEY_HINTS, style: STYLE_DIM }], width),
+      footerLine(notice, width),
     ];
   }
 
@@ -261,30 +354,62 @@ function buildLines(snapshot: Snapshot | null, link: LinkState): string[] {
   ];
 
   const room = Math.max((process.stdout.rows ?? FALLBACK_ROWS) - CHROME_LINE_COUNT, 1);
-  const shown = state.sessions.slice(0, room);
-  for (const session of shown) lines.push(composeLine(sessionLine(session), width));
-  if (state.sessions.length > shown.length) {
-    const hidden = state.sessions.length - shown.length;
-    lines.push(composeLine([{ text: `  +${hidden} more`, style: STYLE_DIM }], width));
+  const selectedIndex = state.sessions.findIndex(
+    (session) => session.sessionId === selectedSessionId,
+  );
+  const start = Math.max(Math.min(selectedIndex - room + 1, state.sessions.length - room), 0);
+  const shown = state.sessions.slice(start, start + room);
+  for (const session of shown) {
+    lines.push(
+      composeLine(
+        sessionLine({ session, selected: session.sessionId === selectedSessionId, width }),
+        width,
+      ),
+    );
+  }
+  const above = start;
+  const below = state.sessions.length - start - shown.length;
+  const overflow = [
+    ...(above > 0 ? [`+${above} ${MORE_ABOVE}`] : []),
+    ...(below > 0 ? [`+${below} ${MORE_BELOW}`] : []),
+  ];
+  if (overflow.length > 0) {
+    lines.push(composeLine([{ text: `  ${overflow.join('   ')}`, style: STYLE_DIM }], width));
   }
   if (state.sessions.length === 0) {
     lines.push(composeLine([{ text: '  no sessions', style: STYLE_DIM }], width));
   }
 
   lines.push('');
-  lines.push(composeLine([{ text: KEY_HINTS, style: STYLE_DIM }], width));
+  lines.push(footerLine(notice, width));
   return lines;
 }
 
 let snapshot: Snapshot | null = null;
 let link: LinkState = LINK_DOWN;
+let selectedSessionId: string | null = null;
+/** Remembered so a selection that disappears falls back to the nearest surviving row. */
+let selectedIndex = 0;
+let notice: string | null = null;
 let restored = false;
 let quitting = false;
+
+function selectRow(sessions: SessionView[], index: number): void {
+  if (sessions.length === 0) {
+    selectedSessionId = null;
+    selectedIndex = 0;
+    return;
+  }
+  selectedIndex = clamp(index, 0, sessions.length - 1);
+  selectedSessionId = sessions[selectedIndex]?.sessionId ?? null;
+}
 
 function paint(): void {
   if (restored) return;
   const frame = [CURSOR_HOME];
-  for (const line of buildLines(snapshot, link)) frame.push(line, ERASE_TO_LINE_END, '\n');
+  for (const line of buildLines({ snapshot, link, selectedSessionId, notice })) {
+    frame.push(line, ERASE_TO_LINE_END, '\n');
+  }
   frame.push(ERASE_BELOW);
   process.stdout.write(frame.join(''));
 }
@@ -300,6 +425,8 @@ function restoreTerminal(): void {
 function applyState(state: DaemonState, next: LinkState): void {
   snapshot = { state, receivedAt: Date.now() };
   link = next;
+  const index = state.sessions.findIndex((session) => session.sessionId === selectedSessionId);
+  selectRow(state.sessions, index >= 0 ? index : selectedIndex);
   paint();
 }
 
@@ -313,14 +440,18 @@ async function fetchState(): Promise<DaemonState | null> {
 
 /** The daemon broadcasts on session change only, so a control change is read back
  *  explicitly rather than waiting for a push that may be minutes away. */
-async function command(path: string): Promise<void> {
+async function command(path: string, body?: unknown): Promise<void> {
   try {
-    await fetch(`${DAEMON_URL}${path}`, {
+    const response = await fetch(`${DAEMON_URL}${path}`, {
       method: 'POST',
+      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
+    notice = response.ok ? null : `${COMMAND_FAILURE_NOTICE} ${response.status}`;
     const state = await fetchState();
     if (state) applyState(state, link);
+    else paint();
   } catch {
     link = LINK_DOWN;
     paint();
@@ -340,6 +471,23 @@ function onKey(key: string): void {
   }
   if (!snapshot) return;
   const { state } = snapshot;
+  if (KEYS_SELECT_PREVIOUS.some((candidate) => candidate === key)) {
+    selectRow(state.sessions, selectedIndex - 1);
+    paint();
+    return;
+  }
+  if (KEYS_SELECT_NEXT.some((candidate) => candidate === key)) {
+    selectRow(state.sessions, selectedIndex + 1);
+    paint();
+    return;
+  }
+  if (key === KEY_TOGGLE_MUTE) {
+    const selected = state.sessions.find((session) => session.sessionId === selectedSessionId);
+    if (selected) {
+      void command('/mute', { sessionId: selected.sessionId, muted: !selected.muted });
+    }
+    return;
+  }
   if (key === KEY_TOGGLE_MODE) {
     void command(`/mode?mode=${nextMode(state.mode)}`);
     return;
