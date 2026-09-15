@@ -120,6 +120,36 @@ resuming from the position it froze at. With one session all parts gate together
 behaves like hold music. With several, the transport keeps running so parts stay locked
 to each other and a rejoining part enters wherever the piece currently is.
 
+When the score reaches its end the `autoplay` setting decides what happens: `off` loops
+the current piece, `sequential` walks the library in order, and `random` draws from a
+shuffled bag so every track is heard before any repeats and the piece just played is
+never the next one. Sessions keep their voices across the change — the tree is rebuilt
+and reassigned, and the outgoing score's notes are released before the new one binds.
+
+### Browsing the library
+
+`GET /tracks` returns every playable file with its title, composer, licence, format and
+the number of voices the classifier finds in it. Anything at two voices or fewer is
+flagged `holdMusicOnly`: a Bach prelude is a legitimate choice for a single session, but
+it cannot tell four agents apart, and the UI should say so rather than hide it.
+`POST /track` with `{"file": "..."}` switches tracks, and accepts only names that are
+already in that list.
+
+Each track also reports `integrity`. The licence in `tracks.json` was recorded against a
+specific sha256, so sourcing a track and trusting a track are separate questions: a file
+whose bytes no longer match its record reads `mismatch`, and a file with no recorded
+digest — anything you supplied yourself — reads `unrecorded` rather than borrowing the
+licence of the name it was given. `src/catalogue.test.ts` fails if any shipped file drifts
+from the record that licensed it.
+
+Only MIDI is supported and only MIDI will be. The whole product is per-part volume
+gating, which means addressing each instrument on its own channel; an mp3 or wav is one
+mixed stereo pair with no parts to gate. `format` is reported per track so a client can
+explain that rather than silently ignoring the file.
+
+Files dropped into `llmfm-tracks/` beside your Copilot config are playable too. They are
+listed without a licence record, because we have not verified one for them.
+
 ## Music and licensing
 
 MIDI messages are sent to the synthesizer already installed on your machine. The
@@ -137,6 +167,20 @@ A public-domain composition does not imply a public-domain sequence: a MIDI file
 Beethoven symphony is its own copyrightable work. Only files whose licence is stated by
 the publisher are shipped. `tools/curate-tracks.ts` fetches the library and records that
 provenance; it is run by hand, and the daemon itself never touches the network.
+
+Curation also screens for dynamics. A score whose notes all share one velocity is refused
+before it is written into `tracks/`, because the signal this product sends is one part
+fading out while the others carry on, and a flat score gives that fade nothing to move
+against — it reads as the music breaking rather than as a voice leaving. Engraving tools
+write a flat velocity unless dynamics were engraved, so every file is measured and none is
+trusted for its source. `src/dynamics.test.ts` holds the bundled library to the same bar.
+
+Instrumentation is corrected at load. Engraved editions routinely put a whole string
+section on the solo GM patches and horns on 69, which is English Horn — a woodwind. A part
+whose name says it is a section moves to String Ensemble, and a part named as a horn moves
+to French Horn. The decision reads the part name, never the program alone, so a genuine
+concerto soloist keeps the patch its score chose; `part.scoredProgram` keeps the original
+for inspection.
 
 ## Privacy
 

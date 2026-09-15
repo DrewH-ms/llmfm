@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { basename } from 'node:path';
 import type { Track } from '@tonejs/midi';
 import { MAX_MIDI_VALUE, MELODIC_CHANNELS, MIN_NOTE_DURATION_SECONDS, PERCUSSION_CHANNEL } from './constants.ts';
+import { parsePartName, normalizePartName } from './part-names.ts';
 import type { Part, Score, ScoredNote } from './types.ts';
 
 /** @tonejs/midi ships a UMD bundle, so Node's ESM loader cannot see its named exports. */
@@ -42,6 +43,48 @@ function scoreNote(
   };
 }
 
+/** GM programs the engraving tools get wrong in ways that misrepresent the score through
+ *  a General MIDI synth, rather than ways that are a matter of taste.
+ *
+ *  Section strings are the common case: LilyPond emits the solo patches (40 Violin,
+ *  41 Viola, 42 Cello, 43 Contrabass) for parts that a whole desk plays, and one solo
+ *  patch carrying a section reads as thin and reedy. Horns are the clearer error — they
+ *  are written to 69, which is English Horn, a woodwind, not the brass instrument the
+ *  part names.
+ *
+ *  Driven by the part name, never by the program alone: a genuine solo violin in a
+ *  concerto belongs on 40, and substituting by program would silently rewrite it. */
+const STRING_SECTION_PROGRAM = 48;
+const FRENCH_HORN_PROGRAM = 60;
+const SECTION_STRINGS = new Set(['Violin', 'Viola', 'Cello', 'Contrabass']);
+
+/** A section says so by naming more than one player. Ordinals are not enough on their
+ *  own — "Violino I" is how a concerto names its soloist as well as how a symphony names
+ *  its first desk — so plurality is the evidence, and a name that says "solo" overrides
+ *  it outright. */
+const PLURAL_TOKENS = new Set([
+  'violins', 'violini', 'violinen', 'violons', 'geigen', 'fiddles', 'vlns', 'vns', 'vni',
+  'violas', 'viole', 'vle', 'bratschen', 'altos', 'vlas',
+  'cellos', 'celli', 'violoncelli', 'violoncelles', 'vcs',
+  'contrabasses', 'contrabassi', 'contrabbassi', 'kontrabasse', 'contrebasses',
+  'basses', 'bassi', 'dbs',
+]);
+const SOLO_TOKENS = new Set(['solo', 'soli', 'solist', 'soloist']);
+
+/** Returns the program to sound the part with, which is the original unless the name is
+ *  evidence that the file's own choice misrepresents it. */
+export function remapProgram(name: string, program: number): number {
+  const tokens = normalizePartName(name).split(' ');
+  if (tokens.some((token) => SOLO_TOKENS.has(token))) return program;
+
+  const parsed = parsePartName(name);
+  if (parsed.instrument === 'Horn') return FRENCH_HORN_PROGRAM;
+  if (parsed.instrument !== null && SECTION_STRINGS.has(parsed.instrument)) {
+    if (tokens.some((token) => PLURAL_TOKENS.has(token))) return STRING_SECTION_PROGRAM;
+  }
+  return program;
+}
+
 /** Busiest first, so the parts that carry the piece are the ones that get a channel of
  *  their own. Ties break on track order to keep the allocation reproducible. */
 function melodicChannels(tracks: { track: Track; index: number }[]): Map<number, number> {
@@ -72,11 +115,14 @@ export function loadScore(filePath: string): Score {
     const percussion = track.instrument.percussion;
     const channel = percussion ? PERCUSSION_CHANNEL : (channelOf.get(index) ?? OVERFLOW_CHANNEL);
     const name = partName(track, index);
-    const id = partId(name, track.instrument.number, index);
+    const scored = track.instrument.number;
+    const program = percussion ? scored : remapProgram(name, scored);
+    const id = partId(name, scored, index);
     return {
       partId: id,
       name,
-      program: track.instrument.number,
+      program,
+      scoredProgram: scored,
       channel,
       percussion,
       notes: track.notes.map((note) => scoreNote(note, channel, id)),

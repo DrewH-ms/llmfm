@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 import { loadScore } from '../src/score.ts';
+import { measureDynamics, isDynamic, MIN_DISTINCT_VELOCITIES } from './dynamics.ts';
 
 /**
  * Downloads the curated track library from the Mutopia Project, records each file's
@@ -43,72 +44,38 @@ const COMPOSER_NAMES = new Map<string, string>([
   ['BeethovenLv', 'Ludwig van Beethoven'],
   ['MozartWA', 'Wolfgang Amadeus Mozart'],
   ['VivaldiA', 'Antonio Vivaldi'],
+  ['DvorakA', 'Antonín Dvořák'],
+  ['GriegE', 'Edvard Grieg'],
+  ['HaydnFJ', 'Franz Joseph Haydn'],
+  ['Mendelssohn-BartholdyF', 'Felix Mendelssohn Bartholdy'],
 ]);
 
-/** The batch, chosen to spread across scoring practice rather than across repertoire:
- *  whole orchestra, chamber strings, wind chamber, concerto, and two solo keyboard pieces
- *  that are expected to yield too few voices to be usable. */
+/** Screened rather than sampled. An earlier batch was taken for scoring variety alone and
+ *  most of it was dynamically flat, which is fatal here: the signal is one part fading
+ *  against the others, and a score with one velocity throughout has nothing to fade
+ *  against. Every entry below was measured to carry real dynamics before being listed,
+ *  and the gate in this script re-checks it on every run. */
 const CURATED = [
+  { file: 'dvorak-symphony7.mid', piece: 'DvorakA/O70/DvorakSYMPH7' },
+  { file: 'dvorak-symphony9-new-world.mid', piece: 'DvorakA/O95/Sym9' },
+  { file: 'beethoven-egmont-overture.mid', piece: 'BeethovenLv/O84/Egmont' },
+  { file: 'beethoven-coriolan-overture.mid', piece: 'BeethovenLv/O62/Coriolan' },
+  { file: 'beethoven-fidelio-overture.mid', piece: 'BeethovenLv/O72b/fidelio' },
+  { file: 'beethoven-piano-concerto3-1.mid', piece: 'BeethovenLv/O37/Concerto_No3' },
+  { file: 'beethoven-symphony5-2.mid', piece: 'BeethovenLv/O67/Symphony5_2' },
   {
-    file: 'beethoven-symphony5-1.mid',
-    piece: 'BeethovenLv/O67/Symphony5_1',
-    forces: 'Full classical orchestra',
+    file: 'mendelssohn-midsummer-nights-dream.mid',
+    piece: 'Mendelssohn-BartholdyF/O61/Sommernachtstraum',
   },
-  {
-    file: 'beethoven-quartet-op18-4-1.mid',
-    piece: 'BeethovenLv/O18/QuartetOpus18_No4_1',
-    forces: 'String quartet',
-  },
-  {
-    file: 'mozart-eine-kleine-nachtmusik.mid',
-    piece: 'MozartWA/KV525/MozartWA-KV525',
-    forces: 'String ensemble',
-  },
-  {
-    file: 'mozart-clarinet-concerto.mid',
-    piece: 'MozartWA/KV622/MozartK622',
-    forces: 'Concerto, orchestra with solo wind',
-  },
-  {
-    file: 'mozart-clarinet-quintet.mid',
-    piece: 'MozartWA/KV581/k581',
-    forces: 'Wind and string chamber',
-  },
-  {
-    file: 'bach-brandenburg1-1.mid',
-    piece: 'BachJS/BWV1046/Brandenburg1-1',
-    forces: 'Concerto grosso, horns and oboes',
-  },
-  {
-    file: 'bach-brandenburg2.mid',
-    piece: 'BachJS/BWV1047/brandenburg_2',
-    forces: 'Concerto grosso, mixed soloists',
-  },
-  {
-    file: 'bach-double-violin-concerto.mid',
-    piece: 'BachJS/BWV1043/concerto-in-d-minor',
-    forces: 'Concerto for two violins',
-  },
-  {
-    file: 'bach-toccata-and-fugue.mid',
-    piece: 'BachJS/BWV565/ToccataFugue',
-    forces: 'Solo organ',
-  },
-  {
-    file: 'bach-wtc1-prelude1.mid',
-    piece: 'BachJS/BWV846/wtk1-prelude1',
-    forces: 'Solo keyboard',
-  },
-  {
-    file: 'beethoven-moonlight-1.mid',
-    piece: 'BeethovenLv/O27/moonlight',
-    forces: 'Solo piano',
-  },
-  {
-    file: 'vivaldi-four-seasons-spring.mid',
-    piece: 'VivaldiA/O8/spring',
-    forces: 'Baroque concerto, solo violin and strings',
-  },
+  { file: 'grieg-aases-death.mid', piece: 'GriegE/O46/02-lamortdase-strings' },
+  { file: 'mozart-wind-divertimento2.mid', piece: 'MozartWA/KV229/divertimento' },
+  { file: 'mozart-piano-concerto23.mid', piece: 'MozartWA/KV488/Mozart-KV488' },
+  { file: 'mozart-quartet-kv387.mid', piece: 'MozartWA/KV387/k387' },
+  { file: 'mozart-requiem-dies-irae.mid', piece: 'MozartWA/KV626/dies_irae' },
+  { file: 'mozart-eine-kleine-nachtmusik.mid', piece: 'MozartWA/KV525/MozartWA-KV525' },
+  { file: 'haydn-quartet-op76-4.mid', piece: 'HaydnFJ/O76/op76-n4' },
+  { file: 'bach-violin-concerto-e-major.mid', piece: 'BachJS/BWV1042/concerto-in-e-major' },
+  { file: 'bach-brandenburg5-3.mid', piece: 'BachJS/BWV1050/brand5-3' },
 ] as const;
 
 type CuratedTrack = {
@@ -195,13 +162,24 @@ function largestMidi(archive: Buffer): Buffer {
   return largest.data;
 }
 
-function parses(path: string): boolean {
+/** Refuses before the file is kept rather than after it is bundled: a flat score cannot
+ *  carry the signal, so shipping one and discovering it by ear is the failure mode this
+ *  exists to prevent. Returns the reason, or null when the file may be kept. */
+function screen(path: string): string | null {
+  let score;
   try {
-    const score = loadScore(path);
-    return score.parts.length > 0 && score.notes.length > 0 && score.duration > 0;
-  } catch {
-    return false;
+    score = loadScore(path);
+  } catch (error) {
+    return `does not parse as MIDI: ${error instanceof Error ? error.message : error}`;
   }
+  if (score.parts.length === 0 || score.notes.length === 0 || score.duration <= 0) {
+    return 'parses but contains no playable music';
+  }
+  const dynamics = measureDynamics(score.notes);
+  if (!isDynamic(dynamics)) {
+    return `dynamically flat: ${dynamics.distinct} distinct velocities, need ${MIN_DISTINCT_VELOCITIES}`;
+  }
+  return null;
 }
 
 function writeAttribution(tracks: CuratedTrack[]): void {
@@ -235,11 +213,15 @@ async function curate(track: (typeof CURATED)[number], refresh: boolean): Promis
   if (!midFile) throw new Error('piece publishes no MIDI');
 
   const destination = join(TRACKS_DIR, `${CURATED_PREFIX}${track.file}`);
-  if (refresh || !existsSync(destination) || !parses(destination)) {
+  if (refresh || !existsSync(destination) || screen(destination) !== null) {
     const downloaded = await fetchBytes(`${MUTOPIA_FTP}${track.piece}/${midFile}`);
     const midi = midFile.toLowerCase().endsWith('.zip') ? largestMidi(downloaded) : downloaded;
     writeFileSync(destination, midi);
-    if (!parses(destination)) throw new Error('downloaded file does not parse as MIDI');
+  }
+  const rejected = screen(destination);
+  if (rejected !== null) {
+    rmSync(destination, { force: true });
+    throw new Error(rejected);
   }
 
   const composerKey = rdfField(document, 'composer');
@@ -248,7 +230,7 @@ async function curate(track: (typeof CURATED)[number], refresh: boolean): Promis
     file: `${CURATED_PREFIX}${track.file}`,
     title: rdfField(document, 'title').replace(/\s+/g, ' '),
     composer: COMPOSER_NAMES.get(composerKey) ?? composerKey,
-    forces: track.forces,
+    forces: rdfField(document, 'for').replace(/\s+/g, ' '),
     date: rdfField(document, 'date'),
     style: rdfField(document, 'style'),
     licence: rdfField(document, 'licence'),

@@ -1,0 +1,1579 @@
+{
+  "candidates": [
+    {
+      "piece": "ArbeauT/Orch/belle",
+      "leaf": "belle",
+      "title": "Pavan: Belle qui tiens ma Vie",
+      "composer": "ArbeauT",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/ArbeauT/Orch/belle/"
+    },
+    {
+      "piece": "BachJS/BWV1068/bach-air",
+      "leaf": "bach-air",
+      "title": "Air",
+      "composer": "BachJS",
+      "for": "Orchestra",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1068/bach-air/"
+    },
+    {
+      "piece": "BachJS/BWV1068/air-tromb",
+      "leaf": "air-tromb",
+      "title": "Air, from Suite No.3 in D",
+      "composer": "BachJS",
+      "for": "Trombone Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1068/air-tromb/"
+    },
+    {
+      "piece": "BachJS/BWV264/bwv-264",
+      "leaf": "bwv-264",
+      "title": "Als der gütige Gott vollenden wollt' sein Wort",
+      "composer": "BachJS",
+      "for": "Voice (SATB)",
+      "licence": "Creative Commons Attribution-ShareAlike 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV264/bwv-264/"
+    },
+    {
+      "piece": "BachJS/BWV232/BachBMinorMass",
+      "leaf": "BachBMinorMass",
+      "title": "B Minor Mass - Aria",
+      "composer": "BachJS",
+      "for": "Ensemble: Horn, 2 Bassoons, Bass, Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV232/BachBMinorMass/"
+    },
+    {
+      "piece": "BachJS/BWV1046/Brandenburg1-1",
+      "leaf": "Brandenburg1-1",
+      "title": "Brandenburg Concerto No. 1 (First Movement - Allegro)",
+      "composer": "BachJS",
+      "for": "Ensemble: Corno, Oboe, Fagotto, Violino piccolo, Violino, Viola, Violoncello, Violone grosso, Continuo",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1046/Brandenburg1-1/"
+    },
+    {
+      "piece": "BachJS/BWV1046/Brandenburg1-2",
+      "leaf": "Brandenburg1-2",
+      "title": "Brandenburg Concerto No. 1 (Second Movement - Adagio)",
+      "composer": "BachJS",
+      "for": "Ensemble: Oboe, Fagotto, Violino piccolo, Violino, Viola, Violoncello, Violone grosso, Continuo",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1046/Brandenburg1-2/"
+    },
+    {
+      "piece": "BachJS/BWV1050/brand5-3",
+      "leaf": "brand5-3",
+      "title": "Brandenburg Concerto No. 5 (3rd Movement: Allegro)",
+      "composer": "BachJS",
+      "for": "Ensemble: Flute, Two Violins, Violas, 'Cello, Bass and Harpsichord",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1050/brand5-3/"
+    },
+    {
+      "piece": "BachJS/BWV248/Bach_BrichAn",
+      "leaf": "Bach_BrichAn",
+      "title": "Brich an, o schönes Morgenlicht",
+      "composer": "BachJS",
+      "for": "Choir (SATB)",
+      "licence": "Creative Commons Attribution-ShareAlike 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV248/Bach_BrichAn/"
+    },
+    {
+      "piece": "BachJS/BWV277/Bach_ChristLag",
+      "leaf": "Bach_ChristLag",
+      "title": "Christ Lag In Todesbanden",
+      "composer": "BachJS",
+      "for": "Choir (SATB)",
+      "licence": "Creative Commons Attribution-ShareAlike 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV277/Bach_ChristLag/"
+    },
+    {
+      "piece": "BachJS/BWV1043/concerto-in-d-minor",
+      "leaf": "concerto-in-d-minor",
+      "title": "Concerto in D minor for two violins and strings",
+      "composer": "BachJS",
+      "for": "Violin Duet and String Orchestra: Two Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1043/concerto-in-d-minor/"
+    },
+    {
+      "piece": "BachJS/BWV1042/concerto-in-e-major",
+      "leaf": "concerto-in-e-major",
+      "title": "Concerto in E major for violin and strings",
+      "composer": "BachJS",
+      "for": "Violin and String Orchestra: Two Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1042/concerto-in-e-major/"
+    },
+    {
+      "piece": "BachJS/BWV1056R/BWV1056R-Schreck",
+      "leaf": "BWV1056R-Schreck",
+      "title": "Concerto in G minor",
+      "composer": "BachJS",
+      "for": "Violin, Viola, Basso Continuo, String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1056R/BWV1056R-Schreck/"
+    },
+    {
+      "piece": "BachJS/BWV36b/bwv0036b",
+      "leaf": "bwv0036b",
+      "title": "Die Freude Reget Sich",
+      "composer": "BachJS",
+      "for": "Orchestra: Flute, Oboe, Violins, Viola, Choir (SATB), Soprano, Alto, Tenor, Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV36b/bwv0036b/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusII",
+      "leaf": "contrapunctusII",
+      "title": "Die Kunst der Fuge, Contrapunctus II",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusII/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusIII",
+      "leaf": "contrapunctusIII",
+      "title": "Die Kunst der Fuge, Contrapunctus III",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusIII/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusIV",
+      "leaf": "contrapunctusIV",
+      "title": "Die Kunst der Fuge, Contrapunctus IV",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusIV/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusIX",
+      "leaf": "contrapunctusIX",
+      "title": "Die Kunst der Fuge, Contrapunctus IX",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusIX/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusV",
+      "leaf": "contrapunctusV",
+      "title": "Die Kunst der Fuge, Contrapunctus V",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusV/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusVI",
+      "leaf": "contrapunctusVI",
+      "title": "Die Kunst der Fuge, Contrapunctus VI",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusVI/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusVII",
+      "leaf": "contrapunctusVII",
+      "title": "Die Kunst der Fuge, Contrapunctus VII",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusVII/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusVIII",
+      "leaf": "contrapunctusVIII",
+      "title": "Die Kunst der Fuge, Contrapunctus VIII",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusVIII/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusX",
+      "leaf": "contrapunctusX",
+      "title": "Die Kunst der Fuge, Contrapunctus X",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusX/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusXI",
+      "leaf": "contrapunctusXI",
+      "title": "Die Kunst der Fuge, Contrapunctus XI",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusXI/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusXIX",
+      "leaf": "contrapunctusXIX",
+      "title": "Die Kunst der Fuge, Contrapunctus XIX, Fuga a 3 Soggetti",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusXIX/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusXVI",
+      "leaf": "contrapunctusXVI",
+      "title": "Die Kunst der Fuge, Contrapunctus XVI a 3 (rectus, inversus)",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusXVI/"
+    },
+    {
+      "piece": "BachJS/BWV1080/contrapunctusXVIII",
+      "leaf": "contrapunctusXVIII",
+      "title": "Die Kunst der Fuge, Contrapunctus XVIII a 4 (rectus, inversus)",
+      "composer": "BachJS",
+      "for": "String Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1080/contrapunctusXVIII/"
+    },
+    {
+      "piece": "BachJS/BWV1055/bwv1055",
+      "leaf": "bwv1055",
+      "title": "Keyboard Concerto Nº 4",
+      "composer": "BachJS",
+      "for": "Orchestra: Violins, Viola,'Cello, Continuo, Harpsichord, Clavichord, Piano",
+      "licence": "Creative Commons Attribution-ShareAlike 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV1055/bwv1055/"
+    },
+    {
+      "piece": "BachJS/BWV230/bach_BWV_230_Lobet_den_Herrn_alle_Heiden",
+      "leaf": "bach_BWV_230_Lobet_den_Herrn_alle_Heiden",
+      "title": "Lobet den Herrn, alle Heiden (Psalm 117)",
+      "composer": "BachJS",
+      "for": "Voice (SATB) and Continuo",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV230/bach_BWV_230_Lobet_den_Herrn_alle_Heiden/"
+    },
+    {
+      "piece": "BachJS/BWV582/Passacaglia",
+      "leaf": "Passacaglia",
+      "title": "Passacaglia",
+      "composer": "BachJS",
+      "for": "String Quartet",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV582/Passacaglia/"
+    },
+    {
+      "piece": "BachJS/BWV878/spiritus_domini_bach",
+      "leaf": "spiritus_domini_bach",
+      "title": "Spiritus Domini",
+      "composer": "BachJS",
+      "for": "Voice (SATB)",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/BachJS/BWV878/spiritus_domini_bach/"
+    },
+    {
+      "piece": "BeethovenLv/O61/violin_concerto_1",
+      "leaf": "violin_concerto_1",
+      "title": "Concerto for Violin and Orchestra in D Major (1st Movement)",
+      "composer": "BeethovenLv",
+      "for": "Violin and Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O61/violin_concerto_1/"
+    },
+    {
+      "piece": "BeethovenLv/O61/violin_concerto_2",
+      "leaf": "violin_concerto_2",
+      "title": "Concerto for Violin and Orchestra in D Major (2nd Movement)",
+      "composer": "BeethovenLv",
+      "for": "Violin and Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O61/violin_concerto_2/"
+    },
+    {
+      "piece": "BeethovenLv/O61/violin_concerto_3",
+      "leaf": "violin_concerto_3",
+      "title": "Concerto for Violin and Orchestra in D Major (3rd Movement)",
+      "composer": "BeethovenLv",
+      "for": "Violin and Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O61/violin_concerto_3/"
+    },
+    {
+      "piece": "BeethovenLv/O72b/fidelio",
+      "leaf": "fidelio",
+      "title": "Fidelio Overture",
+      "composer": "BeethovenLv",
+      "for": "Orchestra: Flutes, Oboes, Clarinets, Bassoons, Horns, Trumpets, Tenor Trombone, Bass Trombone, Timpani, Violins, Viola, 'Cello, Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O72b/fidelio/"
+    },
+    {
+      "piece": "BeethovenLv/O137/Fuge_Opus137",
+      "leaf": "Fuge_Opus137",
+      "title": "Fuge - Opus 137",
+      "composer": "BeethovenLv",
+      "for": "String Quintet: Violins, Violas, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O137/Fuge_Opus137/"
+    },
+    {
+      "piece": "BeethovenLv/WoO29/marsch_woo29",
+      "leaf": "marsch_woo29",
+      "title": "Marsch - WoO 29",
+      "composer": "BeethovenLv",
+      "for": "Wind Ensemble",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/WoO29/marsch_woo29/"
+    },
+    {
+      "piece": "BeethovenLv/O62/Coriolan",
+      "leaf": "Coriolan",
+      "title": "Ouverture Coriolan",
+      "composer": "BeethovenLv",
+      "for": "Orchestra: Flutes, Oboes, Clarinets, Bassoons, French Horns, Trumpets, Percussion (Timpani), Violins, Violas, 'Cello, Double Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O62/Coriolan/"
+    },
+    {
+      "piece": "BeethovenLv/O84/Egmont",
+      "leaf": "Egmont",
+      "title": "Overture to Egmont",
+      "composer": "BeethovenLv",
+      "for": "Orchestra: Flutes, Oboe, Clarinet, Bassoon, Horns, Trumpets, Timpani, Violins, Viola, 'Cello, Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O84/Egmont/"
+    },
+    {
+      "piece": "BeethovenLv/O37/Concerto_No3",
+      "leaf": "Concerto_No3",
+      "title": "Piano Concerto No. 3 in C Minor (1st Movement: Allegro con brio)",
+      "composer": "BeethovenLv",
+      "for": "Piano and Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O37/Concerto_No3/"
+    },
+    {
+      "piece": "BeethovenLv/O131/quartet_o131",
+      "leaf": "quartet_o131",
+      "title": "Quartet No. 14 in C Sharp Minor",
+      "composer": "BeethovenLv",
+      "for": "String Quartet: Two Violins, Viola, 'Cello",
+      "licence": "Creative Commons Attribution-ShareAlike 2.5",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O131/quartet_o131/"
+    },
+    {
+      "piece": "BeethovenLv/O18/QuartetOpus18_No4_1",
+      "leaf": "QuartetOpus18_No4_1",
+      "title": "Quartet No. 4 in C Minor: 1. Allegro ma non tanto",
+      "composer": "BeethovenLv",
+      "for": "String Quartet: Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O18/QuartetOpus18_No4_1/"
+    },
+    {
+      "piece": "BeethovenLv/O18/QuartetOpus18_No4_2",
+      "leaf": "QuartetOpus18_No4_2",
+      "title": "Quartet No. 4 in C Minor: 2. Andante scherzoso quasi allegretto",
+      "composer": "BeethovenLv",
+      "for": "String Quartet: Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O18/QuartetOpus18_No4_2/"
+    },
+    {
+      "piece": "BeethovenLv/O18/QuartetOpus18_No4_3",
+      "leaf": "QuartetOpus18_No4_3",
+      "title": "Quartet No. 4 in C Minor: 3. Menuetto. Allegretto",
+      "composer": "BeethovenLv",
+      "for": "String Quartet: Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O18/QuartetOpus18_No4_3/"
+    },
+    {
+      "piece": "BeethovenLv/O18/QuartetOpus18_No4_4",
+      "leaf": "QuartetOpus18_No4_4",
+      "title": "Quartet No. 4 in C Minor: 4. Allegro - Prestissimo",
+      "composer": "BeethovenLv",
+      "for": "String Quartet: Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O18/QuartetOpus18_No4_4/"
+    },
+    {
+      "piece": "BeethovenLv/O50/Romanze_Opus50",
+      "leaf": "Romanze_Opus50",
+      "title": "Romanze",
+      "composer": "BeethovenLv",
+      "for": "Violin, Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O50/Romanze_Opus50/"
+    },
+    {
+      "piece": "BeethovenLv/O40/Romanze_Opus40",
+      "leaf": "Romanze_Opus40",
+      "title": "Romanze - Opus 40",
+      "composer": "BeethovenLv",
+      "for": "Violin, Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O40/Romanze_Opus40/"
+    },
+    {
+      "piece": "BeethovenLv/O59/Quartet_Opus_59No3_2",
+      "leaf": "Quartet_Opus_59No3_2",
+      "title": "String Quartet Opus 59 No. 3 - Part II",
+      "composer": "BeethovenLv",
+      "for": "String Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O59/Quartet_Opus_59No3_2/"
+    },
+    {
+      "piece": "BeethovenLv/O55/BeethovenSymphony3",
+      "leaf": "BeethovenSymphony3",
+      "title": "Symphony No. 3 in Eb Major (Eroica)",
+      "composer": "BeethovenLv",
+      "for": "Orchestra",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O55/BeethovenSymphony3/"
+    },
+    {
+      "piece": "BeethovenLv/O67/Symphony5_1",
+      "leaf": "Symphony5_1",
+      "title": "Symphony No. 5 - Opus 67 (1st Movement)",
+      "composer": "BeethovenLv",
+      "for": "Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O67/Symphony5_1/"
+    },
+    {
+      "piece": "BeethovenLv/O67/Symphony5_2",
+      "leaf": "Symphony5_2",
+      "title": "Symphony No. 5 - Opus 67 (2nd Movement)",
+      "composer": "BeethovenLv",
+      "for": "Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O67/Symphony5_2/"
+    },
+    {
+      "piece": "BeethovenLv/O92/Symphony7_1",
+      "leaf": "Symphony7_1",
+      "title": "Symphony No. 7 in A Major (1st Movement: Poco sostenuto - Vivace)",
+      "composer": "BeethovenLv",
+      "for": "Orchestra: Flutes, Oboes, Clarinets, Bassoons, Horns, Trumpets, Timpani, Violins, Viola, 'Cello, Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O92/Symphony7_1/"
+    },
+    {
+      "piece": "BeethovenLv/O92/Symphony7_2",
+      "leaf": "Symphony7_2",
+      "title": "Symphony No. 7 in A Major (2nd Movement: Allegretto)",
+      "composer": "BeethovenLv",
+      "for": "Orchestra: Flutes, Oboes, Clarinets, Bassoons, Horns, Trumpets, Timpani, Violins, Viola, 'Cello, Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BeethovenLv/O92/Symphony7_2/"
+    },
+    {
+      "piece": "BrahmsJ/O40/BrahmsHornTrio",
+      "leaf": "BrahmsHornTrio",
+      "title": "Brahms Horn Trio",
+      "composer": "BrahmsJ",
+      "for": "Ensemble: Horn, Violin, Piano",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/BrahmsJ/O40/BrahmsHornTrio/"
+    },
+    {
+      "piece": "BrahmsJ/O104/nachtwache1",
+      "leaf": "nachtwache1",
+      "title": "Nachtwache 1",
+      "composer": "BrahmsJ",
+      "for": "Voice (SATB)",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/BrahmsJ/O104/nachtwache1/"
+    },
+    {
+      "piece": "CharpentierMA/H490/DavidEtJonathas",
+      "leaf": "DavidEtJonathas",
+      "title": "David et Jonathas",
+      "composer": "CharpentierMA",
+      "for": "Voice, Orchestra",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/CharpentierMA/H490/DavidEtJonathas/"
+    },
+    {
+      "piece": "CorelliA/O6/nr8-quartet",
+      "leaf": "nr8-quartet",
+      "title": "Concerto grosso op.6 no.8 Christmas concerto",
+      "composer": "CorelliA",
+      "for": "String Quartet: Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/CorelliA/O6/nr8-quartet/"
+    },
+    {
+      "piece": "CorneliusP/O9/GrabliedM",
+      "leaf": "GrabliedM",
+      "title": "Grablied",
+      "composer": "CorneliusP",
+      "for": "Choir (TTBB)",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/CorneliusP/O9/GrabliedM/"
+    },
+    {
+      "piece": "DowlandJ/ALS17/ComeAgain",
+      "leaf": "ComeAgain",
+      "title": "Come Again",
+      "composer": "DowlandJ",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/DowlandJ/ALS17/ComeAgain/"
+    },
+    {
+      "piece": "DowlandJ/ALS1/UnquietThoughts",
+      "leaf": "UnquietThoughts",
+      "title": "Unquiet Thoughts",
+      "composer": "DowlandJ",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/DowlandJ/ALS1/UnquietThoughts/"
+    },
+    {
+      "piece": "DvorakA/O95/Sym9",
+      "leaf": "Sym9",
+      "title": "Symphony No. 9 in E minor",
+      "composer": "DvorakA",
+      "for": "Orchestra",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/DvorakA/O95/Sym9/"
+    },
+    {
+      "piece": "DvorakA/O70/DvorakSYMPH7",
+      "leaf": "DvorakSYMPH7",
+      "title": "Symphony Nr. 7",
+      "composer": "DvorakA",
+      "for": "Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/DvorakA/O70/DvorakSYMPH7/"
+    },
+    {
+      "piece": "GriegE/O46/02-lamortdase-strings",
+      "leaf": "02-lamortdase-strings",
+      "title": "Aase's Death from Peer Gynt Suite I",
+      "composer": "GriegE",
+      "for": "String Quartet: Violins, Viola, Cello, Double Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/GriegE/O46/02-lamortdase-strings/"
+    },
+    {
+      "piece": "GriegE/O46/03-anitrasdance",
+      "leaf": "03-anitrasdance",
+      "title": "Anitra's Dance (Tanz) from Peer Gynt Suite I",
+      "composer": "GriegE",
+      "for": "String Ensemble: Violins, Violas, Cello, Double Bass, Triangle",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/GriegE/O46/03-anitrasdance/"
+    },
+    {
+      "piece": "HandelGF/HWV19/AgitatoDaFiereTempeste",
+      "leaf": "AgitatoDaFiereTempeste",
+      "title": "Agitato da fiere tempeste , Aria from Riccardo primo",
+      "composer": "HandelGF",
+      "for": "Voice (Alto), Oboes, String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV19/AgitatoDaFiereTempeste/"
+    },
+    {
+      "piece": "HandelGF/HWV42/AlTardarDellaVendetta",
+      "leaf": "AlTardarDellaVendetta",
+      "title": "Al tardar della vendetta , Aria from Deidamia",
+      "composer": "HandelGF",
+      "for": "Voice (Bass), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV42/AlTardarDellaVendetta/"
+    },
+    {
+      "piece": "HandelGF/HWV7/CaraSposa",
+      "leaf": "CaraSposa",
+      "title": "Cara sposa, amanta cara , Aria from Rinaldo",
+      "composer": "HandelGF",
+      "for": "Voice (Soprano), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV7/CaraSposa/"
+    },
+    {
+      "piece": "HandelGF/HWV37/CorriVolaATuoiTrofei",
+      "leaf": "CorriVolaATuoiTrofei",
+      "title": "Corri, vola, a' tuoi trofei , Aria from Giustino",
+      "composer": "HandelGF",
+      "for": "Voice (Soprano), Oboes, String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV37/CorriVolaATuoiTrofei/"
+    },
+    {
+      "piece": "HandelGF/HWV47/Ecco_il_sol",
+      "leaf": "Ecco_il_sol",
+      "title": "Ecco il sol , Aria from La Resurrezione",
+      "composer": "HandelGF",
+      "for": "Voice (Tenor), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV47/Ecco_il_sol/"
+    },
+    {
+      "piece": "HandelGF/HWV72/Fra_l_ombre",
+      "leaf": "Fra_l_ombre",
+      "title": "Fra l'ombre e gl'orrori , Aria from Aci, Galatea e Polifemo",
+      "composer": "HandelGF",
+      "for": "Voice (Bass), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV72/Fra_l_ombre/"
+    },
+    {
+      "piece": "HandelGF/HWV35/Gavotta",
+      "leaf": "Gavotta",
+      "title": "Gavotta from Atalanta",
+      "composer": "HandelGF",
+      "for": "Ensemble: Trumpets, Timpani",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV35/Gavotta/"
+    },
+    {
+      "piece": "HandelGF/HWV42/Greci_tu_offendi",
+      "leaf": "Greci_tu_offendi",
+      "title": "Grecia tu offendi , Aria from Deidamia",
+      "composer": "HandelGF",
+      "for": "Voice (Alto), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV42/Greci_tu_offendi/"
+    },
+    {
+      "piece": "HandelGF/HWV35/ImparaIngrata",
+      "leaf": "ImparaIngrata",
+      "title": "Impara, ingrata , Aria from Atalanta",
+      "composer": "HandelGF",
+      "for": "Voice (Basso), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV35/ImparaIngrata/"
+    },
+    {
+      "piece": "HandelGF/HWV19/IoGiaTAmai",
+      "leaf": "IoGiaTAmai",
+      "title": "Io già t'amai , Aria from Rodelinda",
+      "composer": "HandelGF",
+      "for": "Voice (Tenor), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV19/IoGiaTAmai/"
+    },
+    {
+      "piece": "HandelGF/HWV22/LaGloriaSola",
+      "leaf": "LaGloriaSola",
+      "title": "La gloria sola , Aria from Admeto",
+      "composer": "HandelGF",
+      "for": "Voice (Bass), Oboes, String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV22/LaGloriaSola/"
+    },
+    {
+      "piece": "HandelGF/HWV10/LaVendettaEUnCibo",
+      "leaf": "LaVendettaEUnCibo",
+      "title": "La vendetta e un cibo , Aria from Silla",
+      "composer": "HandelGF",
+      "for": "Voice (Alto), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV10/LaVendettaEUnCibo/"
+    },
+    {
+      "piece": "HandelGF/HWV42/Marche",
+      "leaf": "Marche",
+      "title": "Marche from Deidamia",
+      "composer": "HandelGF",
+      "for": "Trumpets, Horns, Kettledrum, String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV42/Marche/"
+    },
+    {
+      "piece": "HandelGF/HWV56/Messiah",
+      "leaf": "Messiah",
+      "title": "Messiah",
+      "composer": "HandelGF",
+      "for": "Voice and Orchestra",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV56/Messiah/"
+    },
+    {
+      "piece": "HandelGF/HWV42/NelleNubiIntornoAlFato",
+      "leaf": "NelleNubiIntornoAlFato",
+      "title": "Nelle nubi intorno al Fato , Aria from Deidamia",
+      "composer": "HandelGF",
+      "for": "Voice (Bass), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV42/NelleNubiIntornoAlFato/"
+    },
+    {
+      "piece": "HandelGF/HWV21/NoRisolvoAbbandonar",
+      "leaf": "NoRisolvoAbbandonar",
+      "title": "No! Risolvo abbandonar , Aria from Alessandro",
+      "composer": "HandelGF",
+      "for": "Voice (Alto), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV21/NoRisolvoAbbandonar/"
+    },
+    {
+      "piece": "HandelGF/HWV26/NonPensiQuellAltera",
+      "leaf": "NonPensiQuellAltera",
+      "title": "Non pensi quell'altera , Aria from Lotario",
+      "composer": "HandelGF",
+      "for": "Voice (Tenor), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV26/NonPensiQuellAltera/"
+    },
+    {
+      "piece": "HandelGF/HWV72/Precipitoso_nel_mar",
+      "leaf": "Precipitoso_nel_mar",
+      "title": "Precipitoso nel mar , Aria from Aci, Galatea e Polifemo",
+      "composer": "HandelGF",
+      "for": "Voice (Bass), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV72/Precipitoso_nel_mar/"
+    },
+    {
+      "piece": "HandelGF/HWV41/Se_potessero",
+      "leaf": "Se_potessero",
+      "title": "Se potessero i sospir' miei , Aria from Imeneo",
+      "composer": "HandelGF",
+      "for": "Voice (Alto), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV41/Se_potessero/"
+    },
+    {
+      "piece": "HandelGF/HWV39/Sol_la_brama",
+      "leaf": "Sol_la_brama",
+      "title": "Sol la brama di vendetta , Aria from Faramondo",
+      "composer": "HandelGF",
+      "for": "Voice (Basso), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV39/Sol_la_brama/"
+    },
+    {
+      "piece": "HandelGF/HWV7/SoloDalBrando",
+      "leaf": "SoloDalBrando",
+      "title": "Solo dal brando , Aria from Rinaldo",
+      "composer": "HandelGF",
+      "for": "Voice (Alto), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV7/SoloDalBrando/"
+    },
+    {
+      "piece": "HandelGF/HWV39/Vado_a_recar",
+      "leaf": "Vado_a_recar",
+      "title": "Vado a recar la morte , Aria from Faramondo",
+      "composer": "HandelGF",
+      "for": "Voice (Basso), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV39/Vado_a_recar/"
+    },
+    {
+      "piece": "HandelGF/HWV39/Voglio_che_sia_l_indegno",
+      "leaf": "Voglio_che_sia_l_indegno",
+      "title": "Voglio che sia l'indegno, Aria from Faramondo",
+      "composer": "HandelGF",
+      "for": "Voice (Soprano), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/HandelGF/HWV39/Voglio_che_sia_l_indegno/"
+    },
+    {
+      "piece": "HaydnFJ/O1/op1_1",
+      "leaf": "op1_1",
+      "title": "String Quartet in B-flat major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O1/op1_1/"
+    },
+    {
+      "piece": "HaydnFJ/O76/op76-n4",
+      "leaf": "op76-n4",
+      "title": "String Quartet in B-flat major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O76/op76-n4/"
+    },
+    {
+      "piece": "HaydnFJ/O76/op76-n3",
+      "leaf": "op76-n3",
+      "title": "String Quartet in C major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O76/op76-n3/"
+    },
+    {
+      "piece": "HaydnFJ/O1/op1_3",
+      "leaf": "op1_3",
+      "title": "String Quartet in D major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O1/op1_3/"
+    },
+    {
+      "piece": "HaydnFJ/O76/op76-n5",
+      "leaf": "op76-n5",
+      "title": "String Quartet in D major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O76/op76-n5/"
+    },
+    {
+      "piece": "HaydnFJ/O76/op76-n2",
+      "leaf": "op76-n2",
+      "title": "String Quartet in D minor",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O76/op76-n2/"
+    },
+    {
+      "piece": "HaydnFJ/O1/op1_2",
+      "leaf": "op1_2",
+      "title": "String Quartet in E-flat major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O1/op1_2/"
+    },
+    {
+      "piece": "HaydnFJ/O76/op76-n6",
+      "leaf": "op76-n6",
+      "title": "String Quartet in E-flat major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O76/op76-n6/"
+    },
+    {
+      "piece": "HaydnFJ/O1/op1_4",
+      "leaf": "op1_4",
+      "title": "String Quartet in G major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O1/op1_4/"
+    },
+    {
+      "piece": "HaydnFJ/O76/op76-n1",
+      "leaf": "op76-n1",
+      "title": "String Quartet in G major",
+      "composer": "HaydnFJ",
+      "for": "String Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/HaydnFJ/O76/op76-n1/"
+    },
+    {
+      "piece": "Ippolitov-IvanovM/O37/ippolitov-ivanov-liturgy",
+      "leaf": "ippolitov-ivanov-liturgy",
+      "title": "Divine Liturgy of St. John Chrysostom",
+      "composer": "Ippolitov-IvanovM",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/Ippolitov-IvanovM/O37/ippolitov-ivanov-liturgy/"
+    },
+    {
+      "piece": "KuhnauJ/BWV142/part2",
+      "leaf": "part2",
+      "title": "Uns ist ein Kind geboren: 2. Coro",
+      "composer": "KuhnauJ",
+      "for": "Voice (SATB)",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/KuhnauJ/BWV142/part2/"
+    },
+    {
+      "piece": "KuhnauJ/BWV142/part4",
+      "leaf": "part4",
+      "title": "Uns ist ein Kind geboren: 4. Coro",
+      "composer": "KuhnauJ",
+      "for": "Voice (SATB)",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/KuhnauJ/BWV142/part4/"
+    },
+    {
+      "piece": "KuhnauJ/BWV142/part8",
+      "leaf": "part8",
+      "title": "Uns ist ein Kind geboren: 8. Choral",
+      "composer": "KuhnauJ",
+      "for": "Voice (SATB)",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/KuhnauJ/BWV142/part8/"
+    },
+    {
+      "piece": "LullyJB/LWV71/Armide",
+      "leaf": "Armide",
+      "title": "Acte II, Scene III from Armide",
+      "composer": "LullyJB",
+      "for": "Voice (Tenor), String Ensemble, Basso Continuo",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/LullyJB/LWV71/Armide/"
+    },
+    {
+      "piece": "LullyJB/LWV71/lwv71",
+      "leaf": "lwv71",
+      "title": "Armide",
+      "composer": "LullyJB",
+      "for": "Voice, Orchestra",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/LullyJB/LWV71/lwv71/"
+    },
+    {
+      "piece": "LullyJB/LWV22/LWV22LesPlaisirsDeLIleEnchantee",
+      "leaf": "LWV22LesPlaisirsDeLIleEnchantee",
+      "title": "Les Plaisirs de l'Île Enchantée",
+      "composer": "LullyJB",
+      "for": "Voice, Orchestra",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/LullyJB/LWV22/LWV22LesPlaisirsDeLIleEnchantee/"
+    },
+    {
+      "piece": "LullyJB/LWV61/LWV61Phaeton",
+      "leaf": "LWV61Phaeton",
+      "title": "Phaéton",
+      "composer": "LullyJB",
+      "for": "Voice, Orchestra",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/LullyJB/LWV61/LWV61Phaeton/"
+    },
+    {
+      "piece": "LullyJB/LWV56/lwv56",
+      "leaf": "lwv56",
+      "title": "Psyché",
+      "composer": "LullyJB",
+      "for": "Voice, Orchestra",
+      "licence": "Creative Commons Attribution 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/LullyJB/LWV56/lwv56/"
+    },
+    {
+      "piece": "Mendelssohn-BartholdyF/O36/paulus_3",
+      "leaf": "paulus_3",
+      "title": "Allein Gott in der Höh sei Ehr",
+      "composer": "Mendelssohn-BartholdyF",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/Mendelssohn-BartholdyF/O36/paulus_3/"
+    },
+    {
+      "piece": "Mendelssohn-BartholdyF/O23/Mendelssohn-BartholdyF_op_23_No_1",
+      "leaf": "Mendelssohn-BartholdyF_op_23_No_1",
+      "title": "Aus tiefer Not schrei’ ich zu dir",
+      "composer": "Mendelssohn-BartholdyF",
+      "for": "SATB, Organ",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/Mendelssohn-BartholdyF/O23/Mendelssohn-BartholdyF_op_23_No_1/"
+    },
+    {
+      "piece": "Mendelssohn-BartholdyF/O36/paulus_9",
+      "leaf": "paulus_9",
+      "title": "Dir, Herr, dir will ich mich ergeben",
+      "composer": "Mendelssohn-BartholdyF",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/Mendelssohn-BartholdyF/O36/paulus_9/"
+    },
+    {
+      "piece": "Mendelssohn-BartholdyF/O61/Sommernachtstraum",
+      "leaf": "Sommernachtstraum",
+      "title": "Ein Sommernachtstraum - No.5",
+      "composer": "Mendelssohn-BartholdyF",
+      "for": "Orchestra: Flute, Oboe, Clarinet, Bassoon, French Horn, Violins, Viola, 'Cello, Double Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/Mendelssohn-BartholdyF/O61/Sommernachtstraum/"
+    },
+    {
+      "piece": "Mendelssohn-BartholdyF/O47/EsistbestimmtinGottesRatM",
+      "leaf": "EsistbestimmtinGottesRatM",
+      "title": "Es ist bestimmt in Gottes Rat",
+      "composer": "Mendelssohn-BartholdyF",
+      "for": "Choir (TTBB)",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/Mendelssohn-BartholdyF/O47/EsistbestimmtinGottesRatM/"
+    },
+    {
+      "piece": "Mendelssohn-BartholdyF/O47/RatundScheiden",
+      "leaf": "RatundScheiden",
+      "title": "Gottes Rat und Scheiden",
+      "composer": "Mendelssohn-BartholdyF",
+      "for": "Choir (SATB)",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/Mendelssohn-BartholdyF/O47/RatundScheiden/"
+    },
+    {
+      "piece": "Mendelssohn-BartholdyF/O42/wie_der_hirsch_schreit",
+      "leaf": "wie_der_hirsch_schreit",
+      "title": "Psalm 42",
+      "composer": "Mendelssohn-BartholdyF",
+      "for": "Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/Mendelssohn-BartholdyF/O42/wie_der_hirsch_schreit/"
+    },
+    {
+      "piece": "Mendelssohn-BartholdyF/O70/elias_32",
+      "leaf": "elias_32",
+      "title": "Wer bis an das Ende beharrt",
+      "composer": "Mendelssohn-BartholdyF",
+      "for": "Voice (SATB)",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/Mendelssohn-BartholdyF/O70/elias_32/"
+    },
+    {
+      "piece": "MonteverdiC/SV111/Sestina",
+      "leaf": "Sestina",
+      "title": "Sestina",
+      "composer": "MonteverdiC",
+      "for": "Voice (SSATB), Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/MonteverdiC/SV111/Sestina/"
+    },
+    {
+      "piece": "MonteverdiC/SV105/T_Amo_Mia_Vita",
+      "leaf": "T_Amo_Mia_Vita",
+      "title": "T'amo mia vita",
+      "composer": "MonteverdiC",
+      "for": "Voices (SSATB), Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/MonteverdiC/SV105/T_Amo_Mia_Vita/"
+    },
+    {
+      "piece": "MozartWA/KV546/k546",
+      "leaf": "k546",
+      "title": "Adagio and Fugue in C minor",
+      "composer": "MozartWA",
+      "for": "String Quartet",
+      "licence": "Creative Commons Attribution-ShareAlike 2.5",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV546/k546/"
+    },
+    {
+      "piece": "MozartWA/KV315/k315",
+      "leaf": "k315",
+      "title": "Andante in C Major K. 315",
+      "composer": "MozartWA",
+      "for": "Flute and Orchestra: Violins, Viola, Cello, Horns, Oboes and Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV315/k315/"
+    },
+    {
+      "piece": "MozartWA/KV527/canzonetta",
+      "leaf": "canzonetta",
+      "title": "Canzonetta \"Deh vieni alla finestra\" from Don Giovanni",
+      "composer": "MozartWA",
+      "for": "Ensemble: Baritone, Mandolin, Violin, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV527/canzonetta/"
+    },
+    {
+      "piece": "MozartWA/KV622/MozartK622",
+      "leaf": "MozartK622",
+      "title": "Clarinet concerto",
+      "composer": "MozartWA",
+      "for": "Orchestra: Flute, Bassoon, Horn, Violin, Alto, Cello, DoubleBass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV622/MozartK622/"
+    },
+    {
+      "piece": "MozartWA/KV191/kv191-bassoon-concerto",
+      "leaf": "kv191-bassoon-concerto",
+      "title": "Concerto for Bassoon and Orchestra in B flat major",
+      "composer": "MozartWA",
+      "for": "Bassoon and Orchestra: Horns, Oboes, Violins, Viola, Cello and Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV191/kv191-bassoon-concerto/"
+    },
+    {
+      "piece": "MozartWA/KV620/magicflute-13-aria",
+      "leaf": "magicflute-13-aria",
+      "title": "Die Zauberflöte (The Magic Flute) - No. 13 Arie",
+      "composer": "MozartWA",
+      "for": "Orchestra: Piccolo, Flute, Clarinet, Bassoon, Violins, Viola, Cello, Double Bass, Voice (Soprano)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV620/magicflute-13-aria/"
+    },
+    {
+      "piece": "MozartWA/KV620/magicflute-14-aria",
+      "leaf": "magicflute-14-aria",
+      "title": "Die Zauberflöte (The Magic Flute) - No. 14 Arie",
+      "composer": "MozartWA",
+      "for": "Orchestra: Flute, Bassoon, French Horn, Violins, Viola, Cello, Double Bass, Voice (Soprano)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV620/magicflute-14-aria/"
+    },
+    {
+      "piece": "MozartWA/KV620/magicflute-15-aria",
+      "leaf": "magicflute-15-aria",
+      "title": "Die Zauberflöte (The Magic Flute) - No. 15 Arie",
+      "composer": "MozartWA",
+      "for": "Orchestra: Flute, Bassoon, French Horn, Violins, Viola, Cello, Double Bass, Voice (Bass)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV620/magicflute-15-aria/"
+    },
+    {
+      "piece": "MozartWA/KV620/magicflute-17-aria",
+      "leaf": "magicflute-17-aria",
+      "title": "Die Zauberflöte (The Magic Flute) - No. 17 Arie",
+      "composer": "MozartWA",
+      "for": "Orchestra: Flute, Oboe, Bassoon, Violins, Viola, Cello, Double Bass, Voice (Soprano)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV620/magicflute-17-aria/"
+    },
+    {
+      "piece": "MozartWA/KV620/magicflute-04-aria",
+      "leaf": "magicflute-04-aria",
+      "title": "Die Zauberflöte (The Magic Flute) - No. 4 Arie",
+      "composer": "MozartWA",
+      "for": "Orchestra: Oboe, Bassoon, French Horn, Violins, Viola, Cello, Double Bass, Voice (Soprano)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV620/magicflute-04-aria/"
+    },
+    {
+      "piece": "MozartWA/KV620/magicflute-07-duet",
+      "leaf": "magicflute-07-duet",
+      "title": "Die Zauberflöte (The Magic Flute) - No. 7 Duett",
+      "composer": "MozartWA",
+      "for": "Orchestra: Clarinet, Bassoon, French Horn, Violins, Viola, Cello, Double Bass, Voice duet (Soprano and Bass)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV620/magicflute-07-duet/"
+    },
+    {
+      "piece": "MozartWA/KV620/magicflute-09-march",
+      "leaf": "magicflute-09-march",
+      "title": "Die Zauberflöte (The Magic Flute) - No. 9 Marsch der Priester",
+      "composer": "MozartWA",
+      "for": "Orchestra: Flute, Bass French Horn, Bassoon, French Horn, Tenor Trombone, Alto Trombone, Bass Trombone, Violins, Viola, Cello, Double Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV620/magicflute-09-march/"
+    },
+    {
+      "piece": "MozartWA/KV620/magicflute-00-overture",
+      "leaf": "magicflute-00-overture",
+      "title": "Die Zauberflöte (The Magic Flute) - Ouverture",
+      "composer": "MozartWA",
+      "for": "Orchestra: Flute, Oboe, Clarinet, Bassoon, French Horn, Trumpet, Trombone, Violins, Viola, Cello, Double Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV620/magicflute-00-overture/"
+    },
+    {
+      "piece": "MozartWA/KV626/dies_irae",
+      "leaf": "dies_irae",
+      "title": "Dies Irae",
+      "composer": "MozartWA",
+      "for": "Voice (SATB), Orchestra: Basset Horns in F, Bassoon, Trumpet in D, Timpani, Violins, Viola, Cello, Organ/Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV626/dies_irae/"
+    },
+    {
+      "piece": "MozartWA/KV229/divertimento",
+      "leaf": "divertimento",
+      "title": "Divertimento II",
+      "composer": "MozartWA",
+      "for": "Ensemble: Oboe, Clarinet, Bassoon",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV229/divertimento/"
+    },
+    {
+      "piece": "MozartWA/KV522/k522-mv1",
+      "leaf": "k522-mv1",
+      "title": "Ein Musikalischer Spass (A Musical Joke) Mv 1",
+      "composer": "MozartWA",
+      "for": "Orchestra: Horns, Violin, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV522/k522-mv1/"
+    },
+    {
+      "piece": "MozartWA/KV525/MozartWA-KV525",
+      "leaf": "MozartWA-KV525",
+      "title": "Eine Kleine Nachtmusik",
+      "composer": "MozartWA",
+      "for": "Orchestra: Violins, Viola, Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV525/MozartWA-KV525/"
+    },
+    {
+      "piece": "MozartWA/KV525/eine-kleine-nachtmusik-mvt1",
+      "leaf": "eine-kleine-nachtmusik-mvt1",
+      "title": "Eine kleine Nachtmusik (1st movement)",
+      "composer": "MozartWA",
+      "for": "String Quartet: Violins, Viola, Cello or Double Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV525/eine-kleine-nachtmusik-mvt1/"
+    },
+    {
+      "piece": "MozartWA/KV158/k158",
+      "leaf": "k158",
+      "title": "Funftes Quartett",
+      "composer": "MozartWA",
+      "for": "String Quartet",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV158/k158/"
+    },
+    {
+      "piece": "MozartWA/KV407/MozartHornQuintet",
+      "leaf": "MozartHornQuintet",
+      "title": "Horn Quintet, K.407",
+      "composer": "MozartWA",
+      "for": "Ensemble: Horn, Violin, 2 Violas, Cello",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV407/MozartHornQuintet/"
+    },
+    {
+      "piece": "MozartWA/KV477/k477",
+      "leaf": "k477",
+      "title": "Masonic Funeral Music KV 477",
+      "composer": "MozartWA",
+      "for": "Orchestra: Basset Horn, Clarinet, Oboes, Horns, Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV477/k477/"
+    },
+    {
+      "piece": "MozartWA/KV412/MozartHornConcerto1",
+      "leaf": "MozartHornConcerto1",
+      "title": "Mozart Horn Concerto No. 1",
+      "composer": "MozartWA",
+      "for": "Horn, Orchestra",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV412/MozartHornConcerto1/"
+    },
+    {
+      "piece": "MozartWA/KV417/MozartHornConcerto2",
+      "leaf": "MozartHornConcerto2",
+      "title": "Mozart Horn Concerto No. 2",
+      "composer": "MozartWA",
+      "for": "Horn, Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV417/MozartHornConcerto2/"
+    },
+    {
+      "piece": "MozartWA/KV447/MozartHornConcerto3",
+      "leaf": "MozartHornConcerto3",
+      "title": "Mozart Horn Concerto No.3",
+      "composer": "MozartWA",
+      "for": "Horn, Orchestra",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV447/MozartHornConcerto3/"
+    },
+    {
+      "piece": "MozartWA/KV495/MozartHornConcerto4",
+      "leaf": "MozartHornConcerto4",
+      "title": "Mozart Horn Concerto No.4",
+      "composer": "MozartWA",
+      "for": "Horn, Orchestra",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV495/MozartHornConcerto4/"
+    },
+    {
+      "piece": "MozartWA/KV488/Mozart-KV488",
+      "leaf": "Mozart-KV488",
+      "title": "Piano Concerto № 23",
+      "composer": "MozartWA",
+      "for": "Orchestra: Flute, Clarinet, Bassoon, French Horn, Piano, Violins, Viola, Cello and Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV488/Mozart-KV488/"
+    },
+    {
+      "piece": "MozartWA/KV478/k478",
+      "leaf": "k478",
+      "title": "Piano Quartet KV 478",
+      "composer": "MozartWA",
+      "for": "Ensemble: Violin, Viola, Cello, Piano",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV478/k478/"
+    },
+    {
+      "piece": "MozartWA/KV387/k387",
+      "leaf": "k387",
+      "title": "String Quartet KV. 387 (nr. 14)",
+      "composer": "MozartWA",
+      "for": "String Quartet: Two Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV387/k387/"
+    },
+    {
+      "piece": "MozartWA/KV421/k421",
+      "leaf": "k421",
+      "title": "String Quartet KV. 421 (nr. 15)",
+      "composer": "MozartWA",
+      "for": "String Quartet: Two Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV421/k421/"
+    },
+    {
+      "piece": "MozartWA/KV428/k428",
+      "leaf": "k428",
+      "title": "String Quartet KV. 428 (nr. 16)",
+      "composer": "MozartWA",
+      "for": "String Quartet: Two Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV428/k428/"
+    },
+    {
+      "piece": "MozartWA/KV458/k458",
+      "leaf": "k458",
+      "title": "String Quartet KV. 458 (nr. 17) \"Hunt\"",
+      "composer": "MozartWA",
+      "for": "String Quartet: Two Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV458/k458/"
+    },
+    {
+      "piece": "MozartWA/KV464/k464",
+      "leaf": "k464",
+      "title": "String Quartet KV. 464 (nr. 18)",
+      "composer": "MozartWA",
+      "for": "String Quartet: Two Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV464/k464/"
+    },
+    {
+      "piece": "MozartWA/KV465/k465",
+      "leaf": "k465",
+      "title": "String Quartet KV. 465 (nr. 19) \"Dissonances\"",
+      "composer": "MozartWA",
+      "for": "String Quartet: Two Violins, Viola, 'Cello",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV465/k465/"
+    },
+    {
+      "piece": "MozartWA/KV183/Symphony25_1",
+      "leaf": "Symphony25_1",
+      "title": "Symphony No. 25 - KV183 (1st Movement)",
+      "composer": "MozartWA",
+      "for": "Orchestra: Oboes, Horns, Violins, Viola, 'Cello, Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV183/Symphony25_1/"
+    },
+    {
+      "piece": "MozartWA/KV183/Symphony25_2",
+      "leaf": "Symphony25_2",
+      "title": "Symphony No. 25 - KV183 (2nd Movement)",
+      "composer": "MozartWA",
+      "for": "Orchestra: Oboes, Horns, Violins, Viola, 'Cello, Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV183/Symphony25_2/"
+    },
+    {
+      "piece": "MozartWA/KV130/k130",
+      "leaf": "k130",
+      "title": "Symphony nr. 18 in F major K. 130",
+      "composer": "MozartWA",
+      "for": "Orchestra: Flutes, Horns, Violins, Viola, Cello and Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/MozartWA/KV130/k130/"
+    },
+    {
+      "piece": "NaujalisJ/O7/naujalis-caligaverunt",
+      "leaf": "naujalis-caligaverunt",
+      "title": "Caligaverunt",
+      "composer": "NaujalisJ",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/NaujalisJ/O7/naujalis-caligaverunt/"
+    },
+    {
+      "piece": "NaujalisJ/O7/naujalis-popule-meus",
+      "leaf": "naujalis-popule-meus",
+      "title": "Popule Meus",
+      "composer": "NaujalisJ",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/NaujalisJ/O7/naujalis-popule-meus/"
+    },
+    {
+      "piece": "NaujalisJ/O7/naujalis-vexilla-regis",
+      "leaf": "naujalis-vexilla-regis",
+      "title": "Vexilla Regis Prodeunt",
+      "composer": "NaujalisJ",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/NaujalisJ/O7/naujalis-vexilla-regis/"
+    },
+    {
+      "piece": "NeithardtA/O141/03-TheLastRoseOfSummer",
+      "leaf": "03-TheLastRoseOfSummer",
+      "title": "Des Sommers letzte Rose",
+      "composer": "NeithardtA",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/NeithardtA/O141/03-TheLastRoseOfSummer/"
+    },
+    {
+      "piece": "NeithardtA/O141/02-BlueBells",
+      "leaf": "02-BlueBells",
+      "title": "Die blauen Glöckchen von Schottland",
+      "composer": "NeithardtA",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/NeithardtA/O141/02-BlueBells/"
+    },
+    {
+      "piece": "NeithardtA/O141/01-HomeSweetHome",
+      "leaf": "01-HomeSweetHome",
+      "title": "Heimat, süßer Ort",
+      "composer": "NeithardtA",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/NeithardtA/O141/01-HomeSweetHome/"
+    },
+    {
+      "piece": "NeithardtA/O141/04-RuleBritannia",
+      "leaf": "04-RuleBritannia",
+      "title": "Rule Britannia",
+      "composer": "NeithardtA",
+      "for": "Voice (SATB)",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/NeithardtA/O141/04-RuleBritannia/"
+    },
+    {
+      "piece": "PurcellH/Z135/JehovaQuamMulti",
+      "leaf": "JehovaQuamMulti",
+      "title": "Jehova, quam multi sunt hostes mei",
+      "composer": "PurcellH",
+      "for": "SSATB, Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/PurcellH/Z135/JehovaQuamMulti/"
+    },
+    {
+      "piece": "SchubertF/D706/SchubertF-D706-Psalm23",
+      "leaf": "SchubertF-D706-Psalm23",
+      "title": "Psalm 23",
+      "composer": "SchubertF",
+      "for": "Choir SSAA, Piano",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/SchubertF/D706/SchubertF-D706-Psalm23/"
+    },
+    {
+      "piece": "SchubertF/D703/SchubertF-D703-Quartettsatz",
+      "leaf": "SchubertF-D703-Quartettsatz",
+      "title": "Streichquartett No. 12 “Quartettsatz” in c-moll",
+      "composer": "SchubertF",
+      "for": "String Quartet",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/SchubertF/D703/SchubertF-D703-Quartettsatz/"
+    },
+    {
+      "piece": "SchubertF/D962/SchubertF-D962-TantumErgo",
+      "leaf": "SchubertF-D962-TantumErgo",
+      "title": "Tantum ergo",
+      "composer": "SchubertF",
+      "for": "Voice (Choir SATB), Orchestra",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/SchubertF/D962/SchubertF-D962-TantumErgo/"
+    },
+    {
+      "piece": "TchaikovskyPI/O35/tchai_op35",
+      "leaf": "tchai_op35",
+      "title": "Violin Concerto in D Major (All three movements)",
+      "composer": "TchaikovskyPI",
+      "for": "Violin, Orchestra: Flutes, Oboes, Clarinets, Bassoons, Horns, Trumpets, Timpani, Violins, Viola, 'Cello, Bass",
+      "licence": "Public Domain",
+      "source": "https://www.mutopiaproject.org/ftp/TchaikovskyPI/O35/tchai_op35/"
+    },
+    {
+      "piece": "VivaldiA/O8/autumn",
+      "leaf": "autumn",
+      "title": "Autumno / Autumn",
+      "composer": "VivaldiA",
+      "for": "Violin, Strings",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/O8/autumn/"
+    },
+    {
+      "piece": "VivaldiA/rv725/DelDestin",
+      "leaf": "DelDestin",
+      "title": "Del destin non vi lagnate, Aria from L'Olimpiade",
+      "composer": "VivaldiA",
+      "for": "Voice (Tenor), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/rv725/DelDestin/"
+    },
+    {
+      "piece": "VivaldiA/O8/summer",
+      "leaf": "summer",
+      "title": "Estate  /  Summer",
+      "composer": "VivaldiA",
+      "for": "Violin, Strings",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/O8/summer/"
+    },
+    {
+      "piece": "VivaldiA/O8/winter",
+      "leaf": "winter",
+      "title": "L'Inverno / Winter",
+      "composer": "VivaldiA",
+      "for": "Violin, String",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/O8/winter/"
+    },
+    {
+      "piece": "VivaldiA/O8/spring",
+      "leaf": "spring",
+      "title": "La Primavera  /  Spring",
+      "composer": "VivaldiA",
+      "for": "Violin, Strings",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/O8/spring/"
+    },
+    {
+      "piece": "VivaldiA/rv725/MentreDormi",
+      "leaf": "MentreDormi",
+      "title": "Mentre dormi amor, Aria from L'Olimpiade",
+      "composer": "VivaldiA",
+      "for": "Voice (Soprano), Horn, String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/rv725/MentreDormi/"
+    },
+    {
+      "piece": "VivaldiA/rv690/DellAlmaSuperba",
+      "leaf": "DellAlmaSuperba",
+      "title": "Quell'alma superba, Aria from Serenata a tre",
+      "composer": "VivaldiA",
+      "for": "Voice (Tenor), Bassoon, String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/rv690/DellAlmaSuperba/"
+    },
+    {
+      "piece": "VivaldiA/rv725/SiamNavi",
+      "leaf": "SiamNavi",
+      "title": "Siam navi all'onde algenti, Aria from L'Olimpiade",
+      "composer": "VivaldiA",
+      "for": "Voice (Soprano), String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/rv725/SiamNavi/"
+    },
+    {
+      "piece": "VivaldiA/rv725/StaPiangendo",
+      "leaf": "StaPiangendo",
+      "title": "Sta piangendo la tortorella, Aria from L'Olimpiade",
+      "composer": "VivaldiA",
+      "for": "Voice (Soprano), Horns, String Ensemble, Basso Continuo",
+      "licence": "Creative Commons Attribution-ShareAlike 3.0",
+      "source": "https://www.mutopiaproject.org/ftp/VivaldiA/rv725/StaPiangendo/"
+    },
+    {
+      "piece": "VolkmannR/O30/AbendliedM",
+      "leaf": "AbendliedM",
+      "title": "Abendlied",
+      "composer": "VolkmannR",
+      "for": "Choir (TTBB)",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/VolkmannR/O30/AbendliedM/"
+    },
+    {
+      "piece": "VolkmannR/O30/AugenhaltenM",
+      "leaf": "AugenhaltenM",
+      "title": "Ich halte ihr die Augen zu",
+      "composer": "VolkmannR",
+      "for": "Choir (TTBB)",
+      "licence": "Creative Commons Attribution 4.0",
+      "source": "https://www.mutopiaproject.org/ftp/VolkmannR/O30/AugenhaltenM/"
+    }
+  ]
+}

@@ -41,6 +41,9 @@ export type Part = {
   partId: string;
   name: string;
   program: number;
+  /** The program the file itself specified, kept so a remap is inspectable and
+   *  reversible. Equal to `program` where nothing was remapped. */
+  scoredProgram: number;
   channel: number;
   percussion: boolean;
   notes: ScoredNote[];

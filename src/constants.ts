@@ -129,8 +129,12 @@ export const MASTER_VOLUME_CURVE_EXPONENT = 0.75;
 
 /** The track loaded when none is chosen. Named rather than taken as the first file in the
  *  directory: the motif is lifted from whatever is loaded, so a track added under an
- *  earlier-sorting name would silently replace both the music and the startup sting. */
-export const DEFAULT_TRACK = 'mutopia-beethoven-symphony5-1.mid';
+ *  earlier-sorting name would silently replace both the music and the startup sting.
+ *  Coriolan is chosen on two measurements rather than taste — 75 distinct note velocities,
+ *  so a fade has a living texture to move against, and every one of its twelve parts
+ *  carries a name the lexicon recognises, so the dashboard can say which instrument fell
+ *  silent instead of numbering it. */
+export const DEFAULT_TRACK = 'mutopia-beethoven-coriolan-overture.mid';
 
 /** What happens when the score runs out. Off is the default because a track ending is
  *  the one moment the user can be sure the silence is not about them. */

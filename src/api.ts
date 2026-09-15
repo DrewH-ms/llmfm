@@ -4,6 +4,29 @@ import { DAEMON_HOST, DAEMON_PORT, GATE_MODES } from './constants.ts';
 import type { GateMode } from './constants.ts';
 import type { DaemonState } from './types.ts';
 
+/** One shipped file as the UI sees it. Search and filtering happen client side, so this
+ *  carries the provenance and the shape of the piece rather than a curated subset. */
+export type TrackInfo = {
+  file: string;
+  /** Always `mid`: the gate is per-part CC7, which recorded audio cannot be given. */
+  format: string;
+  title: string | null;
+  composer: string | null;
+  /** What tracks.json records for this name. It describes the bytes that were curated,
+   *  not necessarily the bytes now on disk — see `integrity`. */
+  licenceId: string | null;
+  /** Whether the file still hashes to what the licence record was written against.
+   *  A record can outlive its file: overwrite a curated name with other bytes and the
+   *  entry keeps asserting a licence for music it no longer describes. `unrecorded`
+   *  means no digest was curated for it, which is the normal case for a user's own file. */
+  integrity: 'verified' | 'mismatch' | 'unrecorded';
+  /** Independent lines the classifier found, which is how many sessions can be told
+   *  apart by ear. */
+  voiceCount: number;
+  /** Too few voices to carry an ensemble; still playable, but only as hold music. */
+  holdMusicOnly: boolean;
+};
+
 export type ApiHandlers = {
   onHookEvent(options: { name: string; body: string }): void;
   onSetMode(mode: GateMode): void;
@@ -13,6 +36,9 @@ export type ApiHandlers = {
   /** False when the key is unknown or the value fails its spec, which the route turns
    *  into a 400 rather than silently accepting a setting that was never applied. */
   onSetSetting(options: { key: string; value: unknown }): boolean;
+  tracks(): TrackInfo[];
+  /** False when the file is not one we ship, which the route turns into a 400. */
+  onSetTrack(file: string): boolean;
   state(): DaemonState;
 };
 
@@ -26,6 +52,25 @@ const HTTP_OK = 200;
 const HTTP_NO_CONTENT = 204;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
+
+/** Every client is a separate process, so a request body is as untrusted as a hook's:
+ *  anything that is not a JSON object contributes no fields at all. */
+function fields(body: string): Record<string, unknown> {
+  try {
+    const payload: unknown = JSON.parse(body);
+    if (typeof payload === 'object' && payload !== null) {
+      return payload as Record<string, unknown>;
+    }
+  } catch {
+    return {};
+  }
+  return {};
+}
+
+const stringField = (body: Record<string, unknown>, key: string): string => {
+  const value = body[key];
+  return typeof value === 'string' ? value : '';
+};
 
 export function startApi(handlers: ApiHandlers): Promise<Api> {
   const streams = new Set<ServerResponse>();
@@ -69,20 +114,9 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
 
     if (req.method === 'POST' && url.pathname === '/mute') {
       void readBody(req).then((body) => {
-        // The dashboard is a separate process and its payload is as untrusted as a hook's.
-        let sessionId = '';
-        let muted = false;
-        try {
-          const payload: unknown = JSON.parse(body);
-          if (typeof payload === 'object' && payload !== null) {
-            const record = payload as Record<string, unknown>;
-            if (typeof record['sessionId'] === 'string') sessionId = record['sessionId'];
-            muted = record['muted'] === true;
-          }
-        } catch {
-          sessionId = '';
-        }
-        if (sessionId) handlers.onSetMute({ sessionId, muted });
+        const payload = fields(body);
+        const sessionId = stringField(payload, 'sessionId');
+        if (sessionId) handlers.onSetMute({ sessionId, muted: payload['muted'] === true });
         res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(handlers.state()));
       });
@@ -91,27 +125,38 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
 
     if (req.method === 'POST' && url.pathname === '/config') {
       void readBody(req).then((body) => {
-        let key = '';
-        let value: unknown = null;
-        try {
-          const payload: unknown = JSON.parse(body);
-          if (typeof payload === 'object' && payload !== null) {
-            const record = payload as Record<string, unknown>;
-            if (typeof record['key'] === 'string') key = record['key'];
-            value = record['value'];
-          }
-        } catch {
-          key = '';
-        }
+        const payload = fields(body);
+        const key = stringField(payload, 'key');
         // The setting specs own validation, so an unknown key and a value the spec
         // rejects are the same failure here and neither reaches the config file.
-        if (!key || !handlers.onSetSetting({ key, value })) {
+        if (!key || !handlers.onSetSetting({ key, value: payload['value'] })) {
           res.writeHead(HTTP_BAD_REQUEST).end();
           return;
         }
         res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(handlers.state()));
       });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/track') {
+      void readBody(req).then((body) => {
+        // The daemon owns the list of files we ship, so an arbitrary path never becomes
+        // a read: the name either matches one of them or the request is rejected.
+        const file = stringField(fields(body), 'file');
+        if (!file || !handlers.onSetTrack(file)) {
+          res.writeHead(HTTP_BAD_REQUEST).end();
+          return;
+        }
+        res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(handlers.state()));
+      });
+      return;
+    }
+
+    if (url.pathname === '/tracks') {
+      res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ tracks: handlers.tracks() }));
       return;
     }
 

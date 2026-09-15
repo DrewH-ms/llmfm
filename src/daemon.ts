@@ -1,7 +1,9 @@
-import { readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startApi } from './api.ts';
+import type { TrackInfo } from './api.ts';
 import { createMidiOut } from './midi-out.ts';
 import { createMixer } from './mixer.ts';
 import { createOrchestrator } from './orchestrator.ts';
@@ -14,13 +16,24 @@ import { playStartupMotif } from './motif.ts';
 import type { StartupMotif } from './motif.ts';
 import { createSimulation } from './simulate.ts';
 import { createConfigStore } from './config.ts';
+import { buildVoiceTree } from './voices.ts';
+import { listUserTracks, userTracksDir, ensureUserTracksDir } from './user-tracks.ts';
 import { WATCH_OPEN_SESSIONS, LOG_EVENTS, DEFAULT_TRACK } from './constants.ts';
+import type { AutoplayMode } from './constants.ts';
 import type { DaemonState } from './types.ts';
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TRACKS_DIR = join(PROJECT_ROOT, 'tracks');
+const TRACKS_INDEX = join(TRACKS_DIR, 'tracks.json');
 const MIDI_FILE_PATTERN = /\.midi?$/i;
 const SESSION_ID_LOG_LENGTH = 8;
+/** At or below this there are not enough distinguishable lines to give sessions one
+ *  each, so the piece can only work as hold music. */
+const MAX_HOLD_MUSIC_VOICES = 2;
+/** Rotating needs somewhere else to go. */
+const MIN_ROTATION_TRACKS = 2;
+const AUTOPLAY_OFF: AutoplayMode = 'off';
+const AUTOPLAY_RANDOM: AutoplayMode = 'random';
 
 export type Daemon = { stop(): Promise<void> };
 
@@ -28,11 +41,158 @@ export function listTracks(): string[] {
   return readdirSync(TRACKS_DIR).filter((file) => MIDI_FILE_PATTERN.test(file));
 }
 
+/** Shipped files first, so a user's copy of a name we ship can never shadow the file its
+ *  licence record was written for. Re-read each time: the whole point of the user folder
+ *  is that dropping a file in makes it playable without a restart. */
+export function playableTracks(): string[] {
+  const shipped = listTracks();
+  return [...shipped, ...listUserTracks().filter((file) => !shipped.includes(file))];
+}
+
+/** Null for a name we do not offer, which is how an untrusted request stops being a path
+ *  and starts being a file we already know about. */
+export function resolveTrack(file: string): string | null {
+  if (listTracks().includes(file)) return join(TRACKS_DIR, file);
+  if (listUserTracks().includes(file)) return join(userTracksDir(), file);
+  return null;
+}
+
 /** Falls back to whatever is present so a stripped-down or user-supplied tracks folder
  *  still starts, rather than failing because one named file is missing. */
 function defaultTrack(): string | undefined {
   const tracks = listTracks();
   return tracks.find((file) => file === DEFAULT_TRACK) ?? tracks[0];
+}
+
+type TrackProvenance = {
+  title: string | null;
+  composer: string | null;
+  licenceId: string | null;
+  sha256: string | null;
+};
+
+const readString = (record: Record<string, unknown>, key: string): string | null => {
+  const value = record[key];
+  return typeof value === 'string' && value ? value : null;
+};
+
+/** tracks.json is a file on disk that a user may edit, so a malformed entry costs that
+ *  entry its metadata rather than costing the daemon its track list. */
+function readProvenance(): Map<string, TrackProvenance> {
+  const index = new Map<string, TrackProvenance>();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(TRACKS_INDEX, 'utf8'));
+  } catch {
+    return index;
+  }
+  const entries = (parsed as { tracks?: unknown })?.tracks;
+  if (!Array.isArray(entries)) return index;
+  for (const entry of entries) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const file = readString(record, 'file');
+    if (!file) continue;
+    index.set(file, {
+      title: readString(record, 'title'),
+      composer: readString(record, 'composer'),
+      licenceId: readString(record, 'licenceId'),
+      sha256: readString(record, 'sha256'),
+    });
+  }
+  return index;
+}
+
+/** A file we cannot parse counts as no voices, which marks it hold-music-only rather
+ *  than removing it from a list the user can see on disk. */
+function countVoices(file: string): number {
+  const path = resolveTrack(file);
+  if (!path) return 0;
+  try {
+    const score = loadScore(path);
+    return buildVoiceTree(score).voicesFor(score.parts.length).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Counting voices means parsing a score, so the answer is kept per file. Keyed by digest
+ *  rather than by name: a name can be given different bytes while the daemon runs, and a
+ *  cached count for the file it used to be would be worse than not caching at all. */
+const voiceCounts = new Map<string, number>();
+
+function digestOf(file: string): string | null {
+  const path = resolveTrack(file);
+  if (!path) return null;
+  try {
+    return createHash('sha256').update(readFileSync(path)).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+export function trackCatalogue(): TrackInfo[] {
+  const provenance = readProvenance();
+  return playableTracks().map((file) => {
+    const digest = digestOf(file);
+    const cached = digest === null ? undefined : voiceCounts.get(digest);
+    const voiceCount = cached ?? countVoices(file);
+    if (digest !== null) voiceCounts.set(digest, voiceCount);
+    const entry = provenance.get(file);
+    const recorded = entry?.sha256 ?? null;
+    return {
+      file,
+      format: extname(file).slice(1).toLowerCase(),
+      title: entry?.title ?? null,
+      composer: entry?.composer ?? null,
+      licenceId: entry?.licenceId ?? null,
+      integrity:
+        recorded === null || digest === null
+          ? 'unrecorded'
+          : recorded === digest
+            ? 'verified'
+            : 'mismatch',
+      voiceCount,
+      holdMusicOnly: voiceCount <= MAX_HOLD_MUSIC_VOICES,
+    };
+  });
+}
+
+export type TrackRotation = {
+  /** The file to play next, or null when autoplay is off or there is nowhere to go. */
+  next(options: { library: string[]; current: string | null; mode: AutoplayMode }): string | null;
+};
+
+const shuffled = (files: string[], random: () => number): string[] => {
+  const order = [...files];
+  for (let index = order.length - 1; index > 0; index -= 1) {
+    const pick = Math.floor(random() * (index + 1));
+    const a = order[index];
+    const b = order[pick];
+    if (a === undefined || b === undefined) continue;
+    order[index] = b;
+    order[pick] = a;
+  }
+  return order;
+};
+
+/** Random order draws from a bag rather than rolling a die, so the library is covered
+ *  before anything repeats; the bag refills without the track just heard so a refill
+ *  cannot land on it twice in a row either. */
+export function createTrackRotation(random: () => number = Math.random): TrackRotation {
+  let bag: string[] = [];
+  return {
+    next({ library, current, mode }): string | null {
+      if (mode === AUTOPLAY_OFF || library.length < MIN_ROTATION_TRACKS) return null;
+      if (mode !== AUTOPLAY_RANDOM) {
+        const index = current === null ? -1 : library.indexOf(current);
+        return library[(index + 1) % library.length] ?? null;
+      }
+      bag = bag.filter((file) => file !== current && library.includes(file));
+      if (bag.length === 0) bag = shuffled(library.filter((file) => file !== current), random);
+      return bag.shift() ?? null;
+    },
+  };
 }
 
 export async function startDaemon(options: { track?: string } = {}): Promise<Daemon> {
@@ -46,9 +206,35 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   let motif: StartupMotif | null = null;
   let stopping = false;
 
-  const trackFile = options.track ?? defaultTrack();
   const midiStatus = await midi.start();
-  const score = trackFile ? loadScore(join(TRACKS_DIR, trackFile)) : null;
+  ensureUserTracksDir();
+  let trackFile = options.track ?? defaultTrack();
+  const startPath = trackFile ? resolveTrack(trackFile) : null;
+  let score = startPath ? loadScore(startPath) : null;
+  const rotation = createTrackRotation();
+  let publish = (): void => {};
+
+  /** Swapping scores under a running transport is exactly where a note that is already
+   *  sounding loses the note-off that would have ended it, so the old score is paused and
+   *  its channels cleared before the new one binds. Parsing first means a bad file leaves
+   *  the current piece playing instead of leaving the orchestra silent. */
+  const playTrack = (file: string): boolean => {
+    const path = stopping ? null : resolveTrack(file);
+    if (!path) return false;
+    let next;
+    try {
+      next = loadScore(path);
+    } catch {
+      return false;
+    }
+    scheduler.pause();
+    mixer.silenceAll();
+    trackFile = file;
+    score = next;
+    orchestrator.bindScore(next);
+    publish();
+    return true;
+  };
 
   mixer.setMasterVolume(config.current().masterVolume);
 
@@ -88,7 +274,19 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       config.setMute({ session, muted, preferLabel });
     },
     onSetSetting: ({ key, value }) => config.setSetting(key, value),
+    tracks: trackCatalogue,
+    onSetTrack: playTrack,
     state,
+  });
+  publish = () => api.broadcast();
+
+  const unsubscribeEnd = scheduler.onEnd(() => {
+    const next = rotation.next({
+      library: playableTracks(),
+      current: trackFile ?? null,
+      mode: config.current().autoplay,
+    });
+    if (next) playTrack(next);
   });
 
   const unsubscribe = registry.onChange(() => {
@@ -137,6 +335,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       motif?.cancel();
       unsubscribe();
       unsubscribeConfig();
+      unsubscribeEnd();
       config.stop();
       watcher?.stop();
       simulation.stop();

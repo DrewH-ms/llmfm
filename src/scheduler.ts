@@ -10,6 +10,9 @@ export type Scheduler = {
   play(): void;
   /** Freezes position and stops scheduling. Does NOT fade — the mixer owns loudness. */
   pause(): void;
+  /** Fires each time the playhead reaches the end of the score, after the transport has
+   *  wrapped to the top. A listener that loads another score replaces the loop. */
+  onEnd(listener: () => void): () => void;
   state(): TransportState;
   stop(): void;
 };
@@ -39,6 +42,7 @@ export function createScheduler(options: { midi: MidiOut; mixer: Mixer }): Sched
 
   const timers = new Set<NodeJS.Timeout>();
   const sounding = new Set<ScoredNote>();
+  const endListeners = new Set<() => void>();
 
   const elapsed = (): number => monotonicSeconds() - anchor;
 
@@ -90,8 +94,13 @@ export function createScheduler(options: { midi: MidiOut; mixer: Mixer }): Sched
     }
 
     if (cursor >= notes.length && now - anchor >= duration) {
+      // Wrapping first means a listener that does nothing still gets an endless loop,
+      // and one that loads another score overwrites this state on its way through.
       anchor = now;
       cursor = 0;
+      position = 0;
+      for (const listener of [...endListeners]) listener();
+      return;
     }
     position = now - anchor;
   };
@@ -129,6 +138,13 @@ export function createScheduler(options: { midi: MidiOut; mixer: Mixer }): Sched
       }
       clearTimers();
       releaseSounding();
+    },
+
+    onEnd(listener: () => void): () => void {
+      endListeners.add(listener);
+      return () => {
+        endListeners.delete(listener);
+      };
     },
 
     state(): TransportState {
