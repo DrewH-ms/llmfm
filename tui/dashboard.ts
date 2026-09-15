@@ -90,7 +90,7 @@ const KEYS_RIGHT = ['\u001b[C', '\u001bOC', 'd', 'l'] as const;
 const KEYS_ACTIVATE = ['\r', '\n', ' '] as const;
 /** Escape arrives alone; an arrow key arrives as the whole sequence in one chunk. */
 const KEYS_BACK = ['\u001b', '\u007f', '\b'] as const;
-const HINTS_ROOT = '[↑↓ ws] move   [→ d enter] open   [-/+] fade   [q] quit';
+const HINTS_ROOT = '[↑↓ ws] move   [←→ ad] open or adjust   [-/+] fade   [q] quit';
 const HINTS_SETTINGS = '[↑↓ ws] move   [←→ ad] change   [esc] back   [q] quit';
 const HINTS_SESSIONS = '[↑↓ ws] move   [enter/m] mute   [← a esc] back   [q] quit';
 const COMMAND_FAILURE_NOTICE = 'daemon rejected command:';
@@ -105,27 +105,24 @@ type LinkState = (typeof LINK_STATES)[number];
 
 const SECTION_SETTINGS = 'settings';
 const SECTION_SESSIONS = 'sessions';
-const SECTION_VOLUME = 'volume';
-const SECTION_IDS = [SECTION_SETTINGS, SECTION_SESSIONS, SECTION_VOLUME] as const;
+const SECTION_IDS = [SECTION_SETTINGS, SECTION_SESSIONS] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const ROOT_HEADING = 'MENU';
 const SECTION_TITLES: Readonly<Record<SectionId, string>> = {
   [SECTION_SETTINGS]: 'Settings',
   [SECTION_SESSIONS]: 'Sessions',
-  [SECTION_VOLUME]: 'Master volume',
 };
 const SECTION_HELP: Readonly<Record<SectionId, string>> = {
   [SECTION_SETTINGS]: 'How the music answers to your agents.',
   [SECTION_SESSIONS]: 'Which sessions hold a voice, and which are muted out of the music.',
-  [SECTION_VOLUME]: 'Overall level, applied over every part.',
 };
 
 const MASTER_VOLUME_KEY = 'masterVolume';
 const MODE_KEY = 'mode';
 const FADE_KEY = 'fadeSeconds';
 /** Master volume is a setting like any other, but the listener reaches for it constantly,
- *  so it is a section of its own rather than a row to scroll to. */
+ *  so it sits on the root menu as a live slider rather than behind a page. */
 const MASTER_VOLUME_SPEC = SETTING_SPECS.find((spec) => spec.key === MASTER_VOLUME_KEY) ?? null;
 const LISTED_SETTING_SPECS = SETTING_SPECS.filter((spec) => spec.key !== MASTER_VOLUME_KEY);
 
@@ -403,6 +400,7 @@ function masterVolumeLine(options: {
   return [
     cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
+    { text: fit(spec.title, TITLE_COLUMN_WIDTH), style: selected ? STYLE_BOLD : STYLE_NONE },
     { text: selected ? CYCLE_LEFT : '  ', style: FG_GREY },
     {
       text: bar(max > 0 ? level / max : 0, VOLUME_BAR_WIDTH),
@@ -415,7 +413,6 @@ function masterVolumeLine(options: {
 
 function sectionSummary(id: SectionId, state: DaemonState): string {
   if (id === SECTION_SETTINGS) return `${LISTED_SETTING_SPECS.length} options`;
-  if (id === SECTION_VOLUME) return displaySetting(MASTER_VOLUME_KEY, state.config.masterVolume);
   const muted = state.sessions.filter((session) => session.muted).length;
   const sounding = state.sessions.filter((session) => session.audible).length;
   if (state.sessions.length === 0) return EMPTY_SESSIONS_TEXT;
@@ -498,15 +495,15 @@ function footerLine(options: {
 function rowsFor(options: { state: DaemonState; section: SectionId | null }): Row[] {
   const { state, section } = options;
   if (section === null) {
-    return SECTION_IDS.map((id) => ({ kind: 'section', key: `section:${id}`, id }));
+    const sections: Row[] = SECTION_IDS.map((id) => ({ kind: 'section', key: `section:${id}`, id }));
+    if (!MASTER_VOLUME_SPEC) return sections;
+    return [
+      ...sections,
+      { kind: 'setting', key: `setting:${MASTER_VOLUME_SPEC.key}`, spec: MASTER_VOLUME_SPEC },
+    ];
   }
   if (section === SECTION_SETTINGS) {
     return LISTED_SETTING_SPECS.map((spec) => ({ kind: 'setting', key: `setting:${spec.key}`, spec }));
-  }
-  if (section === SECTION_VOLUME) {
-    return MASTER_VOLUME_SPEC
-      ? [{ kind: 'setting', key: `setting:${MASTER_VOLUME_SPEC.key}`, spec: MASTER_VOLUME_SPEC }]
-      : [];
   }
   return state.sessions.map((session) => ({
     kind: 'session',
@@ -525,7 +522,7 @@ function rowLine(options: {
   const { row, state, section, selected, width } = options;
   if (row.kind === 'section') return sectionLine({ id: row.id, state, selected, width });
   if (row.kind === 'session') return sessionLine({ session: row.session, selected, width });
-  if (section === SECTION_VOLUME) {
+  if (row.spec.key === MASTER_VOLUME_KEY) {
     return masterVolumeLine({ spec: row.spec, config: state.config, selected });
   }
   return settingLine({ spec: row.spec, config: state.config, selected, width });

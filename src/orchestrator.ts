@@ -29,6 +29,9 @@ export type Orchestrator = {
   setFadeSeconds(seconds: number): void;
   fadeSeconds(): number;
   sessionViews(): SessionView[];
+  /** Clears pending re-checks. Without it a settle or re-split timer outlives shutdown and
+   *  holds the process open waiting to reconsider a mix that no longer exists. */
+  stop(): void;
 };
 
 /** Maps session state onto part audibility, and owns the rule that the transport runs
@@ -259,6 +262,12 @@ export function createOrchestrator(options: {
       config.setSetting('fadeSeconds', seconds);
     },
     fadeSeconds: (): number => config.current().fadeSeconds,
+    stop(): void {
+      if (settleTimer) clearTimeout(settleTimer);
+      if (coarsenTimer) clearTimeout(coarsenTimer);
+      settleTimer = null;
+      coarsenTimer = null;
+    },
     sessionViews(): SessionView[] {
       const now = Date.now();
       const muteRules = config.current();
