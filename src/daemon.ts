@@ -341,6 +341,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       config.stop();
       watcher?.stop();
       simulation.stop();
+      orchestrator.stop();
       scheduler.stop();
       mixer.silenceAll();
       mixer.stop();
