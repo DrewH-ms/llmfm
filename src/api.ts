@@ -10,6 +10,9 @@ export type ApiHandlers = {
   onSetFade(seconds: number): void;
   onSimulate(options: { running: boolean }): void;
   onSetMute(options: { sessionId: string; muted: boolean }): void;
+  /** False when the key is unknown or the value fails its spec, which the route turns
+   *  into a 400 rather than silently accepting a setting that was never applied. */
+  onSetSetting(options: { key: string; value: unknown }): boolean;
   state(): DaemonState;
 };
 
@@ -21,6 +24,7 @@ export type Api = {
 
 const HTTP_OK = 200;
 const HTTP_NO_CONTENT = 204;
+const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
 
 export function startApi(handlers: ApiHandlers): Promise<Api> {
@@ -79,6 +83,32 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
           sessionId = '';
         }
         if (sessionId) handlers.onSetMute({ sessionId, muted });
+        res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(handlers.state()));
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/config') {
+      void readBody(req).then((body) => {
+        let key = '';
+        let value: unknown = null;
+        try {
+          const payload: unknown = JSON.parse(body);
+          if (typeof payload === 'object' && payload !== null) {
+            const record = payload as Record<string, unknown>;
+            if (typeof record['key'] === 'string') key = record['key'];
+            value = record['value'];
+          }
+        } catch {
+          key = '';
+        }
+        // The setting specs own validation, so an unknown key and a value the spec
+        // rejects are the same failure here and neither reaches the config file.
+        if (!key || !handlers.onSetSetting({ key, value })) {
+          res.writeHead(HTTP_BAD_REQUEST).end();
+          return;
+        }
         res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(handlers.state()));
       });

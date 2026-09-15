@@ -85,6 +85,7 @@ export type DaemonState = {
   transport: TransportState;
   midi: MidiStatus;
   sessions: SessionView[];
+  config: import('./config.ts').LlmfmConfig;
 };
 
 /** What the daemon puts on the wire. Deliberately not `Session & …`: `listedByCli` and

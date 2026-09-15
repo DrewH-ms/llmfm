@@ -71,11 +71,15 @@ test('the file may still silence a session whose agentStop was missed', (t) => {
   assert.equal(workingOf(registry), false, 'the file must remain able to stop the music');
 });
 
-test('a session without hooks is driven entirely by the file', () => {
+test('the file registers a session it cannot vouch for, without starting it', () => {
   const registry = createSessionRegistry();
 
+  // A session the hooks have never reported -- opened before install, or resumed
+  // elsewhere. The file knows it exists, which is worth recording: it is what tells a
+  // real session apart from a sub-agent. What the file cannot do is vouch for the work,
+  // so the session is registered silent rather than sounding on an unverifiable claim.
   registry.applyFileState([{ sessionId: SESSION_ID, working: true }]);
-  assert.equal(workingOf(registry), true);
+  assert.equal(workingOf(registry), false);
 
   registry.applyFileState([{ sessionId: SESSION_ID, working: false }]);
   assert.equal(workingOf(registry), false);
@@ -164,4 +168,23 @@ test('clearing a block clears the block clock', (t) => {
   registry.applyHookEvent(hookEvent('postToolUse'));
 
   assert.equal(sessionOf(registry).blockedSince, null);
+});
+
+test('a cold start does not bring pre-existing sessions up working', (t) => {
+  t.mock.timers.enable({ apis: ['Date'] });
+  const registry = createSessionRegistry();
+
+  // The daemon starts with sessions already open. The file is the only signal it has,
+  // and it reports every one of them busy -- including agents sitting on a prompt.
+  registry.applyFileState([{ sessionId: SESSION_ID, working: true }]);
+  assert.equal(workingOf(registry), false, 'the file may not assert work on its own');
+
+  // Nor on any later poll: an idle agent fires no hook, so nothing would correct it.
+  t.mock.timers.tick(HOOK_AUTHORITY_MS + 1);
+  registry.applyFileState([{ sessionId: SESSION_ID, working: true }]);
+  assert.equal(workingOf(registry), false);
+
+  // A genuinely busy session still corrects itself on its next hook event.
+  registry.applyHookEvent(hookEvent('userPromptSubmitted'));
+  assert.equal(workingOf(registry), true);
 });

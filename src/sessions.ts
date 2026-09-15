@@ -98,21 +98,26 @@ export function createSessionRegistry(): SessionRegistry {
         }
         // The file's flag only flips at turn boundaries, so a recent hook reading outranks it.
         if (previous?.source === 'hook' && now - previous.updatedAt < HOOK_AUTHORITY_MS) continue;
-        // Its authority is directional: it sees only that a session is busy, never why,
-        // so a background process reads the same as a working agent. It may silence a
-        // session it believes idle, but may never restore one the hooks have silenced.
-        if (entry.working && previous?.source === 'hook') continue;
-        if (previous && previous.working === entry.working) continue;
+        // Its authority is one-way. The file's `working: true` carries no information,
+        // because the flag tracks *the CLI* being busy — it stays true while a background
+        // shell runs and while an agent sits on a prompt. Only its `false`, and its word
+        // on existence, mean anything. So a `true` registers the session but never asserts
+        // work: asserting work is a hook's job alone. Otherwise a cold start, where the
+        // file is the only signal, brings every already-open session up busy and holds the
+        // music on indefinitely, since an idle agent fires no hook to correct it.
+        // A known session is only ever silenced here, never started; an unknown one is
+        // registered in the silent state, so existence is recorded without a claim.
+        if (previous && (entry.working || !previous.working)) continue;
 
         const cwd = previous?.cwd ?? null;
         sessions.set(entry.sessionId, {
           sessionId: entry.sessionId,
-          working: entry.working,
+          working: false,
           cwd,
           label: labelOf({ cwd, sessionId: entry.sessionId }),
           source: 'file',
           blockedMidTurn: false,
-        blockedSince: null,
+          blockedSince: null,
           listedByCli: true,
           startedAt: previous?.startedAt ?? now,
           updatedAt: now,

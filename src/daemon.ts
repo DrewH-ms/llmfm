@@ -10,6 +10,8 @@ import { createSessionRegistry } from './sessions.ts';
 import { watchOpenSessions } from './open-sessions.ts';
 import { parseHookEvent } from './intake.ts';
 import { loadScore } from './score.ts';
+import { playStartupMotif } from './motif.ts';
+import type { StartupMotif } from './motif.ts';
 import { createSimulation } from './simulate.ts';
 import { createConfigStore } from './config.ts';
 import { WATCH_OPEN_SESSIONS, LOG_EVENTS } from './constants.ts';
@@ -34,11 +36,14 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const config = createConfigStore();
   const orchestrator = createOrchestrator({ registry, mixer, scheduler, config });
   const simulation = createSimulation(registry);
+  let motif: StartupMotif | null = null;
+  let stopping = false;
 
   const trackFile = options.track ?? listTracks()[0];
   const midiStatus = await midi.start();
+  const score = trackFile ? loadScore(join(TRACKS_DIR, trackFile)) : null;
 
-  if (trackFile) orchestrator.bindScore(loadScore(join(TRACKS_DIR, trackFile)));
+  mixer.setMasterVolume(config.current().masterVolume);
 
   const state = (): DaemonState => ({
     mode: orchestrator.mode(),
@@ -48,6 +53,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     transport: scheduler.state(),
     midi: midi.status(),
     sessions: orchestrator.sessionViews(),
+    config: config.current(),
   });
 
   const api = await startApi({
@@ -74,20 +80,43 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
         .some((other) => other.sessionId !== sessionId && other.label === session.label);
       config.setMute({ session, muted, preferLabel });
     },
+    onSetSetting: ({ key, value }) => config.setSetting(key, value),
     state,
   });
 
   const unsubscribe = registry.onChange(() => {
+    // A session arriving means the orchestra has something to say; the sting yields to it
+    // rather than playing over the first notes of the real performance.
+    motif?.cancel();
     orchestrator.refresh();
     api.broadcast();
   });
   // A hand edit to the config must take effect mid-piece, not at the next restart.
   const unsubscribeConfig = config.onChange(() => {
+    mixer.setMasterVolume(config.current().masterVolume);
     orchestrator.refresh();
     api.broadcast();
   });
   config.start();
   const watcher = WATCH_OPEN_SESSIONS ? watchOpenSessions(registry) : null;
+
+  // The transport starts only once the sting is out of the way, so the mixer's opening
+  // fade cannot write over it. Hook events arriving meanwhile are still recorded; they
+  // reach the mix when the score binds.
+  const beginPerformance = (): void => {
+    motif = null;
+    if (score && !stopping) orchestrator.bindScore(score);
+  };
+  if (score && midiStatus.ready && config.current().startupMotif) {
+    motif = playStartupMotif({
+      midi,
+      score,
+      masterVolume: config.current().masterVolume,
+      onDone: beginPerformance,
+    });
+  } else {
+    beginPerformance();
+  }
 
   console.log(`LLMFM listening on http://127.0.0.1:7777`);
   console.log(midiStatus.ready ? `MIDI out: ${midiStatus.device}` : `MIDI unavailable: ${midiStatus.error}`);
@@ -95,6 +124,9 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
 
   return {
     async stop(): Promise<void> {
+      stopping = true;
+      // Cancelling clears the sting's own channels, which the mixer does not hold yet.
+      motif?.cancel();
       unsubscribe();
       unsubscribeConfig();
       config.stop();

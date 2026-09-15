@@ -2,6 +2,7 @@ import {
   DEFAULT_FADE_SECONDS,
   FOCUS_SESSION_ID,
   IGNORE_SUBAGENTS,
+  MS_PER_MINUTE,
   PROMPT_GAP_RESUME_MS,
   SUBAGENT_GRACE_MS,
   VOICE_RESPLIT_DEBOUNCE_MS,
@@ -67,6 +68,15 @@ export function createOrchestrator(options: {
     !session.listedByCli &&
     now - session.startedAt >= SUBAGENT_GRACE_MS;
 
+  /** A terminal that was closed is never removed from the CLI's session file, so without
+   *  this it keeps its instrument forever. Only idle sessions are dropped: a working one
+   *  is legitimately holding its voice however long it has been at it. */
+  const isIdleTooLong = (session: Session, now: number): boolean => {
+    const minutes = config.current().idleDropoutMinutes;
+    if (minutes <= 0 || session.working) return false;
+    return now - session.updatedAt >= minutes * MS_PER_MINUTE;
+  };
+
   /** Sessions that may hold a voice. A muted session is deliberately excluded here rather
    *  than gated silent, so it frees its voice for someone else instead of sounding like an
    *  agent that stopped. */
@@ -75,7 +85,12 @@ export function createOrchestrator(options: {
     const muteRules = config.current();
     const sessions = registry
       .list()
-      .filter((session) => !isSubAgent(session, now) && !isMuted(muteRules, session));
+      .filter(
+        (session) =>
+          !isSubAgent(session, now) &&
+          !isMuted(muteRules, session) &&
+          !isIdleTooLong(session, now),
+      );
     if (!FOCUS_SESSION_ID) return sessions;
     return sessions.filter((session) => session.sessionId === FOCUS_SESSION_ID);
   };
@@ -122,12 +137,24 @@ export function createOrchestrator(options: {
     }, VOICE_RESPLIT_DEBOUNCE_MS);
   };
 
+  /** How the mix answers to the sessions. `per-agent` is the ensemble, where each session
+   *  gates only its own voice. The others gate everything together, which is what plain
+   *  hold music across a fleet means. Inversion is not handled here: `shouldSound` has
+   *  already applied `mode`, so aggregating afterwards yields the reversed variants free. */
+  const mixAudible = (sessions: Session[]): boolean => {
+    const policy = config.current().gate;
+    if (policy === 'always') return true;
+    if (sessions.length === 0) return false;
+    return policy === 'all' ? sessions.every(shouldSound) : sessions.some(shouldSound);
+  };
+
   const refresh = (): void => {
     if (!score) return;
 
     const sessions = gatingSessions();
     settleVoiceCount(sessions.length);
     const assignment = currentAssignment(sessions);
+    const perAgent = config.current().gate === 'per-agent';
 
     const audibleParts = new Set<string>();
     const voicedParts = new Set<string>();
@@ -143,16 +170,20 @@ export function createOrchestrator(options: {
     // Parts no session speaks for follow the ensemble, so they colour the texture without
     // claiming anything about an agent. With one session that is the whole orchestra,
     // which is what makes single-session behaviour plain hold music.
-    const ensembleAudible = audibleParts.size > 0;
+    const ensembleAudible = perAgent ? audibleParts.size > 0 : mixAudible(sessions);
 
     for (const part of score.parts) {
-      const audible = voicedParts.has(part.partId)
-        ? audibleParts.has(part.partId)
-        : ensembleAudible;
+      const audible =
+        perAgent && voicedParts.has(part.partId)
+          ? audibleParts.has(part.partId)
+          : ensembleAudible;
       mixer.setPartAudible({ partId: part.partId, audible, fadeSeconds: fade });
     }
 
-    if (mixer.anyAudible()) scheduler.play();
+    // `mute` keeps the transport running through the silence. It costs the resume-in-place
+    // effect, and exists because nothing else can work once we are riding audio we do not
+    // own: there is no pausing another application's stream.
+    if (mixer.anyAudible() || config.current().silenceMode === 'mute') scheduler.play();
     else scheduler.pause();
   };
 

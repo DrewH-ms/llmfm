@@ -87,6 +87,45 @@ export const HANDLE_ID_LENGTH = 8;
 export const PROMPT_GAP_MODES = ['silent', 'resume'] as const;
 export type PromptGapMode = (typeof PROMPT_GAP_MODES)[number];
 export const DEFAULT_PROMPT_GAP: PromptGapMode = 'silent';
+
+/** Which sessions' work the music answers to. `per-agent` is the ensemble: each session
+ *  gates its own voice. The rest gate the whole mix together, which is what a user who
+ *  wants plain hold music across a fleet is asking for. `mode` inverts any of them. */
+export const GATE_POLICIES = ['per-agent', 'any', 'all', 'always'] as const;
+export type GatePolicy = (typeof GATE_POLICIES)[number];
+export const DEFAULT_GATE_POLICY: GatePolicy = 'per-agent';
+
+/** What "silent" means. `pause` stops the transport and resumes in place. `mute` keeps it
+ *  running inaudibly, which costs the resume-mid-phrase effect but is the only option once
+ *  something other than us owns the audio, since we cannot pause another app's stream. */
+export const SILENCE_MODES = ['pause', 'mute'] as const;
+export type SilenceMode = (typeof SILENCE_MODES)[number];
+export const DEFAULT_SILENCE_MODE: SilenceMode = 'pause';
+
+export const MASTER_VOLUME_MAX = 100;
+export const DEFAULT_MASTER_VOLUME = 100;
+export const MASTER_VOLUME_STEP = 5;
+/** Bends the master control so its travel feels even to the ear. A GM/DLS synth reads
+ *  CC7 as attenuation of 40·log10(value/127) dB, and loudness roughly doubles per 10 dB,
+ *  so a linearly scaled CC7 already falls away faster than the number suggests. Raising
+ *  the fraction to this power flattens it back to about "half the number, half as loud",
+ *  and leaves 100 exactly where it is today. */
+export const MASTER_VOLUME_CURVE_EXPONENT = 0.75;
+
+/** Note onsets of the score's opening lifted for the startup sting: the three repeated
+ *  notes and the held one that answers them. */
+export const MOTIF_ONSET_COUNT = 4;
+/** Ring left after the held note before the transport takes over, so the sting reads as
+ *  a deliberate opening rather than as playback stuttering into life. */
+export const MOTIF_TAIL_SECONDS = 0.4;
+
+/** Minutes a session may sit untouched before it gives up its voice; 0 disables it.
+ *  The open-sessions file is never cleaned up by the CLI, so without this a closed
+ *  terminal holds an instrument indefinitely. */
+export const DEFAULT_IDLE_DROPOUT_MINUTES = 0;
+export const IDLE_DROPOUT_MAX_MINUTES = 120;
+export const IDLE_DROPOUT_STEP_MINUTES = 5;
+export const MS_PER_MINUTE = 60_000;
 /** How long `resume` waits before assuming a prompt was answered. */
 export const PROMPT_GAP_RESUME_MS = 8000;
 

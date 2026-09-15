@@ -3,11 +3,10 @@ import { join, dirname } from 'node:path';
 import {
   CONFIG_FILE_NAME,
   CONFIG_POLL_MS,
-  DEFAULT_PROMPT_GAP,
   HANDLE_ID_LENGTH,
-  PROMPT_GAP_MODES,
 } from './constants.ts';
-import type { PromptGapMode } from './constants.ts';
+import type { GatePolicy, PromptGapMode, SilenceMode } from './constants.ts';
+import { SETTING_DEFAULTS, coerceSetting } from './settings.ts';
 import { copilotHooksDir } from './install.ts';
 import type { Session } from './types.ts';
 
@@ -15,6 +14,11 @@ export type LlmfmConfig = {
   /** Handles whose sessions take no voice. See `matchesHandle` for what a handle matches. */
   muted: string[];
   promptGap: PromptGapMode;
+  gate: GatePolicy;
+  silenceMode: SilenceMode;
+  masterVolume: number;
+  idleDropoutMinutes: number;
+  startupMotif: boolean;
 };
 
 export type ConfigStore = {
@@ -22,6 +26,9 @@ export type ConfigStore = {
   /** Idempotent by design: a toggle can land inverted when two clients race or a key
    *  repeats, and the caller always knows the state it wants. */
   setMute(options: { session: SessionHandle; muted: boolean; preferLabel: boolean }): void;
+  /** Applies one setting by key, validated against its spec. Returns false for an unknown
+   *  key or a value the spec rejects, which is what the HTTP layer turns into a 400. */
+  setSetting(key: string, value: unknown): boolean;
   /** Re-reads the file if it changed on disk, so hand edits apply without a restart. */
   start(): void;
   stop(): void;
@@ -31,7 +38,7 @@ export type ConfigStore = {
 /** Just enough of a session to name it. Keeps this module free of session state. */
 export type SessionHandle = { label: string; sessionId: string };
 
-const DEFAULT_CONFIG: LlmfmConfig = { muted: [], promptGap: DEFAULT_PROMPT_GAP };
+const DEFAULT_CONFIG: LlmfmConfig = { muted: [], ...SETTING_DEFAULTS };
 
 export function configPath(): string {
   return join(dirname(copilotHooksDir()), CONFIG_FILE_NAME);
@@ -82,8 +89,14 @@ function parseConfig(raw: string): LlmfmConfig {
   const muted = Array.isArray(record['muted'])
     ? record['muted'].filter((entry): entry is string => typeof entry === 'string')
     : [];
-  const promptGap = PROMPT_GAP_MODES.find((mode) => mode === record['promptGap']);
-  return { muted, promptGap: promptGap ?? DEFAULT_PROMPT_GAP };
+  // Every setting is validated through its own spec, so a hand-edited file with one bad
+  // value keeps the rest rather than reverting wholesale.
+  const settings = { ...SETTING_DEFAULTS } as Record<string, unknown>;
+  for (const key of Object.keys(SETTING_DEFAULTS)) {
+    const coerced = coerceSetting(key, record[key]);
+    if (coerced !== null) settings[key] = coerced;
+  }
+  return { ...(settings as Omit<LlmfmConfig, 'muted'>), muted };
 }
 
 export function createConfigStore(): ConfigStore {
@@ -143,6 +156,13 @@ export function createConfigStore(): ConfigStore {
         return;
       }
       write({ ...config, muted: next });
+    },
+    setSetting(key: string, value: unknown): boolean {
+      const coerced = coerceSetting(key, value);
+      if (coerced === null) return false;
+      if (config[key as keyof LlmfmConfig] === coerced) return true;
+      write({ ...config, [key]: coerced });
+      return true;
     },
     start(): void {
       if (timer) return;
