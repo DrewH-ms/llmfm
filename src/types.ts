@@ -93,6 +93,9 @@ export type DaemonState = {
    *  rather than its own compiled list, so an older daemon offers only what it can take
    *  instead of 400ing on a row the newer menu drew. */
   settingSpecs: readonly import('./settings.ts').SettingSpec[];
+  /** Where a user drops their own `.mid` files. The daemon owns this path, so the
+   *  dashboard opens the folder the daemon actually reads rather than guessing at one. */
+  userTracksDir: string;
 };
 
 /** What the daemon puts on the wire. Deliberately not `Session & …`: `listedByCli` and

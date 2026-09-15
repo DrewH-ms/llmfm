@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { DAEMON_URL } from '../src/constants.ts';
 import {
   SETTING_DEFAULTS,
@@ -94,6 +95,33 @@ const KEYS_BACK = ['\u001b', '\u007f', '\b'] as const;
 const HINTS_ROOT = '[↑↓ ws] move   [←→ ad] open or adjust   [-/+] fade   [q] quit';
 const HINTS_SETTINGS = '[↑↓ ws] move   [←→ ad] change   [esc] back   [q] quit';
 const HINTS_SESSIONS = '[↑↓ ws] move   [enter/m] mute   [← a esc] back   [q] quit';
+const HINTS_MUSIC = '[↑↓ ws] move   [enter/→ d] play or run   [← a esc] back   [q] quit';
+
+const ACTION_SKIP = 'skip';
+const ACTION_FOLDER = 'folder';
+const ACTION_BLUETOOTH = 'bluetooth';
+const ACTION_IDS = [ACTION_SKIP, ACTION_FOLDER, ACTION_BLUETOOTH] as const;
+type ActionId = (typeof ACTION_IDS)[number];
+
+const ACTION_TITLES: Readonly<Record<ActionId, string>> = {
+  [ACTION_SKIP]: 'Skip to next track',
+  [ACTION_FOLDER]: 'Add your own music',
+  [ACTION_BLUETOOTH]: 'Connect Bluetooth',
+};
+const ACTION_HELP: Readonly<Record<ActionId, string>> = {
+  [ACTION_SKIP]: 'Play the next track now, whatever this track does when it ends.',
+  [ACTION_FOLDER]: 'Opens the folder the daemon reads. Drop .mid files in and they appear here.',
+  [ACTION_BLUETOOTH]: 'Not built yet — the daemon plays through the Windows synth for now.',
+};
+const BLUETOOTH_NOTICE = 'Bluetooth output is not built yet';
+const FOLDER_OPEN_FAILED = 'could not open the folder:';
+const SKIP_UNAVAILABLE = 'nothing to skip to — the library has one track';
+const TRACK_HEADING = 'Library';
+const NOW_PLAYING_MARK = '▶';
+const TRACK_UNPLAYABLE = 'hold music only';
+const TRACK_INTEGRITY_BAD = 'file changed since it was curated';
+/** `explorer` on Windows, which is the only platform the MIDI bridge supports anyway. */
+const FOLDER_OPEN_COMMAND = 'explorer.exe';
 const COMMAND_FAILURE_NOTICE = 'daemon rejected command:';
 const UNSUPPORTED_SETTING_NOTICE = 'this daemon has no setting named';
 const EXIT_FAILURE = 1;
@@ -105,17 +133,20 @@ const LINK_DOWN = 'daemon down — retrying';
 const LINK_STATES = [LINK_LIVE, LINK_POLLING, LINK_DOWN] as const;
 type LinkState = (typeof LINK_STATES)[number];
 
+const SECTION_MUSIC = 'music';
 const SECTION_SETTINGS = 'settings';
 const SECTION_SESSIONS = 'sessions';
-const SECTION_IDS = [SECTION_SETTINGS, SECTION_SESSIONS] as const;
+const SECTION_IDS = [SECTION_MUSIC, SECTION_SETTINGS, SECTION_SESSIONS] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const ROOT_HEADING = 'MENU';
 const SECTION_TITLES: Readonly<Record<SectionId, string>> = {
+  [SECTION_MUSIC]: 'Music',
   [SECTION_SETTINGS]: 'Settings',
   [SECTION_SESSIONS]: 'Sessions',
 };
 const SECTION_HELP: Readonly<Record<SectionId, string>> = {
+  [SECTION_MUSIC]: 'What plays, and where your own files go.',
   [SECTION_SETTINGS]: 'How the music answers to your agents.',
   [SECTION_SESSIONS]: 'Which sessions hold a voice, and which are muted out of the music.',
 };
@@ -148,7 +179,19 @@ type Snapshot = { state: DaemonState; receivedAt: number };
 type Row =
   | { kind: 'section'; key: string; id: SectionId }
   | { kind: 'setting'; key: string; spec: SettingSpec }
+  | { kind: 'action'; key: string; id: ActionId }
+  | { kind: 'track'; key: string; track: TrackView }
   | { kind: 'session'; key: string; session: SessionView };
+
+/** One library entry as the menu needs it. The daemon's catalogue carries more, but a row
+ *  that showed provenance would not fit beside the title at 80 columns. */
+type TrackView = {
+  file: string;
+  title: string;
+  composer: string | null;
+  holdMusicOnly: boolean;
+  integrity: string;
+};
 
 /** Everything a frame is drawn from. */
 type View = {
@@ -157,6 +200,7 @@ type View = {
   section: SectionId | null;
   selectedKey: string | null;
   notice: string | null;
+  library: readonly TrackView[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -269,7 +313,34 @@ function parseDaemonState(text: string): DaemonState | null {
     sessions,
     config,
     settingSpecs,
+    userTracksDir: typeof payload['userTracksDir'] === 'string' ? payload['userTracksDir'] : '',
   };
+}
+
+/** Narrows the daemon's track catalogue. A malformed entry is dropped rather than
+ *  rejecting the list: one bad record should cost its own row, not the whole library. */
+function parseTracks(text: string): TrackView[] {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!isRecord(payload) || !Array.isArray(payload['tracks'])) return [];
+  const tracks: TrackView[] = [];
+  for (const entry of payload['tracks']) {
+    if (!isRecord(entry)) continue;
+    const { file, title, composer, holdMusicOnly, integrity } = entry;
+    if (typeof file !== 'string' || file.length === 0) continue;
+    tracks.push({
+      file,
+      title: typeof title === 'string' && title.length > 0 ? title : file,
+      composer: typeof composer === 'string' ? composer : null,
+      holdMusicOnly: holdMusicOnly === true,
+      integrity: typeof integrity === 'string' ? integrity : 'unrecorded',
+    });
+  }
+  return tracks;
 }
 
 function settingValue(config: LlmfmConfig, key: string): unknown {
@@ -423,8 +494,11 @@ function masterVolumeLine(options: {
   ];
 }
 
-function sectionSummary(id: SectionId, state: DaemonState): string {
+function sectionSummary(id: SectionId, state: DaemonState, library: readonly TrackView[]): string {
   if (id === SECTION_SETTINGS) return `${listedSpecs(state).length} options`;
+  if (id === SECTION_MUSIC) {
+    return library.length > 0 ? `${library.length} tracks` : TRACK_HEADING.toLowerCase();
+  }
   const muted = state.sessions.filter((session) => session.muted).length;
   const sounding = state.sessions.filter((session) => session.audible).length;
   if (state.sessions.length === 0) return EMPTY_SESSIONS_TEXT;
@@ -434,17 +508,18 @@ function sectionSummary(id: SectionId, state: DaemonState): string {
 function sectionLine(options: {
   id: SectionId;
   state: DaemonState;
+  library: readonly TrackView[];
   selected: boolean;
   width: number;
 }): Segment[] {
-  const { id, state, selected, width } = options;
+  const { id, state, library, selected, width } = options;
   return [
     cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
     { text: fit(SECTION_TITLES[id], TITLE_COLUMN_WIDTH), style: selected ? STYLE_BOLD : STYLE_NONE },
     { text: '  ', style: STYLE_NONE },
     {
-      text: clip(sectionSummary(id, state), Math.max(width - TITLE_COLUMN_WIDTH - 8, 0)),
+      text: clip(sectionSummary(id, state, library), Math.max(width - TITLE_COLUMN_WIDTH - 8, 0)),
       style: FG_CYAN,
     },
     { text: selected ? ` ${ENTER_MARKER}` : '', style: FG_GREY },
@@ -484,12 +559,15 @@ function helpSegments(row: Row | null, width: number): Segment[] {
   if (!row) return [];
   if (row.kind === 'section') return [{ text: SECTION_HELP[row.id], style: FG_GREY }];
   if (row.kind === 'setting') return [{ text: row.spec.help, style: FG_GREY }];
+  if (row.kind === 'action') return [{ text: ACTION_HELP[row.id], style: FG_GREY }];
+  if (row.kind === 'track') return [{ text: row.track.file, style: FG_GREY }];
   return voiceDetail(row.session, width);
 }
 
 function hintsFor(section: SectionId | null): string {
   if (section === null) return HINTS_ROOT;
-  return section === SECTION_SESSIONS ? HINTS_SESSIONS : HINTS_SETTINGS;
+  if (section === SECTION_SESSIONS) return HINTS_SESSIONS;
+  return section === SECTION_MUSIC ? HINTS_MUSIC : HINTS_SETTINGS;
 }
 
 /** A failure replaces the key hints rather than sharing the line: at 80 columns the
@@ -504,8 +582,12 @@ function footerLine(options: {
   return composeLine([{ text: hintsFor(section), style: STYLE_DIM }], width);
 }
 
-function rowsFor(options: { state: DaemonState; section: SectionId | null }): Row[] {
-  const { state, section } = options;
+function rowsFor(options: {
+  state: DaemonState;
+  section: SectionId | null;
+  library: readonly TrackView[];
+}): Row[] {
+  const { state, section, library } = options;
   if (section === null) {
     const sections: Row[] = SECTION_IDS.map((id) => ({ kind: 'section', key: `section:${id}`, id }));
     const volume = masterVolumeSpec(state);
@@ -515,6 +597,13 @@ function rowsFor(options: { state: DaemonState; section: SectionId | null }): Ro
   if (section === SECTION_SETTINGS) {
     return listedSpecs(state).map((spec) => ({ kind: 'setting', key: `setting:${spec.key}`, spec }));
   }
+  if (section === SECTION_MUSIC) {
+    const actions: Row[] = ACTION_IDS.map((id) => ({ kind: 'action', key: `action:${id}`, id }));
+    return [
+      ...actions,
+      ...library.map((track): Row => ({ kind: 'track', key: `track:${track.file}`, track })),
+    ];
+  }
   return state.sessions.map((session) => ({
     kind: 'session',
     key: `session:${session.sessionId}`,
@@ -522,16 +611,54 @@ function rowsFor(options: { state: DaemonState; section: SectionId | null }): Ro
   }));
 }
 
+function actionLine(options: { id: ActionId; selected: boolean; width: number }): Segment[] {
+  const { id, selected, width } = options;
+  return [
+    cursorSegment(selected),
+    { text: ' ', style: STYLE_NONE },
+    { text: clip(ACTION_TITLES[id], Math.max(width - 4, 0)), style: selected ? STYLE_BOLD : STYLE_NONE },
+  ];
+}
+
+function trackLine(options: {
+  track: TrackView;
+  playing: boolean;
+  selected: boolean;
+  width: number;
+}): Segment[] {
+  const { track, playing, selected, width } = options;
+  // The composer earns its place only when there is room for it; the title is what the
+  // user is choosing by.
+  const label = track.composer ? `${track.title} — ${track.composer}` : track.title;
+  const note = track.integrity === 'mismatch'
+    ? TRACK_INTEGRITY_BAD
+    : track.holdMusicOnly
+      ? TRACK_UNPLAYABLE
+      : '';
+  const room = Math.max(width - note.length - 6, 0);
+  return [
+    cursorSegment(selected),
+    { text: playing ? ` ${NOW_PLAYING_MARK} ` : '   ', style: playing ? FG_GREEN : STYLE_NONE },
+    { text: clip(label, room), style: selected ? STYLE_BOLD : STYLE_NONE },
+    { text: note ? `  ${note}` : '', style: track.integrity === 'mismatch' ? FG_RED : STYLE_DIM },
+  ];
+}
+
 function rowLine(options: {
   row: Row;
   state: DaemonState;
+  library: readonly TrackView[];
   section: SectionId | null;
   selected: boolean;
   width: number;
 }): Segment[] {
-  const { row, state, section, selected, width } = options;
-  if (row.kind === 'section') return sectionLine({ id: row.id, state, selected, width });
+  const { row, state, library, section, selected, width } = options;
+  if (row.kind === 'section') return sectionLine({ id: row.id, state, library, selected, width });
   if (row.kind === 'session') return sessionLine({ session: row.session, selected, width });
+  if (row.kind === 'action') return actionLine({ id: row.id, selected, width });
+  if (row.kind === 'track') {
+    return trackLine({ track: row.track, playing: row.track.file === state.track, selected, width });
+  }
   if (row.spec.key === MASTER_VOLUME_KEY) {
     return masterVolumeLine({ spec: row.spec, config: state.config, selected });
   }
@@ -539,7 +666,7 @@ function rowLine(options: {
 }
 
 function buildLines(view: View): string[] {
-  const { snapshot, link, section, selectedKey, notice } = view;
+  const { snapshot, link, section, selectedKey, notice, library } = view;
   const width = clamp(process.stdout.columns ?? FALLBACK_COLUMNS, MIN_COLUMNS, MAX_COLUMNS);
   if (!snapshot) {
     return [
@@ -607,14 +734,14 @@ function buildLines(view: View): string[] {
     ),
   ];
 
-  const rows = rowsFor({ state, section });
+  const rows = rowsFor({ state, section, library });
   const room = Math.max((process.stdout.rows ?? FALLBACK_ROWS) - CHROME_LINE_COUNT, 1);
   const selectedIndexInRows = rows.findIndex((row) => row.key === selectedKey);
   const start = Math.max(Math.min(selectedIndexInRows - room + 1, rows.length - room), 0);
   const shown = rows.slice(start, start + room);
   for (const row of shown) {
     lines.push(
-      composeLine(rowLine({ row, state, section, selected: row.key === selectedKey, width }), width),
+      composeLine(rowLine({ row, state, library, section, selected: row.key === selectedKey, width }), width),
     );
   }
   if (rows.length === 0) {
@@ -654,6 +781,10 @@ let selectedIndex = 0;
 /** Where the cursor was left in each view, so stepping in and back out does not lose it. */
 const cursorMemory = new Map<string, string>();
 let notice: string | null = null;
+/** The daemon's catalogue, fetched when the music section is opened rather than carried on
+ *  every state broadcast: it changes only when a file is added, and it is larger than the
+ *  rest of the payload put together. */
+let library: TrackView[] = [];
 let restored = false;
 let quitting = false;
 
@@ -663,7 +794,7 @@ function viewKey(): string {
 
 function currentRows(): Row[] {
   if (!snapshot) return [];
-  return rowsFor({ state: snapshot.state, section });
+  return rowsFor({ state: snapshot.state, section, library });
 }
 
 function selectRow(rows: Row[], index: number): void {
@@ -687,7 +818,7 @@ function restoreCursor(): void {
 function paint(): void {
   if (restored) return;
   const frame = [CURSOR_HOME];
-  for (const line of buildLines({ snapshot, link, section, selectedKey, notice })) {
+  for (const line of buildLines({ snapshot, link, section, selectedKey, notice, library })) {
     frame.push(line, ERASE_TO_LINE_END, '\n');
   }
   frame.push(ERASE_BELOW);
@@ -705,7 +836,7 @@ function restoreTerminal(): void {
 function applyState(state: DaemonState, next: LinkState): void {
   snapshot = { state, receivedAt: Date.now() };
   link = next;
-  const rows = rowsFor({ state, section });
+  const rows = rowsFor({ state, section, library });
   const index = rows.findIndex((row) => row.key === selectedKey);
   selectRow(rows, index >= 0 ? index : selectedIndex);
   paint();
@@ -739,6 +870,64 @@ async function command(path: string, body?: unknown): Promise<void> {
   }
 }
 
+/** The catalogue is re-read whenever the music section is opened, which is what makes a
+ *  file dropped in the folder appear without restarting the dashboard. */
+async function refreshLibrary(): Promise<void> {
+  try {
+    const response = await fetch(`${DAEMON_URL}/tracks`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) return;
+    library = parseTracks(await response.text());
+    restoreCursor();
+    paint();
+  } catch {
+    // A failed catalogue read leaves the last one on screen; the link state already says
+    // whether the daemon is reachable, and a stale list is better than an empty one.
+  }
+}
+
+/** Opens the drop-in folder in the system file manager. This is a local shell-out, not
+ *  network egress, and a failure is reported rather than left silent. */
+function openTracksFolder(): void {
+  const dir = snapshot?.state.userTracksDir;
+  if (!dir) {
+    notice = `${FOLDER_OPEN_FAILED} the daemon did not say where it is`;
+    paint();
+    return;
+  }
+  try {
+    const child = spawn(FOLDER_OPEN_COMMAND, [dir], { detached: true, stdio: 'ignore' });
+    child.on('error', () => {
+      notice = `${FOLDER_OPEN_FAILED} ${dir}`;
+      paint();
+    });
+    child.unref();
+  } catch {
+    notice = `${FOLDER_OPEN_FAILED} ${dir}`;
+    paint();
+  }
+}
+
+function runAction(id: ActionId): void {
+  if (id === ACTION_BLUETOOTH) {
+    notice = BLUETOOTH_NOTICE;
+    paint();
+    return;
+  }
+  if (id === ACTION_FOLDER) {
+    openTracksFolder();
+    void refreshLibrary();
+    return;
+  }
+  if (library.length < 2) {
+    notice = SKIP_UNAVAILABLE;
+    paint();
+    return;
+  }
+  void command('/skip');
+}
+
 function cycleSetting(spec: SettingSpec, direction: 1 | -1): void {
   if (!snapshot) return;
   const value = nextWithSpec(spec, settingValue(snapshot.state.config, spec.key), direction);
@@ -766,6 +955,7 @@ function enterSection(id: SectionId): void {
   section = id;
   restoreCursor();
   paint();
+  if (id === SECTION_MUSIC) void refreshLibrary();
 }
 
 function leaveSection(): void {
@@ -797,6 +987,16 @@ function onHorizontal(direction: 1 | -1): void {
     else leaveSection();
     return;
   }
+  if (row.kind === 'action') {
+    if (direction === 1) runAction(row.id);
+    else leaveSection();
+    return;
+  }
+  if (row.kind === 'track') {
+    if (direction === 1) void command('/track', { file: row.track.file });
+    else leaveSection();
+    return;
+  }
   cycleSetting(row.spec, direction);
 }
 
@@ -805,6 +1005,8 @@ function onActivate(): void {
   if (!row) return;
   if (row.kind === 'section') enterSection(row.id);
   else if (row.kind === 'session') toggleMute(row.session);
+  else if (row.kind === 'action') runAction(row.id);
+  else if (row.kind === 'track') void command('/track', { file: row.track.file });
   else cycleSetting(row.spec, 1);
 }
 
@@ -912,6 +1114,9 @@ async function waitForDaemon(): Promise<void> {
 }
 
 async function run(): Promise<void> {
+  // The root menu shows a track count, so the catalogue is read once before the first
+  // frame rather than only when the music section is opened.
+  void refreshLibrary();
   while (!quitting) {
     try {
       await streamEvents();

@@ -35,6 +35,7 @@ const MAX_HOLD_MUSIC_VOICES = 2;
 const MIN_ROTATION_TRACKS = 2;
 const AUTOPLAY_OFF: AutoplayMode = 'off';
 const AUTOPLAY_RANDOM: AutoplayMode = 'random';
+const AUTOPLAY_SEQUENTIAL: AutoplayMode = 'sequential';
 
 export type Daemon = { stop(): Promise<void> };
 
@@ -239,6 +240,19 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
 
   mixer.setMasterVolume(config.current().masterVolume);
 
+  /** A skip is an instruction, not a consequence, so "when a track ends: stop" must not
+   *  disable it. Random still draws from the bag, so skipping repeatedly still covers the
+   *  library before anything repeats. */
+  const skipTrack = (): boolean => {
+    const mode = config.current().autoplay;
+    const next = rotation.next({
+      library: playableTracks(),
+      current: trackFile ?? null,
+      mode: mode === AUTOPLAY_OFF ? AUTOPLAY_SEQUENTIAL : mode,
+    });
+    return next ? playTrack(next) : false;
+  };
+
   const state = (): DaemonState => ({
     mode: orchestrator.mode(),
     fadeSeconds: orchestrator.fadeSeconds(),
@@ -249,6 +263,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     sessions: orchestrator.sessionViews(),
     config: config.current(),
     settingSpecs: SETTING_SPECS,
+    userTracksDir: userTracksDir(),
   });
 
   const api = await startApi({
@@ -278,6 +293,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     onSetSetting: ({ key, value }) => config.setSetting(key, value),
     tracks: trackCatalogue,
     onSetTrack: playTrack,
+    onSkipTrack: skipTrack,
     state,
   });
   publish = () => api.broadcast();

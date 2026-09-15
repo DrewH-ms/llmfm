@@ -39,6 +39,8 @@ export type ApiHandlers = {
   tracks(): TrackInfo[];
   /** False when the file is not one we ship, which the route turns into a 400. */
   onSetTrack(file: string): boolean;
+  /** False when there is nowhere to go — a library of one, or no track playing. */
+  onSkipTrack(): boolean;
   state(): DaemonState;
 };
 
@@ -151,6 +153,16 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
         res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(handlers.state()));
       });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/skip') {
+      if (!handlers.onSkipTrack()) {
+        res.writeHead(HTTP_BAD_REQUEST).end();
+        return;
+      }
+      res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(handlers.state()));
       return;
     }
 
