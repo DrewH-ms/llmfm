@@ -5,7 +5,7 @@ import {
   CONFIG_POLL_MS,
   HANDLE_ID_LENGTH,
 } from './constants.ts';
-import type { GatePolicy, PromptGapMode, SilenceMode } from './constants.ts';
+import type { AutoplayMode, GateMode, GatePolicy, PromptGapMode, SilenceMode } from './constants.ts';
 import { SETTING_DEFAULTS, coerceSetting } from './settings.ts';
 import { copilotHooksDir } from './install.ts';
 import type { Session } from './types.ts';
@@ -15,9 +15,13 @@ export type LlmfmConfig = {
   muted: string[];
   promptGap: PromptGapMode;
   gate: GatePolicy;
+  /** Whether an instrument sounds while its agent works, or only when it needs you. */
+  mode: GateMode;
+  fadeSeconds: number;
   silenceMode: SilenceMode;
   masterVolume: number;
   idleDropoutMinutes: number;
+  autoplay: AutoplayMode;
   startupMotif: boolean;
 };
 

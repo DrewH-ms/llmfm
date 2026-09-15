@@ -1,12 +1,26 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import type { TestContext } from 'node:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createConfigStore, handleFor, matchesHandle } from './config.ts';
+import { configPath, createConfigStore, handleFor, matchesHandle } from './config.ts';
 
 const SESSION = { label: 'Rasa', sessionId: 'cb75a9e8-1234-5678-9abc-def012345678' };
 const OTHER = { label: 'Rasa', sessionId: 'a83b9096-1234-5678-9abc-def012345678' };
+
+/** Points the config at a throwaway home, so a test writes a real file rather than a
+ *  stubbed one and the user's own config is never the thing under test. */
+function useTempHome(t: TestContext): void {
+  const home = mkdtempSync(join(tmpdir(), 'llmfm-test-'));
+  const previous = process.env.COPILOT_HOME;
+  process.env.COPILOT_HOME = home;
+  t.after(() => {
+    if (previous === undefined) delete process.env.COPILOT_HOME;
+    else process.env.COPILOT_HOME = previous;
+    rmSync(home, { recursive: true, force: true });
+  });
+}
 
 test('the printed handle is what the user can type back', () => {
   assert.equal(handleFor(SESSION), 'Rasa (cb75a9e8)');
@@ -55,14 +69,7 @@ test('a session with no cwd does not print its id twice', () => {
 });
 
 test('setMute is idempotent and persists the durable form', (t) => {
-  const home = mkdtempSync(join(tmpdir(), 'llmfm-test-'));
-  const previous = process.env.COPILOT_HOME;
-  process.env.COPILOT_HOME = home;
-  t.after(() => {
-    if (previous === undefined) delete process.env.COPILOT_HOME;
-    else process.env.COPILOT_HOME = previous;
-    rmSync(home, { recursive: true, force: true });
-  });
+  useTempHome(t);
 
   const store = createConfigStore();
   const session = { label: 'Rasa', sessionId: 'db68be72-1111-2222-3333-444455556666' };
@@ -80,14 +87,7 @@ test('setMute is idempotent and persists the durable form', (t) => {
 });
 
 test('unmuting clears a rule the user wrote in another form', (t) => {
-  const home = mkdtempSync(join(tmpdir(), 'llmfm-test-'));
-  const previous = process.env.COPILOT_HOME;
-  process.env.COPILOT_HOME = home;
-  t.after(() => {
-    if (previous === undefined) delete process.env.COPILOT_HOME;
-    else process.env.COPILOT_HOME = previous;
-    rmSync(home, { recursive: true, force: true });
-  });
+  useTempHome(t);
 
   const session = { label: 'Rasa', sessionId: 'db68be72-1111-2222-3333-444455556666' };
   const store = createConfigStore();
@@ -97,4 +97,34 @@ test('unmuting clears a rule the user wrote in another form', (t) => {
   // Unmuting must clear whatever form matches, not just the form it would have written.
   store.setMute({ session, muted: false, preferLabel: true });
   assert.deepEqual(store.current().muted, []);
+});
+
+test('mode and fade persist like any other setting', (t) => {
+  useTempHome(t);
+
+  // They used to live only in the orchestrator, so a restart silently reverted them and
+  // the fade the user had set was never the fade they got back.
+  const store = createConfigStore();
+  assert.equal(store.setSetting('mode', 'alert'), true);
+  assert.equal(store.setSetting('fadeSeconds', 2.5), true);
+  assert.equal(store.setSetting('mode', 'sideways'), false);
+  assert.equal(store.current().mode, 'alert');
+
+  const reopened = createConfigStore();
+  assert.equal(reopened.current().mode, 'alert');
+  assert.equal(reopened.current().fadeSeconds, 2.5);
+});
+
+test('one bad value in a hand-edited file costs only that setting', (t) => {
+  useTempHome(t);
+
+  writeFileSync(
+    configPath(),
+    JSON.stringify({ mode: 'nonsense', fadeSeconds: 3, autoplay: 'random', muted: ['Rasa'] }),
+  );
+  const store = createConfigStore();
+  assert.equal(store.current().mode, 'reward');
+  assert.equal(store.current().fadeSeconds, 3);
+  assert.equal(store.current().autoplay, 'random');
+  assert.deepEqual(store.current().muted, ['Rasa']);
 });

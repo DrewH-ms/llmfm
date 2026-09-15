@@ -1,6 +1,11 @@
-import { DAEMON_URL, GATE_MODES } from '../src/constants.ts';
-import type { GateMode } from '../src/constants.ts';
-import { SETTING_DEFAULTS, SETTING_SPECS, coerceSetting, displaySetting, nextSetting } from '../src/settings.ts';
+import { DAEMON_URL } from '../src/constants.ts';
+import {
+  SETTING_DEFAULTS,
+  SETTING_SPECS,
+  coerceSetting,
+  displaySetting,
+  nextSetting,
+} from '../src/settings.ts';
 import type { SettingSpec } from '../src/settings.ts';
 import { SESSION_SOURCES } from '../src/types.ts';
 import type { DaemonState, MidiStatus, SessionView, TransportState } from '../src/types.ts';
@@ -34,7 +39,7 @@ const MAX_COLUMNS = 120;
 const VOICE_COLUMN_WIDTH = 16;
 /** Wide enough for a handle's disambiguating id suffix, which truncation must not eat. */
 const HANDLE_COLUMN_WIDTH = 22;
-const SETTING_TITLE_WIDTH = 20;
+const TITLE_COLUMN_WIDTH = 20;
 const VOLUME_BAR_WIDTH = 24;
 const BADGE_TEXT_SOUNDING = ' SOUNDING ';
 const BADGE_TEXT_SILENT = '  silent  ';
@@ -44,6 +49,7 @@ const CURSOR_SELECTED = '▸';
 const CURSOR_UNSELECTED = ' ';
 const CYCLE_LEFT = '‹ ';
 const CYCLE_RIGHT = ' ›';
+const ENTER_MARKER = '›';
 const MARKER_SOUNDING = '█ ';
 const MARKER_SILENT = '· ';
 /** Blank, not a third glyph: the column means "is this part sounding", and a muted row
@@ -59,16 +65,9 @@ const CLOCK_COLUMN_WIDTH = 16;
 const ELLIPSIS = '…';
 const SECONDS_PER_MINUTE = 60;
 const SECOND_DIGITS = 2;
-const FADE_DECIMALS = 2;
-/** Lines below the session window: its overflow marker, a blank, the master-volume
- *  heading and row, a blank, the help line and the footer. */
-const TAIL_LINE_COUNT = 7;
-
-const HEADING_SETTINGS = 'SETTINGS';
-const HEADING_SESSIONS = 'SESSIONS';
-const HEADING_MASTER_VOLUME = 'MASTER VOLUME';
-const SESSION_HELP = 'Muted sessions take no voice and never hold the music on.';
-const EMPTY_SESSIONS_TEXT = '  no sessions';
+/** Header, blank, heading, overflow marker, blank, help and footer: everything a frame
+ *  spends before the rows it is actually showing. */
+const CHROME_LINE_COUNT = 10;
 
 const MS_PER_SECOND = 1000;
 const RENDER_INTERVAL_MS = 200;
@@ -76,13 +75,9 @@ const RECONNECT_DELAY_MS = 1000;
 const POLL_INTERVAL_MS = 1000;
 const REQUEST_TIMEOUT_MS = 2000;
 
-const FADE_STEP_SECONDS = 0.25;
-const FADE_MIN_SECONDS = 0.25;
-const FADE_MAX_SECONDS = 10;
-
 const KEY_QUIT = 'q';
 const KEY_INTERRUPT = '\u0003';
-const KEY_TOGGLE_MODE = 'g';
+const KEY_CYCLE_MODE = 'g';
 const KEY_TOGGLE_SIMULATION = 'S';
 const KEY_TOGGLE_MUTE = 'm';
 const KEYS_FADE_UP = ['+', '='] as const;
@@ -90,10 +85,14 @@ const KEYS_FADE_DOWN = ['-', '_'] as const;
 /** Both the cursor-key and application-keypad forms: a raw TTY emits either. */
 const KEYS_SELECT_PREVIOUS = ['\u001b[A', '\u001bOA', 'w', 'k'] as const;
 const KEYS_SELECT_NEXT = ['\u001b[B', '\u001bOB', 's', 'j'] as const;
-const KEYS_DECREASE = ['\u001b[D', '\u001bOD', 'a', 'h'] as const;
-const KEYS_INCREASE = ['\u001b[C', '\u001bOC', 'd', 'l'] as const;
+const KEYS_LEFT = ['\u001b[D', '\u001bOD', 'a', 'h'] as const;
+const KEYS_RIGHT = ['\u001b[C', '\u001bOC', 'd', 'l'] as const;
 const KEYS_ACTIVATE = ['\r', '\n', ' '] as const;
-const KEY_HINTS = '[↑↓ ws] move   [←→ ad] change   [enter/m] toggle   [q] quit';
+/** Escape arrives alone; an arrow key arrives as the whole sequence in one chunk. */
+const KEYS_BACK = ['\u001b', '\u007f', '\b'] as const;
+const HINTS_ROOT = '[↑↓ ws] move   [→ d enter] open   [-/+] fade   [q] quit';
+const HINTS_SETTINGS = '[↑↓ ws] move   [←→ ad] change   [esc] back   [q] quit';
+const HINTS_SESSIONS = '[↑↓ ws] move   [enter/m] mute   [← a esc] back   [q] quit';
 const COMMAND_FAILURE_NOTICE = 'daemon rejected command:';
 const EXIT_FAILURE = 1;
 
@@ -104,20 +103,46 @@ const LINK_DOWN = 'daemon down — retrying';
 const LINK_STATES = [LINK_LIVE, LINK_POLLING, LINK_DOWN] as const;
 type LinkState = (typeof LINK_STATES)[number];
 
+const SECTION_SETTINGS = 'settings';
+const SECTION_SESSIONS = 'sessions';
+const SECTION_VOLUME = 'volume';
+const SECTION_IDS = [SECTION_SETTINGS, SECTION_SESSIONS, SECTION_VOLUME] as const;
+type SectionId = (typeof SECTION_IDS)[number];
+
+const ROOT_HEADING = 'MENU';
+const SECTION_TITLES: Readonly<Record<SectionId, string>> = {
+  [SECTION_SETTINGS]: 'Settings',
+  [SECTION_SESSIONS]: 'Sessions',
+  [SECTION_VOLUME]: 'Master volume',
+};
+const SECTION_HELP: Readonly<Record<SectionId, string>> = {
+  [SECTION_SETTINGS]: 'How the music answers to your agents.',
+  [SECTION_SESSIONS]: 'Which sessions hold a voice, and which are muted out of the music.',
+  [SECTION_VOLUME]: 'Overall level, applied over every part.',
+};
+
 const MASTER_VOLUME_KEY = 'masterVolume';
+const MODE_KEY = 'mode';
+const FADE_KEY = 'fadeSeconds';
 /** Master volume is a setting like any other, but the listener reaches for it constantly,
- *  so it is lifted out of the list into its own section rather than being scrolled to. */
+ *  so it is a section of its own rather than a row to scroll to. */
 const MASTER_VOLUME_SPEC = SETTING_SPECS.find((spec) => spec.key === MASTER_VOLUME_KEY) ?? null;
 const LISTED_SETTING_SPECS = SETTING_SPECS.filter((spec) => spec.key !== MASTER_VOLUME_KEY);
-const FALLBACK_CONFIG: LlmfmConfig = { muted: [], ...SETTING_DEFAULTS };
+
+const SESSION_HELP_MUTED = 'Muted: holds no voice, and never holds the music on.';
+const SESSION_HELP_UNVOICED = 'No voice left to give, so this session sounds nothing.';
+const SESSION_GATES = ' gates ';
+const BACKING_NOTE = ' — the rest is backing';
+const EMPTY_SESSIONS_TEXT = 'no sessions';
 
 type Segment = { text: string; style: string };
 
 type Snapshot = { state: DaemonState; receivedAt: number };
 
-/** A selectable menu row. `key` is stable across frames — a session's array position is
- *  not, and neither is its presence. */
+/** A selectable row. `key` is stable across frames — a session's array position is not,
+ *  and neither is its presence. */
 type Row =
+  | { kind: 'section'; key: string; id: SectionId }
   | { kind: 'setting'; key: string; spec: SettingSpec }
   | { kind: 'session'; key: string; session: SessionView };
 
@@ -125,6 +150,7 @@ type Row =
 type View = {
   snapshot: Snapshot | null;
   link: LinkState;
+  section: SectionId | null;
   selectedKey: string | null;
   notice: string | null;
 };
@@ -162,6 +188,11 @@ function parseSession(value: unknown): SessionView | null {
   if (blockedSince !== null && typeof blockedSince !== 'number') return null;
   if (cwd !== null && typeof cwd !== 'string') return null;
   if (voiceName !== null && typeof voiceName !== 'string') return null;
+  // Absent rather than rejected: the part list is detail, and a daemon that does not send
+  // it is still telling the truth about everything the row itself shows.
+  const voiceParts = Array.isArray(value['voiceParts'])
+    ? value['voiceParts'].filter((entry): entry is string => typeof entry === 'string')
+    : [];
   return {
     sessionId,
     working,
@@ -172,6 +203,7 @@ function parseSession(value: unknown): SessionView | null {
     blockedMidTurn,
     updatedAt,
     voiceName,
+    voiceParts,
     audible,
     handle,
     muted,
@@ -203,12 +235,11 @@ function parseDaemonState(text: string): DaemonState | null {
     return null;
   }
   if (!isRecord(payload)) return null;
-  const { fadeSeconds, simulating, track } = payload;
-  const mode = GATE_MODES.find((candidate) => candidate === payload['mode']);
+  const { simulating, track } = payload;
   const transport = parseTransport(payload['transport']);
   const midi = parseMidi(payload['midi']);
-  if (!mode || !transport || !midi) return null;
-  if (typeof fadeSeconds !== 'number' || typeof simulating !== 'boolean') return null;
+  if (!transport || !midi) return null;
+  if (typeof simulating !== 'boolean') return null;
   if (track !== null && typeof track !== 'string') return null;
   if (!Array.isArray(payload['sessions'])) return null;
   const sessions: SessionView[] = [];
@@ -218,7 +249,18 @@ function parseDaemonState(text: string): DaemonState | null {
     sessions.push(session);
   }
   const config = parseConfig(payload['config']);
-  return { mode, fadeSeconds, simulating, track, transport, midi, sessions, config };
+  // `mode` and `fadeSeconds` are settings now, so the config is where they are read from
+  // and the top-level copies are the daemon's own echo of them.
+  return {
+    mode: config.mode,
+    fadeSeconds: config.fadeSeconds,
+    simulating,
+    track,
+    transport,
+    midi,
+    sessions,
+    config,
+  };
 }
 
 function settingValue(config: LlmfmConfig, key: string): unknown {
@@ -236,15 +278,13 @@ function formatClock(seconds: number): string {
   return `${minutes}:${String(rest).padStart(SECOND_DIGITS, '0')}`;
 }
 
-function fit(text: string, width: number): string {
-  if (text.length <= width) return text.padEnd(width);
-  return `${text.slice(0, Math.max(width - 1, 0))}${ELLIPSIS}`;
-}
-
-/** Truncates without padding, for a value that a following marker must sit against. */
 function clip(text: string, width: number): string {
   if (text.length <= width) return text;
   return `${text.slice(0, Math.max(width - 1, 0))}${ELLIPSIS}`;
+}
+
+function fit(text: string, width: number): string {
+  return clip(text, width).padEnd(width);
 }
 
 /** Styles segments only after the plain text has been measured, so colour codes never
@@ -254,11 +294,7 @@ function composeLine(segments: Segment[], width: number): string {
   let line = '';
   for (const segment of segments) {
     if (used >= width) break;
-    const room = width - used;
-    const text =
-      segment.text.length > room
-        ? `${segment.text.slice(0, Math.max(room - 1, 0))}${ELLIPSIS}`
-        : segment.text;
+    const text = clip(segment.text, width - used);
     line += segment.style === STYLE_NONE ? text : `${segment.style}${text}${STYLE_RESET}`;
     used += text.length;
   }
@@ -278,20 +314,25 @@ function blockedTag(blockedSince: number | null): string {
   if (blockedSince === null) return ` ${TAG_BLOCKED}`;
   const seconds = Math.max(Math.floor((Date.now() - blockedSince) / MS_PER_SECOND), 0);
   const age =
-    seconds < SECONDS_PER_MINUTE
-      ? `${seconds}s`
-      : `${Math.floor(seconds / SECONDS_PER_MINUTE)}m`;
+    seconds < SECONDS_PER_MINUTE ? `${seconds}s` : `${Math.floor(seconds / SECONDS_PER_MINUTE)}m`;
   return ` ${TAG_BLOCKED} ${age}`;
 }
 
-function headingLine(text: string, width: number): string {
-  return composeLine([{ text, style: STYLE_BOLD }], width);
+function cursorSegment(selected: boolean): Segment {
+  return {
+    text: selected ? CURSOR_SELECTED : CURSOR_UNSELECTED,
+    style: selected ? FG_CYAN : STYLE_NONE,
+  };
 }
 
 /** Lays the row out tag-first: `BLOCKED?` says why a part is silent, which the audio
  *  cannot, so the voice name yields its width to it. A muted session makes no claim
  *  about its agent, so it carries no tag. */
-function sessionLine(options: { session: SessionView; selected: boolean; width: number }): Segment[] {
+function sessionLine(options: {
+  session: SessionView;
+  selected: boolean;
+  width: number;
+}): Segment[] {
   const { session, selected, width } = options;
   const tags: Segment[] = [];
   if (session.blockedMidTurn && !session.muted) {
@@ -309,10 +350,7 @@ function sessionLine(options: { session: SessionView; selected: boolean; width: 
   const voiceWidth = clamp(width - fixed - tagWidth - 1, 0, VOICE_COLUMN_WIDTH);
 
   const segments: Segment[] = [
-    {
-      text: selected ? CURSOR_SELECTED : CURSOR_UNSELECTED,
-      style: selected ? FG_CYAN : STYLE_NONE,
-    },
+    cursorSegment(selected),
     { text: marker, style: session.audible ? FG_GREEN : FG_GREY },
     {
       text: fit(session.handle, HANDLE_COLUMN_WIDTH),
@@ -343,15 +381,12 @@ function settingLine(options: {
   const { spec, config, selected, width } = options;
   const value = displaySetting(spec.key, settingValue(config, spec.key));
   return [
-    {
-      text: selected ? CURSOR_SELECTED : CURSOR_UNSELECTED,
-      style: selected ? FG_CYAN : STYLE_NONE,
-    },
+    cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
-    { text: fit(spec.title, SETTING_TITLE_WIDTH), style: selected ? STYLE_BOLD : STYLE_NONE },
+    { text: fit(spec.title, TITLE_COLUMN_WIDTH), style: selected ? STYLE_BOLD : STYLE_NONE },
     { text: ' ', style: STYLE_NONE },
     { text: selected ? CYCLE_LEFT : '  ', style: FG_GREY },
-    { text: clip(value, Math.max(width - SETTING_TITLE_WIDTH - 8, 0)), style: FG_CYAN },
+    { text: clip(value, Math.max(width - TITLE_COLUMN_WIDTH - 8, 0)), style: FG_CYAN },
     { text: selected ? CYCLE_RIGHT : '', style: FG_GREY },
   ];
 }
@@ -366,10 +401,7 @@ function masterVolumeLine(options: {
   const max = spec.kind === 'number' ? spec.max : 1;
   const level = typeof raw === 'number' ? raw : max;
   return [
-    {
-      text: selected ? CURSOR_SELECTED : CURSOR_UNSELECTED,
-      style: selected ? FG_CYAN : STYLE_NONE,
-    },
+    cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
     { text: selected ? CYCLE_LEFT : '  ', style: FG_GREY },
     {
@@ -381,69 +413,137 @@ function masterVolumeLine(options: {
   ];
 }
 
+function sectionSummary(id: SectionId, state: DaemonState): string {
+  if (id === SECTION_SETTINGS) return `${LISTED_SETTING_SPECS.length} options`;
+  if (id === SECTION_VOLUME) return displaySetting(MASTER_VOLUME_KEY, state.config.masterVolume);
+  const muted = state.sessions.filter((session) => session.muted).length;
+  const sounding = state.sessions.filter((session) => session.audible).length;
+  if (state.sessions.length === 0) return EMPTY_SESSIONS_TEXT;
+  return `${state.sessions.length} · ${sounding} sounding · ${muted} muted`;
+}
+
+function sectionLine(options: {
+  id: SectionId;
+  state: DaemonState;
+  selected: boolean;
+  width: number;
+}): Segment[] {
+  const { id, state, selected, width } = options;
+  return [
+    cursorSegment(selected),
+    { text: ' ', style: STYLE_NONE },
+    { text: fit(SECTION_TITLES[id], TITLE_COLUMN_WIDTH), style: selected ? STYLE_BOLD : STYLE_NONE },
+    { text: '  ', style: STYLE_NONE },
+    {
+      text: clip(sectionSummary(id, state), Math.max(width - TITLE_COLUMN_WIDTH - 8, 0)),
+      style: FG_CYAN,
+    },
+    { text: selected ? ` ${ENTER_MARKER}` : '', style: FG_GREY },
+  ];
+}
+
 function transportSegments(transport: TransportState, width: number): Segment[] {
   const clock = `${formatClock(transport.position)} / ${formatClock(transport.duration)}`;
   const fraction = transport.duration > 0 ? transport.position / transport.duration : 0;
   return [
     { text: clock.padEnd(CLOCK_COLUMN_WIDTH), style: STYLE_BOLD },
-    { text: bar(fraction, width - CLOCK_COLUMN_WIDTH), style: transport.playing ? FG_GREEN : FG_YELLOW },
+    {
+      text: bar(fraction, width - CLOCK_COLUMN_WIDTH),
+      style: transport.playing ? FG_GREEN : FG_YELLOW,
+    },
   ];
+}
+
+/** Names the instruments a voice gates. A section-sized voice is the whole complaint the
+ *  user had: "Strings" alone does not say which desks fall silent with this agent, nor
+ *  that everything else is backing and sounds regardless. */
+function voiceDetail(session: SessionView, width: number): Segment[] {
+  if (session.muted) return [{ text: SESSION_HELP_MUTED, style: FG_GREY }];
+  if (!session.voiceName) return [{ text: SESSION_HELP_UNVOICED, style: FG_GREY }];
+  const named = session.voiceParts.filter((part) => part !== session.voiceName);
+  if (named.length === 0) return [{ text: `${session.voiceName}${BACKING_NOTE}`, style: FG_GREY }];
+  const room = width - session.voiceName.length - SESSION_GATES.length - BACKING_NOTE.length;
+  return [
+    { text: session.voiceName, style: FG_CYAN },
+    { text: SESSION_GATES, style: FG_GREY },
+    { text: clip(named.join(', '), Math.max(room, 0)), style: STYLE_NONE },
+    { text: BACKING_NOTE, style: FG_GREY },
+  ];
+}
+
+function helpSegments(row: Row | null, width: number): Segment[] {
+  if (!row) return [];
+  if (row.kind === 'section') return [{ text: SECTION_HELP[row.id], style: FG_GREY }];
+  if (row.kind === 'setting') return [{ text: row.spec.help, style: FG_GREY }];
+  return voiceDetail(row.session, width);
+}
+
+function hintsFor(section: SectionId | null): string {
+  if (section === null) return HINTS_ROOT;
+  return section === SECTION_SESSIONS ? HINTS_SESSIONS : HINTS_SETTINGS;
 }
 
 /** A failure replaces the key hints rather than sharing the line: at 80 columns the
  *  hints already fill it, and the notice would be the part that gets ellipsized. */
-function footerLine(notice: string | null, width: number): string {
+function footerLine(options: {
+  notice: string | null;
+  section: SectionId | null;
+  width: number;
+}): string {
+  const { notice, section, width } = options;
   if (notice) return composeLine([{ text: notice, style: FG_RED }], width);
-  return composeLine([{ text: KEY_HINTS, style: STYLE_DIM }], width);
+  return composeLine([{ text: hintsFor(section), style: STYLE_DIM }], width);
 }
 
-function rowsFor(state: DaemonState): Row[] {
-  const rows: Row[] = LISTED_SETTING_SPECS.map((spec) => ({
-    kind: 'setting',
-    key: `setting:${spec.key}`,
-    spec,
+function rowsFor(options: { state: DaemonState; section: SectionId | null }): Row[] {
+  const { state, section } = options;
+  if (section === null) {
+    return SECTION_IDS.map((id) => ({ kind: 'section', key: `section:${id}`, id }));
+  }
+  if (section === SECTION_SETTINGS) {
+    return LISTED_SETTING_SPECS.map((spec) => ({ kind: 'setting', key: `setting:${spec.key}`, spec }));
+  }
+  if (section === SECTION_VOLUME) {
+    return MASTER_VOLUME_SPEC
+      ? [{ kind: 'setting', key: `setting:${MASTER_VOLUME_SPEC.key}`, spec: MASTER_VOLUME_SPEC }]
+      : [];
+  }
+  return state.sessions.map((session) => ({
+    kind: 'session',
+    key: `session:${session.sessionId}`,
+    session,
   }));
-  for (const session of state.sessions) {
-    rows.push({ kind: 'session', key: `session:${session.sessionId}`, session });
-  }
-  if (MASTER_VOLUME_SPEC) {
-    rows.push({ kind: 'setting', key: `setting:${MASTER_VOLUME_SPEC.key}`, spec: MASTER_VOLUME_SPEC });
-  }
-  return rows;
 }
 
-function helpFor(row: Row | null): string {
-  if (!row) return '';
-  return row.kind === 'setting' ? row.spec.help : SESSION_HELP;
-}
-
-function statusSegments(state: DaemonState, link: LinkState): Segment[] {
-  return [
-    { text: `mode(${KEY_TOGGLE_MODE}) `, style: STYLE_DIM },
-    { text: state.mode, style: FG_CYAN },
-    { text: '   fade(-/+) ', style: STYLE_DIM },
-    { text: `${state.fadeSeconds.toFixed(FADE_DECIMALS)}s`, style: FG_CYAN },
-    { text: `   sim(${KEY_TOGGLE_SIMULATION}) `, style: STYLE_DIM },
-    { text: state.simulating ? 'on' : 'off', style: state.simulating ? FG_YELLOW : FG_GREY },
-    { text: '   link ', style: STYLE_DIM },
-    { text: link, style: link === LINK_LIVE ? FG_GREEN : FG_RED },
-  ];
+function rowLine(options: {
+  row: Row;
+  state: DaemonState;
+  section: SectionId | null;
+  selected: boolean;
+  width: number;
+}): Segment[] {
+  const { row, state, section, selected, width } = options;
+  if (row.kind === 'section') return sectionLine({ id: row.id, state, selected, width });
+  if (row.kind === 'session') return sessionLine({ session: row.session, selected, width });
+  if (section === SECTION_VOLUME) {
+    return masterVolumeLine({ spec: row.spec, config: state.config, selected });
+  }
+  return settingLine({ spec: row.spec, config: state.config, selected, width });
 }
 
 function buildLines(view: View): string[] {
-  const { snapshot, link, selectedKey, notice } = view;
+  const { snapshot, link, section, selectedKey, notice } = view;
   const width = clamp(process.stdout.columns ?? FALLBACK_COLUMNS, MIN_COLUMNS, MAX_COLUMNS);
   if (!snapshot) {
     return [
       composeLine([{ text: 'LLMFM', style: STYLE_BOLD }], width),
       composeLine([{ text: link, style: FG_RED }], width),
       '',
-      footerLine(notice, width),
+      footerLine({ notice, section, width }),
     ];
   }
 
   const { state } = snapshot;
-  const { config } = state;
   const elapsed = (Date.now() - snapshot.receivedAt) / MS_PER_SECOND;
   const transport: TransportState = state.transport.playing
     ? {
@@ -476,92 +576,88 @@ function buildLines(view: View): string[] {
       ],
       width,
     ),
-    composeLine(statusSegments(state, link), width),
+    composeLine(
+      [
+        { text: `sim(${KEY_TOGGLE_SIMULATION}) `, style: STYLE_DIM },
+        { text: state.simulating ? 'on' : 'off', style: state.simulating ? FG_YELLOW : FG_GREY },
+        { text: '   link ', style: STYLE_DIM },
+        { text: link, style: link === LINK_LIVE ? FG_GREEN : FG_RED },
+      ],
+      width,
+    ),
     '',
-    headingLine(HEADING_SETTINGS, width),
+    composeLine(
+      [
+        { text: ROOT_HEADING, style: section === null ? STYLE_BOLD : STYLE_DIM },
+        ...(section === null
+          ? []
+          : [
+              { text: ` ${ENTER_MARKER} `, style: STYLE_DIM },
+              { text: SECTION_TITLES[section].toUpperCase(), style: STYLE_BOLD },
+            ]),
+      ],
+      width,
+    ),
   ];
 
-  for (const spec of LISTED_SETTING_SPECS) {
+  const rows = rowsFor({ state, section });
+  const room = Math.max((process.stdout.rows ?? FALLBACK_ROWS) - CHROME_LINE_COUNT, 1);
+  const selectedIndexInRows = rows.findIndex((row) => row.key === selectedKey);
+  const start = Math.max(Math.min(selectedIndexInRows - room + 1, rows.length - room), 0);
+  const shown = rows.slice(start, start + room);
+  for (const row of shown) {
     lines.push(
-      composeLine(
-        settingLine({ spec, config, selected: selectedKey === `setting:${spec.key}`, width }),
-        width,
-      ),
+      composeLine(rowLine({ row, state, section, selected: row.key === selectedKey, width }), width),
     );
   }
-
-  lines.push('');
-  lines.push(headingLine(`${HEADING_SESSIONS} (${state.sessions.length})`, width));
-
-  // Everything above the session window has already been emitted, so the window gets
-  // whatever the terminal has left once the fixed tail is reserved.
-  const room = Math.max(
-    (process.stdout.rows ?? FALLBACK_ROWS) - lines.length - TAIL_LINE_COUNT,
-    1,
-  );
-  const selectedSessionIndex = state.sessions.findIndex(
-    (session) => `session:${session.sessionId}` === selectedKey,
-  );
-  const start = Math.max(
-    Math.min(selectedSessionIndex - room + 1, state.sessions.length - room),
-    0,
-  );
-  const shown = state.sessions.slice(start, start + room);
-  for (const session of shown) {
-    lines.push(
-      composeLine(
-        sessionLine({
-          session,
-          selected: selectedKey === `session:${session.sessionId}`,
-          width,
-        }),
-        width,
-      ),
-    );
+  if (rows.length === 0) {
+    lines.push(composeLine([{ text: `  ${EMPTY_SESSIONS_TEXT}`, style: STYLE_DIM }], width));
   }
+
   const above = start;
-  const below = state.sessions.length - start - shown.length;
+  const below = rows.length - start - shown.length;
   const overflow = [
     ...(above > 0 ? [`+${above} ${MORE_ABOVE}`] : []),
     ...(below > 0 ? [`+${below} ${MORE_BELOW}`] : []),
   ];
-  if (overflow.length > 0) {
-    lines.push(composeLine([{ text: `  ${overflow.join('   ')}`, style: STYLE_DIM }], width));
-  }
-  if (state.sessions.length === 0) {
-    lines.push(composeLine([{ text: EMPTY_SESSIONS_TEXT, style: STYLE_DIM }], width));
-  }
+  lines.push(
+    overflow.length > 0
+      ? composeLine([{ text: `  ${overflow.join('   ')}`, style: STYLE_DIM }], width)
+      : '',
+  );
 
-  if (MASTER_VOLUME_SPEC) {
-    lines.push('');
-    lines.push(headingLine(HEADING_MASTER_VOLUME, width));
-    lines.push(
-      composeLine(
-        masterVolumeLine({
-          spec: MASTER_VOLUME_SPEC,
-          config,
-          selected: selectedKey === `setting:${MASTER_VOLUME_SPEC.key}`,
-        }),
-        width,
-      ),
-    );
-  }
-
-  const selected = rowsFor(state).find((row) => row.key === selectedKey) ?? null;
+  const selected = rows.find((row) => row.key === selectedKey) ?? null;
   lines.push('');
-  lines.push(composeLine([{ text: `  ${helpFor(selected)}`, style: FG_GREY }], width));
-  lines.push(footerLine(notice, width));
+  lines.push(
+    composeLine(
+      [{ text: '  ', style: STYLE_NONE }, ...helpSegments(selected, width - 2)],
+      width,
+    ),
+  );
+  lines.push(footerLine({ notice, section, width }));
   return lines;
 }
 
 let snapshot: Snapshot | null = null;
 let link: LinkState = LINK_DOWN;
+let section: SectionId | null = null;
 let selectedKey: string | null = null;
 /** Remembered so a selection that disappears falls back to the nearest surviving row. */
 let selectedIndex = 0;
+/** Where the cursor was left in each view, so stepping in and back out does not lose it. */
+const cursorMemory = new Map<string, string>();
 let notice: string | null = null;
 let restored = false;
 let quitting = false;
+
+function viewKey(): string {
+  return section ?? ROOT_HEADING;
+}
+
+function currentRows(): Row[] {
+  if (!snapshot) return [];
+  return rowsFor({ state: snapshot.state, section });
+}
 
 function selectRow(rows: Row[], index: number): void {
   if (rows.length === 0) {
@@ -571,12 +667,20 @@ function selectRow(rows: Row[], index: number): void {
   }
   selectedIndex = clamp(index, 0, rows.length - 1);
   selectedKey = rows[selectedIndex]?.key ?? null;
+  if (selectedKey) cursorMemory.set(viewKey(), selectedKey);
+}
+
+function restoreCursor(): void {
+  const rows = currentRows();
+  const remembered = cursorMemory.get(viewKey());
+  const index = rows.findIndex((row) => row.key === remembered);
+  selectRow(rows, index >= 0 ? index : 0);
 }
 
 function paint(): void {
   if (restored) return;
   const frame = [CURSOR_HOME];
-  for (const line of buildLines({ snapshot, link, selectedKey, notice })) {
+  for (const line of buildLines({ snapshot, link, section, selectedKey, notice })) {
     frame.push(line, ERASE_TO_LINE_END, '\n');
   }
   frame.push(ERASE_BELOW);
@@ -594,7 +698,7 @@ function restoreTerminal(): void {
 function applyState(state: DaemonState, next: LinkState): void {
   snapshot = { state, receivedAt: Date.now() };
   link = next;
-  const rows = rowsFor(state);
+  const rows = rowsFor({ state, section });
   const index = rows.findIndex((row) => row.key === selectedKey);
   selectRow(rows, index >= 0 ? index : selectedIndex);
   paint();
@@ -628,26 +732,60 @@ async function command(path: string, body?: unknown): Promise<void> {
   }
 }
 
-function nextMode(current: GateMode): GateMode {
-  const index = GATE_MODES.indexOf(current);
-  return GATE_MODES[(index + 1) % GATE_MODES.length] ?? current;
+function cycleSetting(key: string, direction: 1 | -1): void {
+  if (!snapshot) return;
+  const value = nextSetting(key, settingValue(snapshot.state.config, key), direction);
+  if (value !== null) void command('/config', { key, value });
 }
 
-function selectedRow(state: DaemonState): Row | null {
-  return rowsFor(state).find((row) => row.key === selectedKey) ?? null;
+function selectedRow(): Row | null {
+  return currentRows().find((row) => row.key === selectedKey) ?? null;
 }
 
-function adjustSelected(state: DaemonState, direction: 1 | -1): void {
-  const row = selectedRow(state);
-  if (!row) return;
-  if (row.kind === 'session') {
-    // Directional rather than a toggle: `setMute` is idempotent, so a held key settles on
-    // the state the arrow means instead of flapping.
-    void command('/mute', { sessionId: row.session.sessionId, muted: direction === 1 });
+function enterSection(id: SectionId): void {
+  section = id;
+  restoreCursor();
+  paint();
+}
+
+function leaveSection(): void {
+  const leaving = section;
+  section = null;
+  if (leaving) cursorMemory.set(ROOT_HEADING, `section:${leaving}`);
+  restoreCursor();
+  paint();
+}
+
+function toggleMute(session: SessionView): void {
+  void command('/mute', { sessionId: session.sessionId, muted: !session.muted });
+}
+
+/** Left and right mean "less" and "more" wherever a row holds a value. A session row holds
+ *  none, so there left keeps the meaning it has in the section list: go back. */
+function onHorizontal(direction: 1 | -1): void {
+  const row = selectedRow();
+  if (!row) {
+    if (direction === -1) leaveSection();
     return;
   }
-  const value = nextSetting(row.spec.key, settingValue(state.config, row.spec.key), direction);
-  if (value !== null) void command('/config', { key: row.spec.key, value });
+  if (row.kind === 'section') {
+    if (direction === 1) enterSection(row.id);
+    return;
+  }
+  if (row.kind === 'session') {
+    if (direction === 1) toggleMute(row.session);
+    else leaveSection();
+    return;
+  }
+  cycleSetting(row.spec.key, direction);
+}
+
+function onActivate(): void {
+  const row = selectedRow();
+  if (!row) return;
+  if (row.kind === 'section') enterSection(row.id);
+  else if (row.kind === 'session') toggleMute(row.session);
+  else cycleSetting(row.spec.key, 1);
 }
 
 function onKey(key: string): void {
@@ -657,52 +795,47 @@ function onKey(key: string): void {
     process.exit(0);
   }
   if (!snapshot) return;
-  const { state } = snapshot;
-  const rows = rowsFor(state);
   if (KEYS_SELECT_PREVIOUS.some((candidate) => candidate === key)) {
-    selectRow(rows, selectedIndex - 1);
+    selectRow(currentRows(), selectedIndex - 1);
     paint();
     return;
   }
   if (KEYS_SELECT_NEXT.some((candidate) => candidate === key)) {
-    selectRow(rows, selectedIndex + 1);
+    selectRow(currentRows(), selectedIndex + 1);
     paint();
     return;
   }
-  if (KEYS_DECREASE.some((candidate) => candidate === key)) {
-    adjustSelected(state, -1);
+  if (KEYS_BACK.some((candidate) => candidate === key)) {
+    leaveSection();
     return;
   }
-  if (KEYS_INCREASE.some((candidate) => candidate === key)) {
-    adjustSelected(state, 1);
+  if (KEYS_LEFT.some((candidate) => candidate === key)) {
+    onHorizontal(-1);
     return;
   }
-  if (key === KEY_TOGGLE_MUTE || KEYS_ACTIVATE.some((candidate) => candidate === key)) {
-    const row = selectedRow(state);
-    if (row?.kind === 'session') {
-      void command('/mute', { sessionId: row.session.sessionId, muted: !row.session.muted });
-    } else if (row && key !== KEY_TOGGLE_MUTE) {
-      adjustSelected(state, 1);
-    }
+  if (KEYS_RIGHT.some((candidate) => candidate === key)) {
+    onHorizontal(1);
     return;
   }
-  if (key === KEY_TOGGLE_MODE) {
-    void command(`/mode?mode=${nextMode(state.mode)}`);
+  if (KEYS_ACTIVATE.some((candidate) => candidate === key)) {
+    onActivate();
+    return;
+  }
+  if (key === KEY_TOGGLE_MUTE) {
+    const row = selectedRow();
+    if (row?.kind === 'session') toggleMute(row.session);
+    return;
+  }
+  if (key === KEY_CYCLE_MODE) {
+    cycleSetting(MODE_KEY, 1);
     return;
   }
   if (key === KEY_TOGGLE_SIMULATION) {
-    void command(`/simulate?running=${!state.simulating}`);
+    void command(`/simulate?running=${!snapshot.state.simulating}`);
     return;
   }
-  const step = KEYS_FADE_UP.some((candidate) => candidate === key)
-    ? FADE_STEP_SECONDS
-    : KEYS_FADE_DOWN.some((candidate) => candidate === key)
-      ? -FADE_STEP_SECONDS
-      : 0;
-  if (step !== 0) {
-    const fade = clamp(state.fadeSeconds + step, FADE_MIN_SECONDS, FADE_MAX_SECONDS);
-    void command(`/mode?fade=${fade}`);
-  }
+  if (KEYS_FADE_UP.some((candidate) => candidate === key)) cycleSetting(FADE_KEY, 1);
+  else if (KEYS_FADE_DOWN.some((candidate) => candidate === key)) cycleSetting(FADE_KEY, -1);
 }
 
 function readFrames(buffer: string): { frames: string[]; rest: string } {

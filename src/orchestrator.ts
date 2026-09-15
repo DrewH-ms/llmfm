@@ -1,5 +1,4 @@
 import {
-  DEFAULT_FADE_SECONDS,
   SETTLE_MARGIN_MS,
   BLOCK_SETTLE_MS,
   FOCUS_SESSION_ID,
@@ -44,8 +43,9 @@ export function createOrchestrator(options: {
 
   let score: Score | null = null;
   let tree: VoiceTree | null = null;
-  let mode: GateMode = 'reward';
-  let fade = DEFAULT_FADE_SECONDS;
+  /** Instrument label per part id, taken from the voice tree's own leaf names so a part
+   *  listed under a voice reads exactly as it would if it were the voice. */
+  let partLabels = new Map<string, string>();
   /** How far the voice tree is currently subdivided. */
   let voiceCount = 0;
   let coarsenTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,7 +62,7 @@ export function createOrchestrator(options: {
       session.blockedSince !== null &&
       Date.now() - session.blockedSince >= PROMPT_GAP_RESUME_MS;
     const working = session.working || stale || settling(session);
-    return mode === 'reward' ? working : !working;
+    return config.current().mode === 'reward' ? working : !working;
   };
 
   /** A block too young to trust yet. See BLOCK_SETTLE_MS: the prompt may already have been
@@ -161,10 +161,23 @@ export function createOrchestrator(options: {
     return policy === 'all' ? sessions.every(shouldSound) : sessions.some(shouldSound);
   };
 
+  /** A section-sized voice gates several instruments under one name. Naming them is what
+   *  separates the parts that answer to this session from the backing that answers to
+   *  nobody. */
+  const partNamesOf = (voice: Voice): string[] => {
+    const names = new Set<string>();
+    for (const partId of voice.partIds) {
+      const label = partLabels.get(partId);
+      if (label) names.add(label);
+    }
+    return [...names];
+  };
+
   const refresh = (): void => {
     if (!score) return;
 
     const sessions = gatingSessions();
+    const fade = config.current().fadeSeconds;
     settleVoiceCount(sessions.length);
     const assignment = currentAssignment(sessions);
     const perAgent = config.current().gate === 'per-agent';
@@ -225,20 +238,27 @@ export function createOrchestrator(options: {
     bindScore(next: Score): void {
       score = next;
       tree = buildVoiceTree(next);
+      // Fully subdividing names every part the tree can gate; what it leaves out is
+      // backing, which never belongs to a voice.
+      partLabels = new Map(
+        tree
+          .voicesFor(next.parts.length)
+          .flatMap((voice) => voice.partIds.map((partId): [string, string] => [partId, voice.name])),
+      );
       mixer.bindScore(next);
       scheduler.load(next);
       refresh();
     },
     refresh,
     setMode(next: GateMode): void {
-      mode = next;
+      config.setSetting('mode', next);
       refresh();
     },
-    mode: (): GateMode => mode,
+    mode: (): GateMode => config.current().mode,
     setFadeSeconds(seconds: number): void {
-      fade = seconds > 0 ? seconds : DEFAULT_FADE_SECONDS;
+      config.setSetting('fadeSeconds', seconds);
     },
-    fadeSeconds: (): number => fade,
+    fadeSeconds: (): number => config.current().fadeSeconds,
     sessionViews(): SessionView[] {
       const now = Date.now();
       const muteRules = config.current();
@@ -261,6 +281,7 @@ export function createOrchestrator(options: {
           handle: handleFor(session),
           muted,
           voiceName: voice?.name ?? null,
+          voiceParts: voice ? partNamesOf(voice) : [],
           audible: !muted && voice !== undefined && shouldSound(session),
         };
       });

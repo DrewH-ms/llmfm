@@ -75,6 +75,43 @@ test('every choice renders a label rather than its raw value', () => {
     }
   }
   assert.equal(displaySetting('idleDropoutMinutes', 0), 'never');
-  assert.equal(displaySetting('idleDropoutMinutes', 15), '15');
+  assert.equal(displaySetting('idleDropoutMinutes', 15), '15 min');
   assert.equal(displaySetting('startupMotif', false), 'off');
+});
+
+test('a number carrying a unit prints it, so the value names a quantity', () => {
+  // "Fade 2" says nothing on its own, and the menu has no other place to put the unit.
+  assert.equal(displaySetting('fadeSeconds', 2), '2s');
+  assert.equal(displaySetting('fadeSeconds', 0.25), '0.25s');
+});
+
+test('fade is a setting, with a floor that is still a crossfade', () => {
+  // It reached the menu because a user reported it broken and had no way to see its value.
+  const spec = SETTING_SPECS.find((entry) => entry.key === 'fadeSeconds');
+  assert.ok(spec && spec.kind === 'number');
+  assert.ok(spec.min > 0, 'an instant cut clicks, so zero is not offered');
+  assert.equal(coerceSetting('fadeSeconds', 0), spec.min);
+  assert.equal(coerceSetting('fadeSeconds', 1000), spec.max);
+  assert.equal(nextSetting('fadeSeconds', 1, 1), 1 + spec.step);
+  assert.equal(nextSetting('fadeSeconds', spec.min, -1), spec.min);
+});
+
+test('mode and autoplay are ordinary settings, validated like the rest', () => {
+  assert.equal(coerceSetting('mode', 'alert'), 'alert');
+  assert.equal(coerceSetting('mode', 'reward'), 'reward');
+  assert.equal(coerceSetting('mode', 'loud'), null);
+  assert.equal(coerceSetting('autoplay', 'random'), 'random');
+  assert.equal(coerceSetting('autoplay', 'next'), null);
+});
+
+test('no two settings share a key, a title, or a value label', () => {
+  // A user asked how `After you approve` differed from `mode`, having read both as the
+  // same control. Two rows that read alike are the bug, whatever the keys say.
+  const keys = SETTING_SPECS.map((spec) => spec.key);
+  const titles = SETTING_SPECS.map((spec) => spec.title.toLowerCase());
+  assert.equal(new Set(keys).size, keys.length);
+  assert.equal(new Set(titles).size, titles.length);
+  for (const spec of SETTING_SPECS) {
+    assert.ok(spec.help.trim().length > 0, `${spec.key} has no help`);
+  }
 });

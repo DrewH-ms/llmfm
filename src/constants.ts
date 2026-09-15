@@ -39,6 +39,12 @@ export const LOOKAHEAD_SECONDS = 0.2;
 export const SCHEDULER_TICK_MS = 25;
 export const FADE_STEP_HZ = 30;
 export const DEFAULT_FADE_SECONDS = 1;
+/** Range the fade control offers. The floor is a real crossfade rather than zero: an
+ *  instant cut lands as a click, and every part changing state at once would click
+ *  together. */
+export const FADE_MIN_SECONDS = 0.25;
+export const FADE_MAX_SECONDS = 10;
+export const FADE_STEP_SECONDS = 0.25;
 /** Resuming uses a shorter fade so a reply feels immediate. */
 export const RESUME_FADE_SECONDS = 0.4;
 /** Slack added to a fade before the transport is allowed to pause, so the last ramp step
@@ -125,6 +131,12 @@ export const MASTER_VOLUME_CURVE_EXPONENT = 0.75;
  *  directory: the motif is lifted from whatever is loaded, so a track added under an
  *  earlier-sorting name would silently replace both the music and the startup sting. */
 export const DEFAULT_TRACK = 'mutopia-beethoven-symphony5-1.mid';
+
+/** What happens when the score runs out. Off is the default because a track ending is
+ *  the one moment the user can be sure the silence is not about them. */
+export const AUTOPLAY_MODES = ['off', 'sequential', 'random'] as const;
+export type AutoplayMode = (typeof AUTOPLAY_MODES)[number];
+export const DEFAULT_AUTOPLAY: AutoplayMode = 'off';
 
 /** Note onsets of the score's opening lifted for the startup sting: the three repeated
  *  notes and the held one that answers them. */

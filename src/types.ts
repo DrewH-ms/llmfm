@@ -101,6 +101,10 @@ export type SessionView = Pick<
   muted: boolean;
   /** Null when the session is unvoiced. */
   voiceName: string | null;
+  /** The instruments that voice actually gates, e.g. Violin I, Violin II, Viola. A voice
+   *  may be a whole section, and its section name alone does not say what falls silent
+   *  with it — nor that every other part is backing, which follows the ensemble. */
+  voiceParts: string[];
   audible: boolean;
 };
 
