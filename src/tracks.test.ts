@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { DEFAULT_TRACK } from './constants.ts';
 
@@ -31,6 +32,18 @@ test('every shipped MIDI file states a licence we are allowed to redistribute', 
     assert.ok(entry, `${file} ships with no entry in tracks.json`);
     assert.ok(ALLOWED.has(entry.licenceId), `${file} states "${entry.licenceId}"`);
     assert.ok(entry.source, `${file} records no source to verify against`);
+  }
+});
+
+test('a shipped file is the one its licence record was written for', () => {
+  // A licence record describes specific bytes. Copying another file over a verified name
+  // inherits its licence, its attribution and its provenance while being none of them —
+  // which has happened here once already, with a file we may not redistribute at all.
+  for (const file of files) {
+    const entry = index.tracks.find((track: { file: string }) => track.file === file);
+    assert.ok(entry?.sha256, `${file} records no hash, so its licence proves nothing`);
+    const actual = createHash('sha256').update(readFileSync(join(TRACKS_DIR, file))).digest('hex');
+    assert.equal(actual, entry.sha256, `${file} is not the file ${entry.licenceId} was verified for`);
   }
 });
 
