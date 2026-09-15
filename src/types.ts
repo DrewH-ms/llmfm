@@ -89,6 +89,10 @@ export type DaemonState = {
   midi: MidiStatus;
   sessions: SessionView[];
   config: import('./config.ts').LlmfmConfig;
+  /** The settings this daemon actually accepts. The dashboard builds its menu from this
+   *  rather than its own compiled list, so an older daemon offers only what it can take
+   *  instead of 400ing on a row the newer menu drew. */
+  settingSpecs: readonly import('./settings.ts').SettingSpec[];
 };
 
 /** What the daemon puts on the wire. Deliberately not `Session & …`: `listedByCli` and

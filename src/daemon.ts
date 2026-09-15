@@ -16,6 +16,7 @@ import { playStartupMotif } from './motif.ts';
 import type { StartupMotif } from './motif.ts';
 import { createSimulation } from './simulate.ts';
 import { createConfigStore } from './config.ts';
+import { SETTING_SPECS } from './settings.ts';
 import { buildVoiceTree } from './voices.ts';
 import { listUserTracks, userTracksDir, ensureUserTracksDir } from './user-tracks.ts';
 import { WATCH_OPEN_SESSIONS, LOG_EVENTS, DEFAULT_TRACK } from './constants.ts';
@@ -247,6 +248,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     midi: midi.status(),
     sessions: orchestrator.sessionViews(),
     config: config.current(),
+    settingSpecs: SETTING_SPECS,
   });
 
   const api = await startApi({

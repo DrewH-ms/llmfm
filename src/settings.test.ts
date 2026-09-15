@@ -4,8 +4,12 @@ import {
   SETTING_DEFAULTS,
   SETTING_SPECS,
   coerceSetting,
+  coerceWithSpec,
   displaySetting,
+  displayWithSpec,
   nextSetting,
+  nextWithSpec,
+  parseSettingSpecs,
 } from './settings.ts';
 
 test('every setting has a default, and every default is valid', () => {
@@ -113,5 +117,54 @@ test('no two settings share a key, a title, or a value label', () => {
   assert.equal(new Set(titles).size, titles.length);
   for (const spec of SETTING_SPECS) {
     assert.ok(spec.help.trim().length > 0, `${spec.key} has no help`);
+  }
+});
+
+test('the spec list survives the wire, so the daemon can drive the menu', () => {
+  const overWire: unknown = JSON.parse(JSON.stringify(SETTING_SPECS));
+  const parsed = parseSettingSpecs(overWire);
+  assert.deepEqual(parsed, JSON.parse(JSON.stringify(SETTING_SPECS)));
+  assert.equal(parsed.length, SETTING_SPECS.length);
+});
+
+test('a daemon that publishes no specs is answered with an empty list, not a guess', () => {
+  for (const payload of [undefined, null, 'specs', 42, {}, []]) {
+    assert.deepEqual(parseSettingSpecs(payload), [], `for ${JSON.stringify(payload) ?? 'undefined'}`);
+  }
+});
+
+test('one unusable spec costs its own row, never the rest of the menu', () => {
+  const good = { kind: 'toggle', key: 'keep', title: 'Keep', help: 'h' };
+  const parsed = parseSettingSpecs([
+    { kind: 'wormhole', key: 'a', title: 'A', help: 'h' },
+    { kind: 'choice', key: 'b', title: 'B', help: 'h', choices: [] },
+    { kind: 'number', key: 'c', title: 'C', help: 'h', min: 10, max: 0, step: 1 },
+    { kind: 'number', key: 'd', title: 'D', help: 'h', min: 0, max: 10, step: 0 },
+    { kind: 'toggle', key: 'e', title: 'E' },
+    good,
+  ]);
+  assert.deepEqual(parsed, [good]);
+});
+
+test('a duplicated key yields one row, so the menu cannot show the same setting twice', () => {
+  const parsed = parseSettingSpecs([
+    { kind: 'toggle', key: 'same', title: 'First', help: 'h' },
+    { kind: 'toggle', key: 'same', title: 'Second', help: 'h' },
+  ]);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0]?.title, 'First');
+});
+
+test('a spec from the wire validates values exactly as the compiled one does', () => {
+  const wire = parseSettingSpecs(JSON.parse(JSON.stringify(SETTING_SPECS)));
+  for (const spec of SETTING_SPECS) {
+    const twin = wire.find((candidate) => candidate.key === spec.key);
+    assert.ok(twin, `${spec.key} crossed the wire`);
+    const probes: unknown[] = [null, 'nonsense', -1, 1e6, true, SETTING_DEFAULTS[spec.key as keyof typeof SETTING_DEFAULTS]];
+    for (const probe of probes) {
+      assert.deepEqual(coerceWithSpec(twin, probe), coerceSetting(spec.key, probe), `${spec.key} <- ${String(probe)}`);
+      assert.deepEqual(nextWithSpec(twin, probe, 1), nextSetting(spec.key, probe, 1), `${spec.key} next`);
+      assert.equal(displayWithSpec(twin, probe), displaySetting(spec.key, probe), `${spec.key} display`);
+    }
   }
 });

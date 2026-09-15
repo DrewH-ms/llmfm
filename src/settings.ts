@@ -22,7 +22,13 @@ import {
 
 /** A setting the dashboard can render and cycle without knowing what it means. Adding a
  *  setting here is the whole change: the menu, the wire format, and validation all read
- *  from this list, so the two sides cannot drift the way the hook config once did. */
+ *  from this list.
+ *
+ *  That only holds within one process. The dashboard is a separate program with its own
+ *  compiled copy, so a daemon left running from before a setting existed answers 400 to a
+ *  menu that still offers it. The daemon therefore publishes this list on `/state` and the
+ *  menu is built from what it sends, which is why the functions below take a spec rather
+ *  than look one up by key. */
 export type SettingSpec =
   | {
       kind: 'choice';
@@ -156,7 +162,13 @@ function clampToStep(spec: Extract<SettingSpec, { kind: 'number' }>, value: numb
  *  not allow, so the HTTP surface never has to know the shape of an individual setting. */
 export function coerceSetting(key: string, value: unknown): string | number | boolean | null {
   const spec = specFor(key);
-  if (!spec) return null;
+  return spec ? coerceWithSpec(spec, value) : null;
+}
+
+export function coerceWithSpec(
+  spec: SettingSpec,
+  value: unknown,
+): string | number | boolean | null {
   if (spec.kind === 'choice') {
     return typeof value === 'string' && spec.choices.includes(value) ? value : null;
   }
@@ -173,7 +185,14 @@ export function nextSetting(
   direction: 1 | -1,
 ): string | number | boolean | null {
   const spec = specFor(key);
-  if (!spec) return null;
+  return spec ? nextWithSpec(spec, current, direction) : null;
+}
+
+export function nextWithSpec(
+  spec: SettingSpec,
+  current: unknown,
+  direction: 1 | -1,
+): string | number | boolean | null {
   if (spec.kind === 'toggle') return !(current === true);
   if (spec.kind === 'number') {
     const base = typeof current === 'number' && Number.isFinite(current) ? current : spec.min;
@@ -188,7 +207,10 @@ export function nextSetting(
 /** What the menu prints for a value. Kept beside the spec so both sides agree. */
 export function displaySetting(key: string, value: unknown): string {
   const spec = specFor(key);
-  if (!spec) return String(value);
+  return spec ? displayWithSpec(spec, value) : String(value);
+}
+
+export function displayWithSpec(spec: SettingSpec, value: unknown): string {
   if (spec.kind === 'toggle') return value === true ? 'on' : 'off';
   if (spec.kind === 'number') {
     const numeric = typeof value === 'number' ? value : spec.min;
@@ -196,4 +218,70 @@ export function displaySetting(key: string, value: unknown): string {
     return `${numeric}${spec.unit ?? ''}`;
   }
   return spec.labels?.[String(value)] ?? String(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+}
+
+function labelsOf(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const labels: Record<string, string> = {};
+  for (const [key, label] of Object.entries(value)) {
+    if (typeof label === 'string') labels[key] = label;
+  }
+  return Object.keys(labels).length > 0 ? labels : undefined;
+}
+
+function parseSpec(value: unknown): SettingSpec | null {
+  if (!isRecord(value)) return null;
+  const { kind, key, title, help } = value;
+  if (typeof key !== 'string' || typeof title !== 'string' || typeof help !== 'string') return null;
+  if (kind === 'toggle') return { kind, key, title, help };
+  if (kind === 'choice') {
+    const choices = stringList(value['choices']);
+    // A choice with nothing to choose would render as a dead row that cycles to null.
+    if (choices.length === 0) return null;
+    const labels = labelsOf(value['labels']);
+    return { kind, key, title, help, choices, ...(labels === undefined ? {} : { labels }) };
+  }
+  if (kind !== 'number') return null;
+  const { min, max, step } = value;
+  if (typeof min !== 'number' || typeof max !== 'number' || typeof step !== 'number') return null;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !(step > 0) || max < min) return null;
+  const unit = typeof value['unit'] === 'string' ? value['unit'] : undefined;
+  const zeroLabel = typeof value['zeroLabel'] === 'string' ? value['zeroLabel'] : undefined;
+  // Spread rather than assign: an explicit `unit: undefined` is a different object from one
+  // without the key, and the round-trip test compares these against the compiled list.
+  return {
+    kind,
+    key,
+    title,
+    help,
+    min,
+    max,
+    step,
+    ...(unit === undefined ? {} : { unit }),
+    ...(zeroLabel === undefined ? {} : { zeroLabel }),
+  };
+}
+
+/** The daemon's own setting list, narrowed. Returns an empty array for anything
+ *  unusable, which callers read as "this daemon does not publish specs" and answer by
+ *  falling back to their compiled copy. */
+export function parseSettingSpecs(value: unknown): SettingSpec[] {
+  if (!Array.isArray(value)) return [];
+  const specs: SettingSpec[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const spec = parseSpec(entry);
+    if (!spec || seen.has(spec.key)) continue;
+    seen.add(spec.key);
+    specs.push(spec);
+  }
+  return specs;
 }

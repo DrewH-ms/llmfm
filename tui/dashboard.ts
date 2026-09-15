@@ -2,9 +2,10 @@ import { DAEMON_URL } from '../src/constants.ts';
 import {
   SETTING_DEFAULTS,
   SETTING_SPECS,
-  coerceSetting,
-  displaySetting,
-  nextSetting,
+  coerceWithSpec,
+  displayWithSpec,
+  nextWithSpec,
+  parseSettingSpecs,
 } from '../src/settings.ts';
 import type { SettingSpec } from '../src/settings.ts';
 import { SESSION_SOURCES } from '../src/types.ts';
@@ -94,6 +95,7 @@ const HINTS_ROOT = '[↑↓ ws] move   [←→ ad] open or adjust   [-/+] fade  
 const HINTS_SETTINGS = '[↑↓ ws] move   [←→ ad] change   [esc] back   [q] quit';
 const HINTS_SESSIONS = '[↑↓ ws] move   [enter/m] mute   [← a esc] back   [q] quit';
 const COMMAND_FAILURE_NOTICE = 'daemon rejected command:';
+const UNSUPPORTED_SETTING_NOTICE = 'this daemon has no setting named';
 const EXIT_FAILURE = 1;
 
 const LINK_LIVE = 'live';
@@ -123,8 +125,13 @@ const MODE_KEY = 'mode';
 const FADE_KEY = 'fadeSeconds';
 /** Master volume is a setting like any other, but the listener reaches for it constantly,
  *  so it sits on the root menu as a live slider rather than behind a page. */
-const MASTER_VOLUME_SPEC = SETTING_SPECS.find((spec) => spec.key === MASTER_VOLUME_KEY) ?? null;
-const LISTED_SETTING_SPECS = SETTING_SPECS.filter((spec) => spec.key !== MASTER_VOLUME_KEY);
+function masterVolumeSpec(state: DaemonState): SettingSpec | null {
+  return state.settingSpecs.find((spec) => spec.key === MASTER_VOLUME_KEY) ?? null;
+}
+
+function listedSpecs(state: DaemonState): readonly SettingSpec[] {
+  return state.settingSpecs.filter((spec) => spec.key !== MASTER_VOLUME_KEY);
+}
 
 const SESSION_HELP_MUTED = 'Muted: holds no voice, and never holds the music on.';
 const SESSION_HELP_UNVOICED = 'No voice left to give, so this session sounds nothing.';
@@ -210,11 +217,11 @@ function parseSession(value: unknown): SessionView | null {
 /** Never fails: a daemon that sends no config, or one field of nonsense, costs the user
  *  the menu's accuracy for that row, not the screen. Values go through the same specs the
  *  daemon validates writes with, so the two sides cannot disagree about what is legal. */
-function parseConfig(value: unknown): LlmfmConfig {
+function parseConfig(value: unknown, specs: readonly SettingSpec[]): LlmfmConfig {
   const record = isRecord(value) ? value : {};
   const settings: Record<string, unknown> = { ...SETTING_DEFAULTS };
-  for (const spec of SETTING_SPECS) {
-    const coerced = coerceSetting(spec.key, record[spec.key]);
+  for (const spec of specs) {
+    const coerced = coerceWithSpec(spec, record[spec.key]);
     if (coerced !== null) settings[spec.key] = coerced;
   }
   const muted = Array.isArray(record['muted'])
@@ -245,7 +252,11 @@ function parseDaemonState(text: string): DaemonState | null {
     if (!session) return null;
     sessions.push(session);
   }
-  const config = parseConfig(payload['config']);
+  // A daemon too old to publish its specs still has to be driveable, so the compiled list
+  // stands in. That is the pre-existing drift risk and nothing worse than today.
+  const published = parseSettingSpecs(payload['settingSpecs']);
+  const settingSpecs = published.length > 0 ? published : SETTING_SPECS;
+  const config = parseConfig(payload['config'], settingSpecs);
   // `mode` and `fadeSeconds` are settings now, so the config is where they are read from
   // and the top-level copies are the daemon's own echo of them.
   return {
@@ -257,6 +268,7 @@ function parseDaemonState(text: string): DaemonState | null {
     midi,
     sessions,
     config,
+    settingSpecs,
   };
 }
 
@@ -376,7 +388,7 @@ function settingLine(options: {
   width: number;
 }): Segment[] {
   const { spec, config, selected, width } = options;
-  const value = displaySetting(spec.key, settingValue(config, spec.key));
+  const value = displayWithSpec(spec, settingValue(config, spec.key));
   return [
     cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
@@ -407,12 +419,12 @@ function masterVolumeLine(options: {
       style: level > 0 ? FG_GREEN : FG_GREY,
     },
     { text: selected ? CYCLE_RIGHT : '  ', style: FG_GREY },
-    { text: ` ${displaySetting(spec.key, level)}`, style: STYLE_BOLD },
+    { text: ` ${displayWithSpec(spec, level)}`, style: STYLE_BOLD },
   ];
 }
 
 function sectionSummary(id: SectionId, state: DaemonState): string {
-  if (id === SECTION_SETTINGS) return `${LISTED_SETTING_SPECS.length} options`;
+  if (id === SECTION_SETTINGS) return `${listedSpecs(state).length} options`;
   const muted = state.sessions.filter((session) => session.muted).length;
   const sounding = state.sessions.filter((session) => session.audible).length;
   if (state.sessions.length === 0) return EMPTY_SESSIONS_TEXT;
@@ -496,14 +508,12 @@ function rowsFor(options: { state: DaemonState; section: SectionId | null }): Ro
   const { state, section } = options;
   if (section === null) {
     const sections: Row[] = SECTION_IDS.map((id) => ({ kind: 'section', key: `section:${id}`, id }));
-    if (!MASTER_VOLUME_SPEC) return sections;
-    return [
-      ...sections,
-      { kind: 'setting', key: `setting:${MASTER_VOLUME_SPEC.key}`, spec: MASTER_VOLUME_SPEC },
-    ];
+    const volume = masterVolumeSpec(state);
+    if (!volume) return sections;
+    return [...sections, { kind: 'setting', key: `setting:${volume.key}`, spec: volume }];
   }
   if (section === SECTION_SETTINGS) {
-    return LISTED_SETTING_SPECS.map((spec) => ({ kind: 'setting', key: `setting:${spec.key}`, spec }));
+    return listedSpecs(state).map((spec) => ({ kind: 'setting', key: `setting:${spec.key}`, spec }));
   }
   return state.sessions.map((session) => ({
     kind: 'session',
@@ -729,10 +739,23 @@ async function command(path: string, body?: unknown): Promise<void> {
   }
 }
 
-function cycleSetting(key: string, direction: 1 | -1): void {
+function cycleSetting(spec: SettingSpec, direction: 1 | -1): void {
   if (!snapshot) return;
-  const value = nextSetting(key, settingValue(snapshot.state.config, key), direction);
-  if (value !== null) void command('/config', { key, value });
+  const value = nextWithSpec(spec, settingValue(snapshot.state.config, spec.key), direction);
+  if (value !== null) void command('/config', { key: spec.key, value });
+}
+
+/** A keyboard shortcut names a setting the daemon may not have. Saying so beats a silent
+ *  no-op, and beats the 400 the menu used to earn. */
+function cycleByKey(key: string, direction: 1 | -1): void {
+  if (!snapshot) return;
+  const spec = snapshot.state.settingSpecs.find((candidate) => candidate.key === key);
+  if (!spec) {
+    notice = `${UNSUPPORTED_SETTING_NOTICE} ${key}`;
+    paint();
+    return;
+  }
+  cycleSetting(spec, direction);
 }
 
 function selectedRow(): Row | null {
@@ -774,7 +797,7 @@ function onHorizontal(direction: 1 | -1): void {
     else leaveSection();
     return;
   }
-  cycleSetting(row.spec.key, direction);
+  cycleSetting(row.spec, direction);
 }
 
 function onActivate(): void {
@@ -782,7 +805,7 @@ function onActivate(): void {
   if (!row) return;
   if (row.kind === 'section') enterSection(row.id);
   else if (row.kind === 'session') toggleMute(row.session);
-  else cycleSetting(row.spec.key, 1);
+  else cycleSetting(row.spec, 1);
 }
 
 function onKey(key: string): void {
@@ -824,15 +847,15 @@ function onKey(key: string): void {
     return;
   }
   if (key === KEY_CYCLE_MODE) {
-    cycleSetting(MODE_KEY, 1);
+    cycleByKey(MODE_KEY, 1);
     return;
   }
   if (key === KEY_TOGGLE_SIMULATION) {
     void command(`/simulate?running=${!snapshot.state.simulating}`);
     return;
   }
-  if (KEYS_FADE_UP.some((candidate) => candidate === key)) cycleSetting(FADE_KEY, 1);
-  else if (KEYS_FADE_DOWN.some((candidate) => candidate === key)) cycleSetting(FADE_KEY, -1);
+  if (KEYS_FADE_UP.some((candidate) => candidate === key)) cycleByKey(FADE_KEY, 1);
+  else if (KEYS_FADE_DOWN.some((candidate) => candidate === key)) cycleByKey(FADE_KEY, -1);
 }
 
 function readFrames(buffer: string): { frames: string[]; rest: string } {
