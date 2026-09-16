@@ -16,6 +16,7 @@ import {
 import type { SettingSpec } from '../src/settings.ts';
 import { SESSION_SOURCES } from '../src/types.ts';
 import type { DaemonState, MidiStatus, SessionView, TransportState } from '../src/types.ts';
+import type { SystemVolumeStatus } from '../src/system-volume.ts';
 import type { LlmfmConfig } from '../src/config.ts';
 
 const ESC = '\x1b[';
@@ -244,6 +245,17 @@ function parseMidi(value: unknown): MidiStatus | null {
   return { ready, device, error };
 }
 
+/** An unreadable field reads as "no endpoint" rather than rejecting the whole snapshot. */
+function parseDuck(value: unknown): SystemVolumeStatus {
+  if (!isRecord(value)) return { ready: false, deviceId: null, error: null };
+  const { ready, deviceId, error } = value;
+  return {
+    ready: ready === true,
+    deviceId: typeof deviceId === 'string' ? deviceId : null,
+    error: typeof error === 'string' ? error : null,
+  };
+}
+
 function parseSession(value: unknown): SessionView | null {
   if (!isRecord(value)) return null;
   const { sessionId, working, cwd, label, blockedMidTurn, updatedAt, voiceName, audible } = value;
@@ -332,6 +344,7 @@ function parseDaemonState(text: string): DaemonState | null {
     track,
     transport,
     midi,
+    duck: parseDuck(payload['duck']),
     sessions,
     config,
     settingSpecs,
@@ -770,6 +783,27 @@ function rowLine(options: {
   return settingLine({ spec: row.spec, config: state.config, selected, width });
 }
 
+/** What is actually carrying the signal. In duck mode that is the volume bridge, and a
+ *  bridge that never came up is the whole feature quietly doing nothing. */
+function sourceSegments(state: DaemonState): Segment[] {
+  if (state.config.audio === 'duck') {
+    return [
+      { text: 'DUCK  ', style: STYLE_DIM },
+      {
+        text: state.duck.error ?? (state.duck.ready ? 'system output' : 'no endpoint'),
+        style: state.duck.error ? FG_RED : state.duck.ready ? FG_GREEN : FG_YELLOW,
+      },
+    ];
+  }
+  return [
+    { text: 'MIDI  ', style: STYLE_DIM },
+    {
+      text: state.midi.error ?? state.midi.device ?? 'no device',
+      style: state.midi.error ? FG_RED : state.midi.ready ? FG_GREEN : FG_YELLOW,
+    },
+  ];
+}
+
 function buildLines(view: View): string[] {
   const { snapshot, link, section, selectedKey, notice, library, playlists } = view;  const width = clamp(process.stdout.columns ?? FALLBACK_COLUMNS, MIN_COLUMNS, MAX_COLUMNS);
   if (!snapshot) {
@@ -804,16 +838,7 @@ function buildLines(view: View): string[] {
       width,
     ),
     composeLine(transportSegments(transport, width), width),
-    composeLine(
-      [
-        { text: 'MIDI  ', style: STYLE_DIM },
-        {
-          text: state.midi.error ?? state.midi.device ?? 'no device',
-          style: state.midi.error ? FG_RED : state.midi.ready ? FG_GREEN : FG_YELLOW,
-        },
-      ],
-      width,
-    ),
+    composeLine(sourceSegments(state), width),
     composeLine(
       [
         { text: `sim(${KEY_TOGGLE_SIMULATION}) `, style: STYLE_DIM },

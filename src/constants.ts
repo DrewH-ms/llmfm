@@ -117,6 +117,13 @@ export const SILENCE_MODES = ['pause', 'mute'] as const;
 export type SilenceMode = (typeof SILENCE_MODES)[number];
 export const DEFAULT_SILENCE_MODE: SilenceMode = 'pause';
 
+/** Where the signal comes from. `midi` plays LLMFM's own score; `duck` mutes and unmutes
+ *  the system output endpoint to gate whatever the user is already playing and we do not
+ *  own. The two are exclusive: a score played over someone else's music says nothing. */
+export const AUDIO_MODES = ['midi', 'duck'] as const;
+export type AudioMode = (typeof AUDIO_MODES)[number];
+export const DEFAULT_AUDIO: AudioMode = 'midi';
+
 export const MASTER_VOLUME_MAX = 100;
 export const DEFAULT_MASTER_VOLUME = 100;
 export const MASTER_VOLUME_STEP = 5;

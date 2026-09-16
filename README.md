@@ -148,6 +148,27 @@ gate, so a recording is gated as a whole — it plays while any agent that is no
 working. `format` is reported per track so a client can explain that rather than
 pretending a recording can be split.
 
+Set **Sound source** to `duck` and LLMFM stops playing anything of its own. Instead it
+rides whatever you are already playing — a browser, a media player, anything the machine
+is mixing — by muting and unmuting the Windows output endpoint: your audio while the gate
+is open, silence while an agent needs you. There is no pausing another application's
+stream, and nothing about it is inspected: no app-specific code, no API, no network.
+
+It is the mute flag rather than a level of zero, deliberately. Windows draws a muted
+speaker in the tray, so on the one occasion we fail to put it back you can see why your
+machine is silent and fix it in a click — where a level of zero reads as broken hardware or
+a dropped connection. Unmuting also returns your level exactly.
+
+The endpoint is borrowed, never taken. It is unmuted when you switch **Sound source** away,
+when the daemon shuts down, and — because the bridge watches the daemon by handle — when
+the daemon dies without saying so. A hard kill that takes the bridge with it is covered by
+a claim file the next start reads. A mute or a level you change yourself becomes the new
+baseline rather than something to restore over. Plug in a headset mid-session and the gate
+follows it: the device you were on is put back before the new one is taken.
+
+**On silence** applies to LLMFM's own music only. In duck mode there is no transport of
+ours to pause or keep running, so it has no effect there: the gate closing always mutes.
+
 Your own music lives in `playlists/`, beside the config, one folder per playlist —
 `bundled/` is the shipped music, and anything you add is listed without a licence record,
 because we have not verified one for it. See `playlists/README.md`.

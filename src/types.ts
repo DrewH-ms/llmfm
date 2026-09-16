@@ -87,6 +87,9 @@ export type DaemonState = {
   track: string | null;
   transport: TransportState;
   midi: MidiStatus;
+  /** The volume bridge duck mode rides. Published whatever the mode, so a bridge that
+   *  never came up is visible rather than silently doing nothing. */
+  duck: import('./system-volume.ts').SystemVolumeStatus;
   sessions: SessionView[];
   config: import('./config.ts').LlmfmConfig;
   /** The settings this daemon actually accepts. The dashboard builds its menu from this

@@ -6,7 +6,14 @@ import {
   DEFAULT_PLAYLIST,
   HANDLE_ID_LENGTH,
 } from './constants.ts';
-import type { AutoplayMode, GateMode, GatePolicy, PromptGapMode, SilenceMode } from './constants.ts';
+import type {
+  AudioMode,
+  AutoplayMode,
+  GateMode,
+  GatePolicy,
+  PromptGapMode,
+  SilenceMode,
+} from './constants.ts';
 import { SETTING_DEFAULTS, coerceSetting } from './settings.ts';
 import { copilotHooksDir } from './install.ts';
 import { configPath } from './paths.ts';
@@ -21,6 +28,8 @@ export type LlmfmConfig = {
   /** Whether an instrument sounds while its agent works, or only when it needs you. */
   mode: GateMode;
   fadeSeconds: number;
+  /** Whether the daemon plays its own score or rides audio it does not own. */
+  audio: AudioMode;
   silenceMode: SilenceMode;
   masterVolume: number;
   idleDropoutMinutes: number;

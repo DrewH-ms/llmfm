@@ -205,8 +205,6 @@ test('the transport runs while anything sounds and pauses when nothing does', ()
 });
 
 test('silence mode mute keeps the transport running through the quiet', () => {
-  // Ducking rides audio we do not own, and there is no pausing another application's
-  // stream, so the transport has to keep time even when every part is gated off.
   const { scheduler, mixer } = harness(
     [session({ sessionId: 'a', working: false })],
     fakeConfig({ silenceMode: 'mute' }),
@@ -215,3 +213,69 @@ test('silence mode mute keeps the transport running through the quiet', () => {
   assert.equal(scheduler.calls.at(-1), 'play', 'mute must not pause the transport');
 });
 
+/** Duck mode rides audio on a device that is not ours, where the output level is the only
+ *  lever there is. `silenceMode` describes a transport of our own that duck mode does not
+ *  have, so it must not reach the duck in either position. */
+test('duck mode answers to the gate alone, whatever "on silence" says', () => {
+  for (const silenceMode of ['pause', 'mute'] as const) {
+    for (const working of [true, false]) {
+      const mixer = fakeMixer();
+      const scheduler = fakeScheduler();
+      const gates: boolean[] = [];
+      const registry = {
+        list: () => [session({ sessionId: 'a', working })],
+      } as unknown as SessionRegistry;
+      const orchestrator = createOrchestrator({
+        registry,
+        mixer,
+        scheduler,
+        config: fakeConfig({ audio: 'duck', gate: 'any', silenceMode }),
+        duck: { setAudible: ({ audible }) => void gates.push(audible) },
+      });
+      built.push(orchestrator);
+      orchestrator.bindScore(score());
+
+      const where = `${silenceMode}/${working ? 'working' : 'idle'}`;
+      assert.deepEqual(gates, [working], `${where}: the duck did not follow the gate`);
+      assert.deepEqual(scheduler.calls, [], `${where}: our own transport must stay stopped`);
+    }
+  }
+});
+
+
+/** A recorded mixdown and someone else's stream are the same shape of problem — one
+ *  stream nobody can subdivide — and the daemon can be switched between them mid-track.
+ *  Only ever one of them is the gate. */
+test('ducking takes the gate from a recorded track, and gives it back', () => {
+  const config = fakeConfig({ audio: 'midi', gate: 'any' });
+  const recordedGates: boolean[] = [];
+  const duckGates: boolean[] = [];
+  let working = true;
+  const registry = {
+    list: () => [session({ sessionId: 'a', working })],
+  } as unknown as SessionRegistry;
+  const orchestrator = createOrchestrator({
+    registry,
+    mixer: fakeMixer(),
+    scheduler: fakeScheduler(),
+    config,
+    recorded: { setAudible: ({ audible }) => void recordedGates.push(audible) },
+    duck: { setAudible: ({ audible }) => void duckGates.push(audible) },
+  });
+  built.push(orchestrator);
+  orchestrator.bindRecorded();
+
+  assert.deepEqual(recordedGates, [true], 'the recorded track holds the gate in midi mode');
+  assert.deepEqual(duckGates, [], 'the duck was driven while it was not the mode');
+
+  config.setSetting('audio', 'duck');
+  working = false;
+  orchestrator.refresh();
+  assert.deepEqual(duckGates, [false], 'the duck did not take the gate');
+  assert.deepEqual(recordedGates, [true], 'the recorded sink was driven while ducking');
+
+  config.setSetting('audio', 'midi');
+  orchestrator.refresh();
+  assert.deepEqual(recordedGates, [true, false], 'the recorded track never got the gate back');
+  assert.deepEqual(duckGates, [false], 'the duck was still driven after the switch back');
+});

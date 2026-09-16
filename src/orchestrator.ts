@@ -37,9 +37,10 @@ export type Orchestrator = {
   stop(): void;
 };
 
-/** Where the gate lands for a track that has no parts. A finished mixdown can only be
- *  turned up or down whole, so the ensemble collapses to one boolean. */
-export type RecordedSink = {
+/** Where the gate lands when there are no parts to spread it across: a finished mixdown,
+ *  or audio playing out of an application that is not ours. Neither can be subdivided, so
+ *  the ensemble collapses to one boolean for the whole stream. */
+export type StreamSink = {
   setAudible(options: { audible: boolean; fadeSeconds: number }): void;
 };
 
@@ -50,10 +51,13 @@ export function createOrchestrator(options: {
   mixer: Mixer;
   scheduler: Scheduler;
   config: ConfigStore;
-  recorded?: RecordedSink;
+  recorded?: StreamSink;
+  /** Drives the system volume so the user's own music carries the signal. */
+  duck?: StreamSink;
 }): Orchestrator {
   const { registry, mixer, scheduler, config } = options;
   const recorded = options.recorded ?? null;
+  const duck = options.duck ?? null;
 
   let score: Score | null = null;
   /** Set instead of `score` while a recorded track is loaded. The two are exclusive: a
@@ -200,27 +204,30 @@ export function createOrchestrator(options: {
     return pending.length > 0 ? Math.max(0, Math.min(...pending)) : null;
   };
 
-  /** Recorded audio is one stream nobody can subdivide, so every session gates the same
-   *  thing. `mixAudible` already says it: under `per-agent` it is "any session that should
-   *  sound", which is the override the ensemble needs — the file plays while anyone is
-   *  working — and under the other policies it is the configured gate unchanged. */
-  const refreshRecorded = (): void => {
-    const sessions = gatingSessions();
-    recorded?.setAudible({
-      audible: mixAudible(sessions),
-      fadeSeconds: config.current().fadeSeconds,
-    });
-    if (settleTimer) {
-      clearTimeout(settleTimer);
-      settleTimer = null;
-    }
-    const soonest = soonestSettle(sessions);
-    if (soonest !== null) settleTimer = setTimeout(refresh, soonest + SETTLE_MARGIN_MS);
+  /** Where the gate lands when nothing can be subdivided. Ducking wins over a recorded
+   *  track because in that mode the daemon plays nothing of its own for a track to be. */
+  const wholeStreamSink = (): StreamSink | null =>
+    config.current().audio === 'duck' ? duck : recordedTrack ? recorded : null;
+
+  const scheduleSettle = (delayMs: number | null): void => {
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = null;
+    if (delayMs === null) return;
+    settleTimer = setTimeout(refresh, delayMs + SETTLE_MARGIN_MS);
   };
 
   const refresh = (): void => {
-    if (recordedTrack) {
-      refreshRecorded();
+    const stream = wholeStreamSink();
+    if (stream) {
+      const sessions = gatingSessions();
+      // Every session gates the same thing, and `mixAudible` already says it: under
+      // `per-agent` it is "any session that should sound", which is the override a stream
+      // with no parts needs, and under the other policies it is the configured gate.
+      stream.setAudible({
+        audible: mixAudible(sessions),
+        fadeSeconds: config.current().fadeSeconds,
+      });
+      scheduleSettle(soonestSettle(sessions));
       return;
     }
     if (!score) return;
@@ -255,13 +262,8 @@ export function createOrchestrator(options: {
       mixer.setPartAudible({ partId: part.partId, audible, fadeSeconds: fade });
     }
 
-    // `mute` keeps the transport running through the silence. It costs the resume-in-place
-    // effect, and exists because nothing else can work once we are riding audio we do not
-    // own: there is no pausing another application's stream.
-    if (settleTimer) {
-      clearTimeout(settleTimer);
-      settleTimer = null;
-    }
+    // `mute` keeps our own transport running through the silence, trading the
+    // resume-in-place effect for not stopping the piece.
     // A block still inside its settle window has to be revisited, or a prompt the user
     // really is waiting on would never silence its part.
     const soonest = soonestSettle(sessions);
@@ -271,12 +273,12 @@ export function createOrchestrator(options: {
       // Pausing the moment the gate shuts would cut the notes the fade still needs, so the
       // transport runs on and the decision is retaken once the ramp has reached zero.
       const wait = !mixer.anyGateOpen() ? fade * MS_PER_SECOND + SETTLE_MARGIN_MS : null;
-      const delay =
-        soonest === null ? wait : wait === null ? soonest : Math.min(soonest, wait);
-      if (delay !== null) settleTimer = setTimeout(refresh, delay + SETTLE_MARGIN_MS);
+      scheduleSettle(
+        soonest === null ? wait : wait === null ? soonest : Math.min(soonest, wait),
+      );
     } else {
       scheduler.pause();
-      if (soonest !== null) settleTimer = setTimeout(refresh, soonest + SETTLE_MARGIN_MS);
+      scheduleSettle(soonest);
     }
   };
 

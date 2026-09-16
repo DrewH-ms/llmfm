@@ -9,6 +9,8 @@ import { createOrchestrator } from './orchestrator.ts';
 import { createScheduler } from './scheduler.ts';
 import { createAudioOut } from './audio-out.ts';
 import { createRecordedPlayer } from './recorded.ts';
+import { createSystemVolume } from './system-volume.ts';
+import { createDuck } from './duck.ts';
 import { createSessionRegistry } from './sessions.ts';
 import { watchOpenSessions } from './open-sessions.ts';
 import { parseHookEvent } from './intake.ts';
@@ -204,6 +206,8 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const config = createConfigStore();
   const audio = createAudioOut();
   const recorded = createRecordedPlayer(audio);
+  const volume = createSystemVolume();
+  const duck = createDuck({ volume });
   const orchestrator = createOrchestrator({
     registry,
     mixer,
@@ -212,6 +216,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     recorded: {
       setAudible: (gate) => recorded.setAudible(gate),
     },
+    duck,
   });
   const simulation = createSimulation(registry);
   let motif: StartupMotif | null = null;
@@ -219,6 +224,12 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   /** True while a recorded track holds the transport, so state and shutdown ask the right
    *  player which one is running. */
   let recordedTrack = false;
+  /** True while the user's own audio carries the signal and LLMFM plays nothing itself. */
+  let ducking = false;
+
+  /** `silenceMode` describes LLMFM's own transport, and duck has no transport of ours. */
+  const holdOurTransport = (): boolean =>
+    config.current().audio !== 'duck' && config.current().silenceMode === 'mute';
 
   const midiStatus = await midi.start();
   ensurePlaylistsDir();
@@ -251,7 +262,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       scheduler.pause();
       mixer.silenceAll();
       recorded.setMasterVolume(config.current().masterVolume);
-      recorded.setHoldTransport(config.current().silenceMode === 'mute');
+      recorded.setHoldTransport(holdOurTransport());
       recordedTrack = true;
       trackFile = file;
       score = null;
@@ -281,6 +292,40 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
 
   mixer.setMasterVolume(config.current().masterVolume);
 
+  /** Only one of ducking and playing our own score ever runs. Switches queue behind each
+   *  other so a toggle cannot leave duck mode before the bridge that must restore the
+   *  level exists, and the chain is kept resolved so one failure cannot skip the unmute. */
+  let audioModeSwitch: Promise<void> = Promise.resolve();
+  const applyAudioMode = (): Promise<void> => {
+    audioModeSwitch = audioModeSwitch
+      .then(async () => {
+        const wanted = config.current().audio === 'duck';
+        if (wanted === ducking) return;
+        if (wanted) {
+          motif?.cancel();
+          scheduler.pause();
+          mixer.silenceAll();
+          recorded.setHoldTransport(holdOurTransport());
+          recorded.setAudible({ audible: false, fadeSeconds: 0 });
+          const status = await duck.start();
+          if (!status.ready) console.log(`Duck unavailable: ${status.error}`);
+          // Only a bridge that answered counts as ducking, so a failed start is retried by
+          // the next switch rather than leaving the mode on with nothing behind it.
+          ducking = status.ready;
+        } else {
+          await duck.stop();
+          ducking = false;
+          recorded.setHoldTransport(holdOurTransport());
+        }
+        orchestrator.refresh();
+        publish();
+      })
+      .catch((error: unknown) => {
+        console.log(`Audio mode switch failed: ${String(error)}`);
+      });
+    return audioModeSwitch;
+  };
+
   /** A skip is an instruction, not a consequence, so "when a track ends: stop" must not
    *  disable it. Random still draws from the bag, so skipping repeatedly still covers the
    *  library before anything repeats. */
@@ -301,6 +346,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     track: trackFile ?? null,
     transport: recordedTrack ? recorded.state() : scheduler.state(),
     midi: midi.status(),
+    duck: volume.status(),
     sessions: orchestrator.sessionViews(),
     config: config.current(),
     settingSpecs: SETTING_SPECS,
@@ -369,7 +415,8 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const unsubscribeConfig = config.onChange(() => {
     mixer.setMasterVolume(config.current().masterVolume);
     recorded.setMasterVolume(config.current().masterVolume);
-    recorded.setHoldTransport(config.current().silenceMode === 'mute');
+    recorded.setHoldTransport(holdOurTransport());
+    void applyAudioMode();
     orchestrator.refresh();
     api.broadcast();
   });
@@ -388,7 +435,13 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     }
     if (score) orchestrator.bindScore(score);
   };
-  if (score && midiStatus.ready && config.current().startupMotif) {
+  // Nothing of ours announces itself over music the user is already playing.
+  if (
+    score &&
+    midiStatus.ready &&
+    config.current().startupMotif &&
+    config.current().audio !== 'duck'
+  ) {
     motif = playStartupMotif({
       midi,
       score,
@@ -398,6 +451,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   } else {
     beginPerformance();
   }
+  void applyAudioMode();
 
   console.log(`LLMFM listening on http://127.0.0.1:7777`);
   console.log(midiStatus.ready ? `MIDI out: ${midiStatus.device}` : `MIDI unavailable: ${midiStatus.error}`);
@@ -414,6 +468,12 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       unsubscribeRecordedEnd();
       // A leaked MCI device keeps sounding after the process it belonged to is gone.
       recorded.stop();
+      // The system volume is the user's, and must never outlive us changed.
+      try {
+        await audioModeSwitch;
+      } finally {
+        await duck.stop();
+      }
       config.stop();
       watcher?.stop();
       simulation.stop();

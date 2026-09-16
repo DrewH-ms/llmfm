@@ -30,8 +30,10 @@
 #   Q                   quit
 # Responses:
 #   OK <scalar> <0|1> <deviceId>            once, at startup
-#   V <scalar> <0|1> <baseline> <0|1>       current level and mute, then the
-#                                           level and mute we would restore to
+#   V <scalar> <0|1> <baseline> <0|1> <deviceId>
+#                                           current level and mute, then the
+#                                           level and mute we would restore to,
+#                                           then the endpoint they belong to
 #   ERR <message>
 
 param([int] $ParentPid = 0)
@@ -69,6 +71,8 @@ interface IMMDevice {
 
 [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IMMDeviceEnumerator {
+    // Declaration order is the vtable, so this slot is load-bearing even though nothing
+    // calls it. Removing it would silently rebind the method below to the wrong function.
     int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr devices);
     int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice device);
 }
@@ -85,10 +89,23 @@ public class LlmfmSystemVolume {
     // volume OSD or another listener can tell them from the user's.
     static Guid eventContext = new Guid("6f1b1f4e-9a6a-4d3e-9a0f-2b8a1c5d7e30");
     static IAudioEndpointVolume endpoint;
+    static string deviceId;
 
-    // Held for the lifetime of the process on purpose: if the default endpoint
-    // changes while we hold a level, the device we must restore is the one we
-    // actually changed, not whatever is default at exit.
+    // The endpoint we are bound to, which is not necessarily the current default: the
+    // device we must restore is the one we actually changed.
+    public static string DeviceId { get { return deviceId; } }
+
+    // Which endpoint the user is listening to right now, without binding it.
+    public static string DefaultId() {
+        IMMDeviceEnumerator enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
+        IMMDevice device;
+        if (enumerator.GetDefaultAudioEndpoint(RENDER, CONSOLE, out device) != 0) return null;
+        string id;
+        if (device.GetId(out id) != 0) return null;
+        return id;
+    }
+
+    // Binds the current default, replacing any endpoint already held.
     public static string Open() {
         IMMDeviceEnumerator enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
         IMMDevice device;
@@ -99,6 +116,7 @@ public class LlmfmSystemVolume {
         endpoint = volume;
         string id;
         if (device.GetId(out id) != 0) id = "unknown";
+        deviceId = id;
         return id;
     }
 
@@ -158,18 +176,36 @@ function Test-Ours([float] $level, [bool] $mute) {
 function Format-State() {
     $level = [LlmfmSystemVolume]::GetLevel()
     $mute = [LlmfmSystemVolume]::GetMute()
-    return ('V ' + (Format-Level $level $mute) + ' ' + (Format-Level ([float] $script:baselineLevel) ([bool] $script:baselineMute)))
+    return ('V ' + (Format-Level $level $mute) + ' ' + (Format-Level ([float] $script:baselineLevel) ([bool] $script:baselineMute)) + ' ' + [LlmfmSystemVolume]::DeviceId)
 }
 
+# An endpoint can be unplugged out from under us, and every call on it then fails. The
+# caller learns that from the reading it asked for; a restore that cannot reach its device
+# must not take down the exit path that called it.
 function Restore-Baseline() {
     if (-not $script:holding) { return }
-    $level = [LlmfmSystemVolume]::GetLevel()
-    $mute = [LlmfmSystemVolume]::GetMute()
-    if (Test-Ours $level $mute) {
-        [LlmfmSystemVolume]::SetLevel([float] $script:baselineLevel)
-        if ($mute -ne $script:baselineMute) { [LlmfmSystemVolume]::SetMute([bool] $script:baselineMute) }
+    try {
+        $level = [LlmfmSystemVolume]::GetLevel()
+        $mute = [LlmfmSystemVolume]::GetMute()
+        if (Test-Ours $level $mute) {
+            [LlmfmSystemVolume]::SetLevel([float] $script:baselineLevel)
+            if ($mute -ne $script:baselineMute) { [LlmfmSystemVolume]::SetMute([bool] $script:baselineMute) }
+        }
+    } catch {
     }
     $script:holding = $false
+}
+
+# The gate has to land on the device the user is actually listening to. A headset plugged
+# in mid-session moves the default, and a mute left behind on the endpoint we bound at
+# startup would be silence nobody hears and a flag nobody clears. At most one endpoint is
+# ever held, and the one we give up is put back before we let go of it. Releasing it also
+# clears the hold, so the caller adopts the new device's state as the baseline.
+function Sync-Endpoint() {
+    $current = [LlmfmSystemVolume]::DefaultId()
+    if (-not $current -or $current -eq [LlmfmSystemVolume]::DeviceId) { return }
+    Restore-Baseline
+    [LlmfmSystemVolume]::Open() | Out-Null
 }
 
 try {
@@ -216,6 +252,7 @@ try {
             if ($command -eq 'G') {
                 Write-Line (Format-State)
             } elseif ($command -eq 'S') {
+                Sync-Endpoint
                 $parts = $line.Substring(2).Split(' ')
                 $target = [float]::Parse($parts[0], $culture)
                 $targetMute = $parts[1] -eq '1'

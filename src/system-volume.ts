@@ -169,6 +169,9 @@ export function createSystemVolume(): SystemVolume {
           return;
         }
         last = { current, baseline };
+        // The bridge follows the default endpoint, so which device the claim is about can
+        // change under a running daemon.
+        if (parts[5]) state = { ...state, deviceId: parts[5] };
         resolve(last);
       };
 
@@ -296,13 +299,15 @@ export function createSystemVolume(): SystemVolume {
 
     async restore(): Promise<VolumeLevel | null> {
       const reading = await request('R');
-      clearClaim();
+      // A restore the bridge could not confirm is the moment the claim matters most, so
+      // the durable record outlives it and the next start puts the level back.
+      if (reading) clearClaim();
       return reading?.current ?? null;
     },
 
     async stop(): Promise<void> {
-      if (state.ready) await request('R');
-      clearClaim();
+      const restored = state.ready ? await request('R') : null;
+      if (!state.ready || restored) clearClaim();
       state = { ready: false, deviceId: state.deviceId, error: state.error };
       try {
         proc?.stdin.write('Q\n');
