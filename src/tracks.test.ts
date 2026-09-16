@@ -3,19 +3,23 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { DEFAULT_TRACK } from './constants.ts';
+import { DEFAULT_TRACK, PLAYABLE_FILE_PATTERN } from './constants.ts';
 
 const TRACKS_DIR = join(import.meta.dirname, '..', 'tracks');
 const index = JSON.parse(readFileSync(join(TRACKS_DIR, 'tracks.json'), 'utf8'));
 const attribution = readFileSync(join(TRACKS_DIR, 'ATTRIBUTION.md'), 'utf8');
-const files = readdirSync(TRACKS_DIR).filter((file) => /\.midi?$/i.test(file));
+const files = readdirSync(TRACKS_DIR).filter((file) => PLAYABLE_FILE_PATTERN.test(file));
 
 /** A public-domain composition does not put its MIDI sequence in the public domain: the
- *  sequence is a separately copyrightable arrangement. These run over the shipped files
- *  rather than over the curation script, so a file dragged into the folder by hand is
- *  caught too — which is how the one unverified track got there in the first place. */
+ *  sequence is a separately copyrightable arrangement, and a recording is a separately
+ *  copyrightable performance. Both hold even for music centuries out of copyright, so a
+ *  file is only redistributable when the *bytes* carry a licence. These run over the
+ *  shipped files rather than over the curation script, so a file dragged into the folder
+ *  by hand is caught too — which is how the one unverified track got there in the first
+ *  place. */
 const ALLOWED = new Set([
   'PD',
+  'CC0',
   'CC BY 2.0',
   'CC BY 2.5',
   'CC BY 3.0',
@@ -26,7 +30,7 @@ const ALLOWED = new Set([
   'CC BY-SA 4.0',
 ]);
 
-test('every shipped MIDI file states a licence we are allowed to redistribute', () => {
+test('every shipped audio file states a licence we are allowed to redistribute', () => {
   for (const file of files) {
     const entry = index.tracks.find((track: { file: string }) => track.file === file);
     assert.ok(entry, `${file} ships with no entry in tracks.json`);

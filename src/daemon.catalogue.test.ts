@@ -17,7 +17,10 @@ test('every shipped entry carries the provenance the UI shows', () => {
     assert.ok(entry.title, `${entry.file} has no title`);
     assert.ok(entry.composer, `${entry.file} has no composer`);
     assert.ok(entry.licenceId, `${entry.file} has no licence`);
-    assert.equal(entry.format, 'mid', `${entry.file} is not a format the gate can work on`);
+    assert.ok(
+      ['mid', 'mp3', 'wav'].includes(entry.format),
+      `${entry.file} is not a format the daemon can play`,
+    );
   }
 });
 

@@ -1,8 +1,11 @@
 # Music credits
 
-Every file in this directory was obtained from The Mutopia Project (mutopiaproject.org) and is
-redistributed under the licence its publisher states for that file. Typesetting and
-sequencing are the work of the Mutopia contributors named below.
+Each file in this directory is redistributed under the licence its publisher states for
+that file. The MIDI sequences come from The Mutopia Project (mutopiaproject.org), where
+typesetting and sequencing are the work of the contributors named below. The recorded
+audio comes from Musopen (musopen.org) and is credited separately further down.
+
+## MIDI sequences — The Mutopia Project
 
 | File | Work | Composer | Licence | Typeset by | Source |
 | --- | --- | --- | --- | --- | --- |
@@ -26,3 +29,22 @@ sequencing are the work of the Mutopia contributors named below.
 
 Files licensed CC BY-SA may be redistributed only with this credit intact and under
 the same licence.
+
+## Recorded audio — Musopen
+
+A recording is a separately copyrightable performance, so a composition being centuries
+out of copyright is not on its own enough to redistribute a recording of it. These come
+from the Musopen Complete Chopin Collection, released under CC0 1.0, which dedicates the
+performance as well as the composition to the public domain. CC0 asks for no attribution;
+the credit below is courtesy, not obligation.
+
+| File | Work | Composer | Licence | Source |
+| --- | --- | --- | --- | --- |
+| `chopin-prelude-28-1.mp3` | Prelude Op. 28 no. 1 in C major | Frédéric Chopin | CC0 | https://archive.org/details/musopen-chopin |
+| `chopin-prelude-28-6.mp3` | Prelude Op. 28 no. 6 in B minor | Frédéric Chopin | CC0 | https://archive.org/details/musopen-chopin |
+| `chopin-prelude-28-7.mp3` | Prelude Op. 28 no. 7 in A major | Frédéric Chopin | CC0 | https://archive.org/details/musopen-chopin |
+| `chopin-prelude-28-15.mp3` | Prelude Op. 28 no. 15 in D-flat major ("Raindrop") | Frédéric Chopin | CC0 | https://archive.org/details/musopen-chopin |
+| `chopin-canon-f-minor.mp3` | Canon in F minor | Frédéric Chopin | CC0 | https://archive.org/details/musopen-chopin |
+| `chopin-prelude-28-1.wav` | Prelude Op. 28 no. 1 in C major (PCM transcode) | Frédéric Chopin | CC0 | transcoded locally from `chopin-prelude-28-1.mp3` |
+
+The performers are not named in the source metadata, so none are credited here.
