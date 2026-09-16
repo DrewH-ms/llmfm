@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import {
   CONFIG_FILE_NAME,
   CONFIG_POLL_MS,
+  DEFAULT_PLAYLIST,
   HANDLE_ID_LENGTH,
 } from './constants.ts';
 import type { AutoplayMode, GateMode, GatePolicy, PromptGapMode, SilenceMode } from './constants.ts';
@@ -23,6 +24,10 @@ export type LlmfmConfig = {
   idleDropoutMinutes: number;
   autoplay: AutoplayMode;
   startupMotif: boolean;
+  /** Which playlist the library is drawn from. Not a spec-driven setting: the valid
+   *  values are whatever folders exist right now, so it is validated against the disk
+   *  when it is applied rather than against a fixed list. */
+  playlist: string;
 };
 
 export type ConfigStore = {
@@ -33,6 +38,9 @@ export type ConfigStore = {
   /** Applies one setting by key, validated against its spec. Returns false for an unknown
    *  key or a value the spec rejects, which is what the HTTP layer turns into a 400. */
   setSetting(key: string, value: unknown): boolean;
+  /** Validated by the caller against the playlists that exist, so this module stays free
+   *  of the filesystem. */
+  setPlaylist(name: string): void;
   /** Re-reads the file if it changed on disk, so hand edits apply without a restart. */
   start(): void;
   stop(): void;
@@ -42,7 +50,7 @@ export type ConfigStore = {
 /** Just enough of a session to name it. Keeps this module free of session state. */
 export type SessionHandle = { label: string; sessionId: string };
 
-const DEFAULT_CONFIG: LlmfmConfig = { muted: [], ...SETTING_DEFAULTS };
+const DEFAULT_CONFIG: LlmfmConfig = { muted: [], playlist: DEFAULT_PLAYLIST, ...SETTING_DEFAULTS };
 
 export function configPath(): string {
   return join(dirname(copilotHooksDir()), CONFIG_FILE_NAME);
@@ -93,6 +101,8 @@ function parseConfig(raw: string): LlmfmConfig {
   const muted = Array.isArray(record['muted'])
     ? record['muted'].filter((entry): entry is string => typeof entry === 'string')
     : [];
+  const rawPlaylist = record['playlist'];
+  const playlist = typeof rawPlaylist === 'string' && rawPlaylist ? rawPlaylist : DEFAULT_PLAYLIST;
   // Every setting is validated through its own spec, so a hand-edited file with one bad
   // value keeps the rest rather than reverting wholesale.
   const settings = { ...SETTING_DEFAULTS } as Record<string, unknown>;
@@ -100,7 +110,7 @@ function parseConfig(raw: string): LlmfmConfig {
     const coerced = coerceSetting(key, record[key]);
     if (coerced !== null) settings[key] = coerced;
   }
-  return { ...(settings as Omit<LlmfmConfig, 'muted'>), muted };
+  return { ...(settings as Omit<LlmfmConfig, 'muted' | 'playlist'>), muted, playlist };
 }
 
 export function createConfigStore(): ConfigStore {
@@ -167,6 +177,10 @@ export function createConfigStore(): ConfigStore {
       if (config[key as keyof LlmfmConfig] === coerced) return true;
       write({ ...config, [key]: coerced });
       return true;
+    },
+    setPlaylist(name: string): void {
+      if (config.playlist === name) return;
+      write({ ...config, playlist: name });
     },
     start(): void {
       if (timer) return;

@@ -1,7 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, dirname, extname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, extname } from 'node:path';
 import { startApi } from './api.ts';
 import type { TrackInfo } from './api.ts';
 import { createMidiOut } from './midi-out.ts';
@@ -20,21 +19,31 @@ import { createSimulation } from './simulate.ts';
 import { createConfigStore } from './config.ts';
 import { SETTING_SPECS } from './settings.ts';
 import { buildVoiceTree } from './voices.ts';
-import { listUserTracks, userTracksDir, ensureUserTracksDir } from './user-tracks.ts';
+import { userTracksDir, ensureUserTracksDir } from './user-tracks.ts';
+import {
+  TRACKS_DIR,
+  listTracks,
+  playableTracks,
+  resolveTrack,
+  libraryFor,
+  listPlaylists,
+  isPlaylist,
+  playlistOf,
+} from './playlists.ts';
 import {
   WATCH_OPEN_SESSIONS,
   LOG_EVENTS,
   DEFAULT_TRACK,
-  PLAYABLE_FILE_PATTERN,
   isRecordedTrack,
 } from './constants.ts';
 import type { AutoplayMode } from './constants.ts';
 import type { DaemonState } from './types.ts';
 
-const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const TRACKS_DIR = join(PROJECT_ROOT, 'tracks');
+export { listTracks, playableTracks, resolveTrack, listPlaylists };
+
 const TRACKS_INDEX = join(TRACKS_DIR, 'tracks.json');
-const SESSION_ID_LOG_LENGTH = 8;/** At or below this there are not enough distinguishable lines to give sessions one
+const SESSION_ID_LOG_LENGTH = 8;
+/** At or below this there are not enough distinguishable lines to give sessions one
  *  each, so the piece can only work as hold music. */
 const MAX_HOLD_MUSIC_VOICES = 2;
 /** Rotating needs somewhere else to go. */
@@ -44,26 +53,6 @@ const AUTOPLAY_RANDOM: AutoplayMode = 'random';
 const AUTOPLAY_SEQUENTIAL: AutoplayMode = 'sequential';
 
 export type Daemon = { stop(): Promise<void> };
-
-export function listTracks(): string[] {
-  return readdirSync(TRACKS_DIR).filter((file) => PLAYABLE_FILE_PATTERN.test(file));
-}
-
-/** Shipped files first, so a user's copy of a name we ship can never shadow the file its
- *  licence record was written for. Re-read each time: the whole point of the user folder
- *  is that dropping a file in makes it playable without a restart. */
-export function playableTracks(): string[] {
-  const shipped = listTracks();
-  return [...shipped, ...listUserTracks().filter((file) => !shipped.includes(file))];
-}
-
-/** Null for a name we do not offer, which is how an untrusted request stops being a path
- *  and starts being a file we already know about. */
-export function resolveTrack(file: string): string | null {
-  if (listTracks().includes(file)) return join(TRACKS_DIR, file);
-  if (listUserTracks().includes(file)) return join(userTracksDir(), file);
-  return null;
-}
 
 /** Falls back to whatever is present so a stripped-down or user-supplied tracks folder
  *  still starts, rather than failing because one named file is missing. */
@@ -165,6 +154,7 @@ export function trackCatalogue(): TrackInfo[] {
             : 'mismatch',
       voiceCount,
       holdMusicOnly: voiceCount <= MAX_HOLD_MUSIC_VOICES,
+      playlist: playlistOf(file),
     };
   });
 }
@@ -297,7 +287,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const skipTrack = (): Promise<boolean> => {
     const mode = config.current().autoplay;
     const next = rotation.next({
-      library: playableTracks(),
+      library: libraryFor(config.current().playlist),
       current: trackFile ?? null,
       mode: mode === AUTOPLAY_OFF ? AUTOPLAY_SEQUENTIAL : mode,
     });
@@ -343,6 +333,12 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     },
     onSetSetting: ({ key, value }) => config.setSetting(key, value),
     tracks: trackCatalogue,
+    playlists: listPlaylists,
+    onSetPlaylist(name) {
+      if (!isPlaylist(name)) return false;
+      config.setPlaylist(name);
+      return true;
+    },
     onSetTrack: playTrack,
     onSkipTrack: skipTrack,
     state,
@@ -351,7 +347,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
 
   const rotateOnEnd = (): void => {
     const next = rotation.next({
-      library: playableTracks(),
+      library: libraryFor(config.current().playlist),
       current: trackFile ?? null,
       mode: config.current().autoplay,
     });

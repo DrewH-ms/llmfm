@@ -231,6 +231,19 @@ export function isRecordedTrack(file: string): boolean {
   return RECORDED_FILE_PATTERN.test(file);
 }
 
+/** The music that ships with LLMFM. Always offered, and the fallback whenever a chosen
+ *  playlist turns out to have nothing in it. */
+export const PLAYLIST_BUNDLED = 'bundled';
+/** Everything the daemon can see at once, bundled and user folders alike. */
+export const PLAYLIST_ALL = 'all';
+export const DEFAULT_PLAYLIST = PLAYLIST_ALL;
+export const PLAYLIST_README = 'README.md';
+/** Scaffolded empty so the README has something to point at. */
+export const PLAYLIST_EXAMPLE = 'playlist1';
+/** Ids of tracks inside a playlist are `folder/file`, always with a forward slash so the
+ *  id a client sends back is the same on every platform. */
+export const PLAYLIST_SEPARATOR = '/';
+
 /** Fraction of the piece a node must be sounding in to be offered as a voice. Below it
  *  the rests are long enough that a silent part reads as a blocked agent rather than as
  *  the music, which inverts the signal. */

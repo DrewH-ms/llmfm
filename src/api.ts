@@ -8,7 +8,7 @@ import type { DaemonState } from './types.ts';
  *  carries the provenance and the shape of the piece rather than a curated subset. */
 export type TrackInfo = {
   file: string;
-  /** Always `mid`: the gate is per-part CC7, which recorded audio cannot be given. */
+  /** `mid`, `mp3` or `wav`. Only `mid` can be split into parts and gated per session. */
   format: string;
   title: string | null;
   composer: string | null;
@@ -25,6 +25,15 @@ export type TrackInfo = {
   voiceCount: number;
   /** Too few voices to carry an ensemble; still playable, but only as hold music. */
   holdMusicOnly: boolean;
+  /** The playlist this track belongs to, for grouping the list a user reads. */
+  playlist: string;
+};
+
+export type PlaylistInfo = {
+  name: string;
+  /** Whether it is a folder a user can add files to. */
+  editable: boolean;
+  count: number;
 };
 
 export type ApiHandlers = {
@@ -37,6 +46,9 @@ export type ApiHandlers = {
    *  into a 400 rather than silently accepting a setting that was never applied. */
   onSetSetting(options: { key: string; value: unknown }): boolean;
   tracks(): TrackInfo[];
+  playlists(): PlaylistInfo[];
+  /** False when the name is not a playlist that exists, which the route turns into a 400. */
+  onSetPlaylist(name: string): boolean;
   /** False when the file is not one we ship, which the route turns into a 400. */
   onSetTrack(file: string): boolean | Promise<boolean>;
   /** False when there is nowhere to go — a library of one, or no track playing. */
@@ -165,6 +177,25 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
         res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(handlers.state()));
       });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/playlist') {
+      void readBody(req).then((body) => {
+        const name = stringField(fields(body), 'name');
+        if (!name || !handlers.onSetPlaylist(name)) {
+          res.writeHead(HTTP_BAD_REQUEST).end();
+          return;
+        }
+        res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(handlers.state()));
+      });
+      return;
+    }
+
+    if (url.pathname === '/playlists') {
+      res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ playlists: handlers.playlists() }));
       return;
     }
 

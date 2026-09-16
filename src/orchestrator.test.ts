@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createOrchestrator } from './orchestrator.ts';
 import { SETTING_DEFAULTS } from './settings.ts';
-import { BLOCK_SETTLE_MS } from './constants.ts';
+import { BLOCK_SETTLE_MS, DEFAULT_PLAYLIST } from './constants.ts';
 import type { ConfigStore, LlmfmConfig } from './config.ts';
 import type { Mixer } from './mixer.ts';
 import type { Scheduler } from './scheduler.ts';
@@ -46,13 +46,21 @@ const session = (over: Partial<Session> & { sessionId: string }): Session => ({
 });
 
 const fakeConfig = (over: Partial<LlmfmConfig> = {}): ConfigStore => {
-  let config: LlmfmConfig = { muted: [], ...SETTING_DEFAULTS, ...over };
+  let config: LlmfmConfig = {
+    muted: [],
+    playlist: DEFAULT_PLAYLIST,
+    ...SETTING_DEFAULTS,
+    ...over,
+  };
   return {
     current: () => config,
     setMute: () => {},
     setSetting(key, value) {
       config = { ...config, [key]: value } as LlmfmConfig;
       return true;
+    },
+    setPlaylist(name) {
+      config = { ...config, playlist: name };
     },
     start: () => {},
     stop: () => {},
