@@ -22,6 +22,9 @@ const MS_PER_SECOND = 1000;
 
 export type Orchestrator = {
   bindScore(score: Score): void;
+  /** Hands the gate to a track with no parts, so the whole stream answers to the sessions
+   *  together. */
+  bindRecorded(): void;
   /** Recomputes part audibility from current session state and drives the transport. */
   refresh(): void;
   setMode(mode: GateMode): void;
@@ -34,6 +37,12 @@ export type Orchestrator = {
   stop(): void;
 };
 
+/** Where the gate lands for a track that has no parts. A finished mixdown can only be
+ *  turned up or down whole, so the ensemble collapses to one boolean. */
+export type RecordedSink = {
+  setAudible(options: { audible: boolean; fadeSeconds: number }): void;
+};
+
 /** Maps session state onto part audibility, and owns the rule that the transport runs
  *  whenever any part is audible and pauses only when all of them are silent. */
 export function createOrchestrator(options: {
@@ -41,10 +50,15 @@ export function createOrchestrator(options: {
   mixer: Mixer;
   scheduler: Scheduler;
   config: ConfigStore;
+  recorded?: RecordedSink;
 }): Orchestrator {
   const { registry, mixer, scheduler, config } = options;
+  const recorded = options.recorded ?? null;
 
   let score: Score | null = null;
+  /** Set instead of `score` while a recorded track is loaded. The two are exclusive: a
+   *  mixdown has no parts, so there is no tree, no assignment and no per-part gate. */
+  let recordedTrack = false;
   let tree: VoiceTree | null = null;
   /** Instrument label per part id, taken from the voice tree's own leaf names so a part
    *  listed under a voice reads exactly as it would if it were the voice. */
@@ -176,7 +190,39 @@ export function createOrchestrator(options: {
     return [...names];
   };
 
+  /** How long until the youngest still-settling block can be trusted, or null when none
+   *  is pending. A block inside its window has to be revisited or a prompt the user really
+   *  is waiting on would never silence anything. */
+  const soonestSettle = (sessions: Session[]): number | null => {
+    const pending = sessions
+      .filter(settling)
+      .map((session) => BLOCK_SETTLE_MS - (Date.now() - (session.blockedSince ?? 0)));
+    return pending.length > 0 ? Math.max(0, Math.min(...pending)) : null;
+  };
+
+  /** Recorded audio is one stream nobody can subdivide, so every session gates the same
+   *  thing. `mixAudible` already says it: under `per-agent` it is "any session that should
+   *  sound", which is the override the ensemble needs — the file plays while anyone is
+   *  working — and under the other policies it is the configured gate unchanged. */
+  const refreshRecorded = (): void => {
+    const sessions = gatingSessions();
+    recorded?.setAudible({
+      audible: mixAudible(sessions),
+      fadeSeconds: config.current().fadeSeconds,
+    });
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = null;
+    }
+    const soonest = soonestSettle(sessions);
+    if (soonest !== null) settleTimer = setTimeout(refresh, soonest + SETTLE_MARGIN_MS);
+  };
+
   const refresh = (): void => {
+    if (recordedTrack) {
+      refreshRecorded();
+      return;
+    }
     if (!score) return;
 
     const sessions = gatingSessions();
@@ -218,10 +264,7 @@ export function createOrchestrator(options: {
     }
     // A block still inside its settle window has to be revisited, or a prompt the user
     // really is waiting on would never silence its part.
-    const pending = sessions
-      .filter(settling)
-      .map((session) => BLOCK_SETTLE_MS - (Date.now() - (session.blockedSince ?? 0)));
-    const soonest = pending.length > 0 ? Math.max(0, Math.min(...pending)) : null;
+    const soonest = soonestSettle(sessions);
 
     if (mixer.anyAudible() || config.current().silenceMode === 'mute') {
       scheduler.play();
@@ -240,6 +283,7 @@ export function createOrchestrator(options: {
   return {
     bindScore(next: Score): void {
       score = next;
+      recordedTrack = false;
       tree = buildVoiceTree(next);
       // Fully subdividing names every part the tree can gate; what it leaves out is
       // backing, which never belongs to a voice.
@@ -253,6 +297,18 @@ export function createOrchestrator(options: {
       refresh();
     },
     refresh,
+    /** Takes the gate away from the score entirely. Tree, labels and per-part mix are
+     *  dropped rather than left behind: a stale ensemble would otherwise keep answering
+     *  for music that has no parts to answer with. */
+    bindRecorded(): void {
+      score = null;
+      tree = null;
+      partLabels = new Map();
+      voiceCount = 0;
+      recordedTrack = true;
+      mixer.silenceAll();
+      refresh();
+    },
     setMode(next: GateMode): void {
       config.setSetting('mode', next);
       refresh();

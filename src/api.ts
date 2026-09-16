@@ -38,9 +38,9 @@ export type ApiHandlers = {
   onSetSetting(options: { key: string; value: unknown }): boolean;
   tracks(): TrackInfo[];
   /** False when the file is not one we ship, which the route turns into a 400. */
-  onSetTrack(file: string): boolean;
+  onSetTrack(file: string): boolean | Promise<boolean>;
   /** False when there is nowhere to go — a library of one, or no track playing. */
-  onSkipTrack(): boolean;
+  onSkipTrack(): boolean | Promise<boolean>;
   state(): DaemonState;
 };
 
@@ -142,11 +142,11 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
     }
 
     if (req.method === 'POST' && url.pathname === '/track') {
-      void readBody(req).then((body) => {
+      void readBody(req).then(async (body) => {
         // The daemon owns the list of files we ship, so an arbitrary path never becomes
         // a read: the name either matches one of them or the request is rejected.
         const file = stringField(fields(body), 'file');
-        if (!file || !handlers.onSetTrack(file)) {
+        if (!file || !(await handlers.onSetTrack(file))) {
           res.writeHead(HTTP_BAD_REQUEST).end();
           return;
         }
@@ -157,12 +157,14 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
     }
 
     if (req.method === 'POST' && url.pathname === '/skip') {
-      if (!handlers.onSkipTrack()) {
-        res.writeHead(HTTP_BAD_REQUEST).end();
-        return;
-      }
-      res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(handlers.state()));
+      void Promise.resolve(handlers.onSkipTrack()).then((moved) => {
+        if (!moved) {
+          res.writeHead(HTTP_BAD_REQUEST).end();
+          return;
+        }
+        res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(handlers.state()));
+      });
       return;
     }
 

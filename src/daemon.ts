@@ -8,6 +8,8 @@ import { createMidiOut } from './midi-out.ts';
 import { createMixer } from './mixer.ts';
 import { createOrchestrator } from './orchestrator.ts';
 import { createScheduler } from './scheduler.ts';
+import { createAudioOut } from './audio-out.ts';
+import { createRecordedPlayer } from './recorded.ts';
 import { createSessionRegistry } from './sessions.ts';
 import { watchOpenSessions } from './open-sessions.ts';
 import { parseHookEvent } from './intake.ts';
@@ -210,31 +212,73 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const scheduler = createScheduler({ midi, mixer });
   const registry = createSessionRegistry();
   const config = createConfigStore();
-  const orchestrator = createOrchestrator({ registry, mixer, scheduler, config });
+  const audio = createAudioOut();
+  const recorded = createRecordedPlayer(audio);
+  const orchestrator = createOrchestrator({
+    registry,
+    mixer,
+    scheduler,
+    config,
+    recorded: {
+      setAudible: (gate) => recorded.setAudible(gate),
+    },
+  });
   const simulation = createSimulation(registry);
   let motif: StartupMotif | null = null;
   let stopping = false;
+  /** True while a recorded track holds the transport, so state and shutdown ask the right
+   *  player which one is running. */
+  let recordedTrack = false;
 
   const midiStatus = await midi.start();
   ensureUserTracksDir();
   let trackFile = options.track ?? defaultTrack();
   const startPath = trackFile ? resolveTrack(trackFile) : null;
-  let score = startPath ? loadScore(startPath) : null;
+  // A recorded file cannot be parsed into a score, and must not take the daemon down on
+  // the way up; it is bound through `playTrack` once the server is listening instead.
+  const startRecorded = trackFile !== undefined && isRecordedTrack(trackFile);
+  let score = startPath && !startRecorded ? loadScore(startPath) : null;
   const rotation = createTrackRotation();
   let publish = (): void => {};
 
   /** Swapping scores under a running transport is exactly where a note that is already
    *  sounding loses the note-off that would have ended it, so the old score is paused and
    *  its channels cleared before the new one binds. Parsing first means a bad file leaves
-   *  the current piece playing instead of leaving the orchestra silent. */
-  const playTrack = (file: string): boolean => {
+   *  the current piece playing instead of leaving the orchestra silent.
+   *
+   *  The two kinds of track are mutually exclusive, and whichever is not taking over is
+   *  silenced first: leaving the other transport running would put two pieces of music in
+   *  the room at once, each answering to the same sessions. */
+  const playTrack = async (file: string): Promise<boolean> => {
     const path = stopping ? null : resolveTrack(file);
     if (!path) return false;
+
+    if (isRecordedTrack(file)) {
+      // Started on demand rather than at boot: the bridge pays an Add-Type compile, and a
+      // library of MIDI never needs it.
+      if (!audio.status().ready) await audio.start();
+      if (!(await recorded.load(path))) return false;
+      scheduler.pause();
+      mixer.silenceAll();
+      recorded.setMasterVolume(config.current().masterVolume);
+      recorded.setHoldTransport(config.current().silenceMode === 'mute');
+      recordedTrack = true;
+      trackFile = file;
+      score = null;
+      orchestrator.bindRecorded();
+      publish();
+      return true;
+    }
+
     let next;
     try {
       next = loadScore(path);
     } catch {
       return false;
+    }
+    if (recordedTrack) {
+      recorded.setAudible({ audible: false, fadeSeconds: 0 });
+      recordedTrack = false;
     }
     scheduler.pause();
     mixer.silenceAll();
@@ -250,14 +294,14 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   /** A skip is an instruction, not a consequence, so "when a track ends: stop" must not
    *  disable it. Random still draws from the bag, so skipping repeatedly still covers the
    *  library before anything repeats. */
-  const skipTrack = (): boolean => {
+  const skipTrack = (): Promise<boolean> => {
     const mode = config.current().autoplay;
     const next = rotation.next({
       library: playableTracks(),
       current: trackFile ?? null,
       mode: mode === AUTOPLAY_OFF ? AUTOPLAY_SEQUENTIAL : mode,
     });
-    return next ? playTrack(next) : false;
+    return next ? playTrack(next) : Promise.resolve(false);
   };
 
   const state = (): DaemonState => ({
@@ -265,7 +309,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     fadeSeconds: orchestrator.fadeSeconds(),
     simulating: simulation.running(),
     track: trackFile ?? null,
-    transport: scheduler.state(),
+    transport: recordedTrack ? recorded.state() : scheduler.state(),
     midi: midi.status(),
     sessions: orchestrator.sessionViews(),
     config: config.current(),
@@ -305,14 +349,17 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   });
   publish = () => api.broadcast();
 
-  const unsubscribeEnd = scheduler.onEnd(() => {
+  const rotateOnEnd = (): void => {
     const next = rotation.next({
       library: playableTracks(),
       current: trackFile ?? null,
       mode: config.current().autoplay,
     });
-    if (next) playTrack(next);
-  });
+    if (next) void playTrack(next);
+  };
+
+  const unsubscribeEnd = scheduler.onEnd(rotateOnEnd);
+  const unsubscribeRecordedEnd = recorded.onEnd(rotateOnEnd);
 
   const unsubscribe = registry.onChange(() => {
     // Only real work cuts the sting short. Merely registering sessions does not: the file
@@ -325,6 +372,8 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   // A hand edit to the config must take effect mid-piece, not at the next restart.
   const unsubscribeConfig = config.onChange(() => {
     mixer.setMasterVolume(config.current().masterVolume);
+    recorded.setMasterVolume(config.current().masterVolume);
+    recorded.setHoldTransport(config.current().silenceMode === 'mute');
     orchestrator.refresh();
     api.broadcast();
   });
@@ -336,7 +385,12 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   // reach the mix when the score binds.
   const beginPerformance = (): void => {
     motif = null;
-    if (score && !stopping) orchestrator.bindScore(score);
+    if (stopping) return;
+    if (startRecorded && trackFile) {
+      void playTrack(trackFile);
+      return;
+    }
+    if (score) orchestrator.bindScore(score);
   };
   if (score && midiStatus.ready && config.current().startupMotif) {
     motif = playStartupMotif({
@@ -361,6 +415,9 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       unsubscribe();
       unsubscribeConfig();
       unsubscribeEnd();
+      unsubscribeRecordedEnd();
+      // A leaked MCI device keeps sounding after the process it belonged to is gone.
+      recorded.stop();
       config.stop();
       watcher?.stop();
       simulation.stop();

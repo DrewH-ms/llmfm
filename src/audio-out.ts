@@ -16,8 +16,11 @@ import path from 'node:path';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 
 const BRIDGE_SCRIPT = path.join(import.meta.dirname, '..', 'bridge', 'audio-bridge.ps1');
-/** Generous because the bridge's first run pays for an Add-Type compile. */
-const BRIDGE_START_TIMEOUT_MS = 15000;
+/** Generous because the bridge's first run pays for an Add-Type compile, and on Windows a
+ *  freshly written .ps1 is often scanned before it executes. Waiting costs nothing —
+ *  `start()` never rejects and the daemon does not block on it — whereas giving up early
+ *  means recorded playback silently does not work for the rest of the session. */
+const BRIDGE_START_TIMEOUT_MS = 30000;
 const COMMAND_TIMEOUT_MS = 5000;
 /** Opening a file touches the disk and may spin up a codec, so it is given longer. */
 const OPEN_TIMEOUT_MS = 20000;
@@ -59,14 +62,15 @@ export function toSeconds(milliseconds: number): number {
 
 /** A 0..1 level as an MCI volume. */
 export function toMciVolume(level: number): number {
-  if (!Number.isFinite(level) || level <= 0) return 0;
-  return Math.round(Math.min(1, level) * MCI_VOLUME_MAX);
+  if (Number.isNaN(level)) return 0;
+  return Math.round(Math.min(1, Math.max(0, level)) * MCI_VOLUME_MAX);
 }
 
 export function createAudioOut(): AudioOut {
   let proc: ChildProcessWithoutNullStreams | null = null;
   let state: AudioStatus = { ready: false, error: null };
   let nextId = 0;
+  let stopping = false;
   /** Replies are matched by echoed id rather than by arrival order, so a slow answer
    *  can never be read as the reply to the command that followed it. */
   const waiting = new Map<string, (reply: string | null) => void>();
@@ -174,7 +178,11 @@ export function createAudioOut(): AudioOut {
         });
         proc.on('exit', () => {
           proc = null;
-          const error = state.error ?? 'bridge exited';
+          const error = state.error ?? (stopping ? null : 'bridge exited');
+          if (error === null) {
+            settle({ ready: false, error: null });
+            return;
+          }
           fail(error);
           settle({ ready: false, error });
         });
@@ -226,10 +234,12 @@ export function createAudioOut(): AudioOut {
           // The bridge closes its device from a finally block when stdin goes away.
         }
       };
+      stopping = true;
       write(`s${nextId++} CLOSE\n`);
       write(`s${nextId++} QUIT\n`);
       state = { ready: false, error: state.error };
-      fail('audio stopped');
+      for (const settle of [...waiting.values()]) settle(null);
+      waiting.clear();
       proc?.stdin.end();
       proc = null;
     },
