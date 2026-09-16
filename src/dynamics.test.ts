@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadScore } from './score.ts';
 import { measureDynamics, isDynamic, MIN_DISTINCT_VELOCITIES } from '../tools/dynamics.ts';
 
-const TRACKS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), 'tracks');
+const TRACKS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), 'playlists', 'bundled');
 const bundled = readdirSync(TRACKS_DIR).filter((file) => /\.midi?$/i.test(file));
 
 /** The library was once mostly flat engravings, which sound like the music breaking when

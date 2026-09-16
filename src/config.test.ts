@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TestContext } from 'node:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { configPath, createConfigStore, handleFor, matchesHandle } from './config.ts';
@@ -10,14 +10,15 @@ const SESSION = { label: 'Rasa', sessionId: 'cb75a9e8-1234-5678-9abc-def01234567
 const OTHER = { label: 'Rasa', sessionId: 'a83b9096-1234-5678-9abc-def012345678' };
 
 /** Points the config at a throwaway home, so a test writes a real file rather than a
- *  stubbed one and the user's own config is never the thing under test. */
+ *  stubbed one and the user's own config is never the thing under test. LLMFM_HOME is the
+ *  variable that moves it: set the wrong one and this writes into the real install. */
 function useTempHome(t: TestContext): void {
   const home = mkdtempSync(join(tmpdir(), 'llmfm-test-'));
-  const previous = process.env.COPILOT_HOME;
-  process.env.COPILOT_HOME = home;
+  const previous = process.env['LLMFM_HOME'];
+  process.env['LLMFM_HOME'] = home;
   t.after(() => {
-    if (previous === undefined) delete process.env.COPILOT_HOME;
-    else process.env.COPILOT_HOME = previous;
+    if (previous === undefined) delete process.env['LLMFM_HOME'];
+    else process.env['LLMFM_HOME'] = previous;
     rmSync(home, { recursive: true, force: true });
   });
 }
@@ -127,4 +128,26 @@ test('one bad value in a hand-edited file costs only that setting', (t) => {
   assert.equal(store.current().fadeSeconds, 3);
   assert.equal(store.current().autoplay, 'random');
   assert.deepEqual(store.current().muted, ['Rasa']);
+});
+
+/** The migration reaches outside the install by design, to a path a redirected home does
+ *  not move. It must therefore not run at all when the home has been redirected — or a
+ *  test pointed at a temp folder carries the user's real config off into it, and takes it
+ *  with the temp folder when it goes. That is not hypothetical; it happened. */
+test('a redirected home never migrates the real config out of ~/.copilot', (t: TestContext) => {
+  const legacyHome = mkdtempSync(join(tmpdir(), 'llmfm-legacy-'));
+  const legacy = join(legacyHome, 'llmfm.config.json');
+  writeFileSync(legacy, JSON.stringify({ muted: ['Precious'] }));
+  const previousCopilot = process.env['COPILOT_HOME'];
+  process.env['COPILOT_HOME'] = legacyHome;
+  t.after(() => {
+    if (previousCopilot === undefined) delete process.env['COPILOT_HOME'];
+    else process.env['COPILOT_HOME'] = previousCopilot;
+    rmSync(legacyHome, { recursive: true, force: true });
+  });
+
+  useTempHome(t);
+  createConfigStore().current();
+
+  assert.ok(existsSync(legacy), 'the legacy config was moved out from under the user');
 });

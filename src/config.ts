@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import {
   CONFIG_FILE_NAME,
@@ -9,6 +9,8 @@ import {
 import type { AutoplayMode, GateMode, GatePolicy, PromptGapMode, SilenceMode } from './constants.ts';
 import { SETTING_DEFAULTS, coerceSetting } from './settings.ts';
 import { copilotHooksDir } from './install.ts';
+import { configPath } from './paths.ts';
+export { configPath };
 import type { Session } from './types.ts';
 
 export type LlmfmConfig = {
@@ -52,8 +54,25 @@ export type SessionHandle = { label: string; sessionId: string };
 
 const DEFAULT_CONFIG: LlmfmConfig = { muted: [], playlist: DEFAULT_PLAYLIST, ...SETTING_DEFAULTS };
 
-export function configPath(): string {
-  return join(dirname(copilotHooksDir()), CONFIG_FILE_NAME);
+/** Settings written by a version that kept them in Copilot's own directory. Moved on
+ *  first read rather than left behind, so upgrading does not quietly reset a user's
+ *  choices — and so the stale copy cannot later be mistaken for the live one.
+ *
+ *  Skipped entirely when the home has been redirected. Otherwise a test pointing
+ *  LLMFM_HOME at a temp folder would reach into the real `~/.copilot` and move the
+ *  user's config out of it, which is exactly what happened once. */
+function migrateLegacyConfig(): void {
+  if (process.env['LLMFM_HOME'] !== undefined) return;
+  const path = configPath();
+  if (existsSync(path)) return;
+  const legacy = join(dirname(copilotHooksDir()), CONFIG_FILE_NAME);
+  if (!existsSync(legacy)) return;
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    renameSync(legacy, path);
+  } catch {
+    /* A config that will not move is not worth failing startup over. */
+  }
 }
 
 function shortId(sessionId: string): string {
@@ -154,6 +173,7 @@ export function createConfigStore(): ConfigStore {
     emit();
   };
 
+  migrateLegacyConfig();
   read();
 
   return {

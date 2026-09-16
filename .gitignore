@@ -1,2 +1,13 @@
 node_modules/
 *.log
+
+# Settings and music are now kept with the install, so the folder a user drops files into
+# is also a git working tree. Ignore what they add; keep what ships.
+llmfm.config.json
+llmfm-volume-claim.json
+playlists/*
+!playlists/README.md
+!playlists/bundled/
+!playlists/playlist1/
+playlists/playlist1/*
+!playlists/playlist1/.gitkeep

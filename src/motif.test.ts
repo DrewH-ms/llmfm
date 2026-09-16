@@ -5,7 +5,7 @@ import { loadScore } from './score.ts';
 import { openingMotif } from './motif.ts';
 import { MOTIF_ONSET_COUNT, DEFAULT_TRACK } from './constants.ts';
 
-const TRACK = join(import.meta.dirname, '..', 'tracks', DEFAULT_TRACK);
+const TRACK = join(import.meta.dirname, '..', 'playlists', 'bundled', DEFAULT_TRACK);
 
 test('the motif is the real opening of the bundled track', () => {
   const score = loadScore(TRACK);

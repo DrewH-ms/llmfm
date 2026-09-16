@@ -17,7 +17,7 @@ import { measureDynamics, isDynamic, MIN_DISTINCT_VELOCITIES } from './dynamics.
 const MUTOPIA_FTP = 'https://www.mutopiaproject.org/ftp/';
 const MUTOPIA_ATTRIBUTION = 'The Mutopia Project (mutopiaproject.org)';
 const PROJECT_ROOT = join(fileURLToPath(import.meta.url), '..', '..');
-const TRACKS_DIR = join(PROJECT_ROOT, 'tracks');
+const TRACKS_DIR = join(PROJECT_ROOT, 'playlists', 'bundled');
 const TRACKS_INDEX = join(TRACKS_DIR, 'tracks.json');
 const ATTRIBUTION_FILE = join(TRACKS_DIR, 'ATTRIBUTION.md');
 /** Marks a file as curated rather than carried over, and keeps it out of the way of the

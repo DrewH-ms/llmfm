@@ -28,9 +28,9 @@ let startedFrom: VolumeLevel;
 let deviceId: string;
 
 before(async () => {
-  // Keeps the claim file out of the real ~/.copilot while the daemon is running.
+  // Keeps the claim file out of the real install while the daemon is running.
   home = mkdtempSync(path.join(tmpdir(), 'llmfm-volume-'));
-  process.env['COPILOT_HOME'] = home;
+  process.env['LLMFM_HOME'] = home;
 
   const volume = createSystemVolume();
   const status = await volume.start();

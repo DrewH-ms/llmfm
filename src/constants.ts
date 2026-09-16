@@ -238,6 +238,8 @@ export const PLAYLIST_BUNDLED = 'bundled';
 export const PLAYLIST_ALL = 'all';
 export const DEFAULT_PLAYLIST = PLAYLIST_ALL;
 export const PLAYLIST_README = 'README.md';
+/** Every playlist is a folder in here, `bundled` included. */
+export const PLAYLISTS_DIR_NAME = 'playlists';
 /** Scaffolded empty so the README has something to point at. */
 export const PLAYLIST_EXAMPLE = 'playlist1';
 /** Ids of tracks inside a playlist are `folder/file`, always with a forward slash so the

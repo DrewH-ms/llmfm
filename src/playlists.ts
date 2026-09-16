@@ -2,33 +2,34 @@
  *  learning anything. There is no index file to keep in step with the disk: what is in the
  *  folder is what is in the playlist.
  *
- *  `bundled` is the one playlist with no folder behind it. The shipped music lives in the
- *  repo, under licence records written against specific bytes, so copying it into the
- *  user's folder would duplicate exactly the files that must not be duplicated. */
+ *  `bundled` is a folder like any other. Its tracks keep bare ids rather than
+ *  `bundled/name`, because the licence records in `tracks.json` are keyed by filename and
+ *  a stored config may already name a track that way. */
 
 import { readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import {
   PLAYABLE_FILE_PATTERN,
   PLAYLIST_ALL,
   PLAYLIST_BUNDLED,
   PLAYLIST_SEPARATOR,
 } from './constants.ts';
-import { userTracksDir, listUserTracks, listUserPlaylists, listUserPlaylistTracks } from './user-tracks.ts';
-
-const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-export const TRACKS_DIR = join(PROJECT_ROOT, 'tracks');
+import { playlistsDir, bundledDir } from './paths.ts';
+import { listUserTracks, listUserPlaylists, listUserPlaylistTracks } from './user-tracks.ts';
 
 export type PlaylistInfo = {
   name: string;
-  /** Bundled and the combined view have no folder a user could add to. */
+  /** The combined view is not a folder, so there is nowhere to add a file to it. */
   editable: boolean;
   count: number;
 };
 
 export function listTracks(): string[] {
-  return readdirSync(TRACKS_DIR).filter((file) => PLAYABLE_FILE_PATTERN.test(file));
+  try {
+    return readdirSync(bundledDir()).filter((file) => PLAYABLE_FILE_PATTERN.test(file));
+  } catch {
+    return [];
+  }
 }
 
 /** Shipped files first, so a user's copy of a name we ship can never shadow the file its
@@ -48,15 +49,15 @@ export function playableTracks(): string[] {
  *  candidate up in a list built from the disk, so no part of the request is ever joined
  *  onto a directory before it has been recognised. */
 export function resolveTrack(file: string): string | null {
-  if (listTracks().includes(file)) return join(TRACKS_DIR, file);
-  if (listUserTracks().includes(file)) return join(userTracksDir(), file);
+  if (listTracks().includes(file)) return join(bundledDir(), file);
+  if (listUserTracks().includes(file)) return join(playlistsDir(), file);
   const cut = file.indexOf(PLAYLIST_SEPARATOR);
   if (cut <= 0) return null;
   const playlist = file.slice(0, cut);
   const name = file.slice(cut + 1);
   if (!listUserPlaylists().includes(playlist)) return null;
   if (!listUserPlaylistTracks(playlist).includes(name)) return null;
-  return join(userTracksDir(), playlist, name);
+  return join(playlistsDir(), playlist, name);
 }
 
 /** Which playlist a track id belongs to, for grouping a list a user is reading. */
@@ -77,7 +78,7 @@ export function tracksIn(playlist: string): string[] {
 export function listPlaylists(): PlaylistInfo[] {
   return [
     { name: PLAYLIST_ALL, editable: false, count: playableTracks().length },
-    { name: PLAYLIST_BUNDLED, editable: false, count: listTracks().length },
+    { name: PLAYLIST_BUNDLED, editable: true, count: listTracks().length },
     ...listUserPlaylists().map((name) => ({
       name,
       editable: true,

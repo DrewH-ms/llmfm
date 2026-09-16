@@ -4,11 +4,12 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-/** COPILOT_HOME is what install.ts reads, and the user tracks folder hangs off that. Set
- *  anything else and this test writes playlists into the user's real install — which it
- *  did, once. */
+/** LLMFM_HOME is what every path in the install hangs off. Set anything else and this test
+ *  writes playlists into the user's real install — which it did, once. Pointing it at a
+ *  temp tree also means the bundled folder here is one this test made, so what it asserts
+ *  does not change every time a track is added to the shipped library. */
 const home = mkdtempSync(join(tmpdir(), 'llmfm-playlists-'));
-process.env.COPILOT_HOME = home;
+process.env['LLMFM_HOME'] = home;
 
 const {
   listPlaylists,
@@ -20,9 +21,11 @@ const {
   isPlaylist,
   playlistOf,
 } = await import('./playlists.ts');
-const { userTracksDir } = await import('./user-tracks.ts');
+const { playlistsDir, bundledDir } = await import('./paths.ts');
 
-const dir = userTracksDir();
+const dir = playlistsDir();
+mkdirSync(bundledDir(), { recursive: true });
+writeFileSync(join(bundledDir(), 'shipped.mid'), 'not really a midi');
 mkdirSync(join(dir, 'roadtrip'), { recursive: true });
 mkdirSync(join(dir, 'empty-one'), { recursive: true });
 writeFileSync(join(dir, 'roadtrip', 'one.mid'), 'not really a midi');
@@ -36,6 +39,15 @@ test('a folder is a playlist, and only playable files count', () => {
   const names = listPlaylists().map((entry) => entry.name);
   assert.deepEqual(names, ['all', 'bundled', 'empty-one', 'roadtrip']);
   assert.deepEqual(tracksIn('roadtrip'), ['roadtrip/one.mid', 'roadtrip/two.wav']);
+});
+
+/** Bundled is a folder like any other, so it must be listed once, by the branch that
+ *  knows its tracks keep bare ids — not a second time as a plain subfolder. */
+test('bundled is listed once, as itself', () => {
+  const names = listPlaylists().map((entry) => entry.name);
+  assert.equal(names.filter((name) => name === 'bundled').length, 1);
+  assert.deepEqual(tracksIn('bundled'), ['shipped.mid']);
+  assert.ok(!playableTracks().includes('bundled/shipped.mid'));
 });
 
 test('an empty playlist is still offered, so the README can point at one', () => {
@@ -61,6 +73,7 @@ test('a playlist that was deleted under us falls back too', () => {
 test('a track inside a playlist resolves, and loose files still do', () => {
   assert.equal(resolveTrack('roadtrip/one.mid'), join(dir, 'roadtrip', 'one.mid'));
   assert.equal(resolveTrack('loose.mid'), join(dir, 'loose.mid'));
+  assert.equal(resolveTrack('shipped.mid'), join(bundledDir(), 'shipped.mid'));
 });
 
 /** resolveTrack is the boundary between a name a client sent and a file we read. It has to

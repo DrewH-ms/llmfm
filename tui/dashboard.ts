@@ -335,7 +335,7 @@ function parseDaemonState(text: string): DaemonState | null {
     sessions,
     config,
     settingSpecs,
-    userTracksDir: typeof payload['userTracksDir'] === 'string' ? payload['userTracksDir'] : '',
+    playlistsDir: typeof payload['playlistsDir'] === 'string' ? payload['playlistsDir'] : '',
   };
 }
 
@@ -1000,7 +1000,7 @@ async function refreshLibrary(): Promise<void> {
 /** Opens the drop-in folder in the system file manager. This is a local shell-out, not
  *  network egress, and a failure is reported rather than left silent. */
 function openTracksFolder(): void {
-  const dir = snapshot?.state.userTracksDir;
+  const dir = snapshot?.state.playlistsDir;
   if (!dir) {
     notice = `${FOLDER_OPEN_FAILED} the daemon did not say where it is`;
     paint();

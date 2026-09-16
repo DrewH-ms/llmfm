@@ -142,13 +142,15 @@ digest — anything you supplied yourself — reads `unrecorded` rather than bor
 licence of the name it was given. `src/catalogue.test.ts` fails if any shipped file drifts
 from the record that licensed it.
 
-Only MIDI is supported and only MIDI will be. The whole product is per-part volume
-gating, which means addressing each instrument on its own channel; an mp3 or wav is one
-mixed stereo pair with no parts to gate. `format` is reported per track so a client can
-explain that rather than silently ignoring the file.
+MIDI is what the product is really built for: per-part volume gating means addressing each
+instrument on its own channel. An mp3 or wav is one mixed stereo pair with no parts to
+gate, so a recording is gated as a whole — it plays while any agent that is not muted is
+working. `format` is reported per track so a client can explain that rather than
+pretending a recording can be split.
 
-Files dropped into `llmfm-tracks/` beside your Copilot config are playable too. They are
-listed without a licence record, because we have not verified one for them.
+Your own music lives in `playlists/`, beside the config, one folder per playlist —
+`bundled/` is the shipped music, and anything you add is listed without a licence record,
+because we have not verified one for it. See `playlists/README.md`.
 
 ## Music and licensing
 

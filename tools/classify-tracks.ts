@@ -16,7 +16,7 @@ import type { Voice } from '../src/types.ts';
  *   node tools/classify-tracks.ts [--quiet]
  */
 
-const TRACKS_DIR = join(fileURLToPath(import.meta.url), '..', '..', 'tracks');
+const TRACKS_DIR = join(fileURLToPath(import.meta.url), '..', '..', 'playlists', 'bundled');
 const MIDI_FILE_PATTERN = /\.midi?$/i;
 /** Below this a track cannot carry a working session of agents: with one or two voices
  *  there is nothing to assign, and the ensemble reading of the signal collapses. */

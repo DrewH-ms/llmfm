@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import { copilotHooksDir } from './install.ts';
+import { llmfmHome } from './paths.ts';
 
 const BRIDGE_SCRIPT = path.join(import.meta.dirname, '..', 'bridge', 'volume-bridge.ps1');
 /** Generous because the bridge's first run pays for an Add-Type compile. */
@@ -69,7 +69,7 @@ export type SystemVolume = {
 };
 
 export function claimPath(): string {
-  return path.join(path.dirname(copilotHooksDir()), CLAIM_FILE_NAME);
+  return path.join(llmfmHome(), CLAIM_FILE_NAME);
 }
 
 function toScalar(level: number): string {

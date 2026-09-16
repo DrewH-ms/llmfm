@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { DEFAULT_TRACK, PLAYABLE_FILE_PATTERN } from './constants.ts';
 
-const TRACKS_DIR = join(import.meta.dirname, '..', 'tracks');
+const TRACKS_DIR = join(import.meta.dirname, '..', 'playlists', 'bundled');
 const index = JSON.parse(readFileSync(join(TRACKS_DIR, 'tracks.json'), 'utf8'));
 const attribution = readFileSync(join(TRACKS_DIR, 'ATTRIBUTION.md'), 'utf8');
 const files = readdirSync(TRACKS_DIR).filter((file) => PLAYABLE_FILE_PATTERN.test(file));

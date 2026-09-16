@@ -19,9 +19,9 @@ import { createSimulation } from './simulate.ts';
 import { createConfigStore } from './config.ts';
 import { SETTING_SPECS } from './settings.ts';
 import { buildVoiceTree } from './voices.ts';
-import { userTracksDir, ensureUserTracksDir } from './user-tracks.ts';
+import { ensurePlaylistsDir } from './user-tracks.ts';
+import { playlistsDir, bundledDir } from './paths.ts';
 import {
-  TRACKS_DIR,
   listTracks,
   playableTracks,
   resolveTrack,
@@ -41,7 +41,7 @@ import type { DaemonState } from './types.ts';
 
 export { listTracks, playableTracks, resolveTrack, listPlaylists };
 
-const TRACKS_INDEX = join(TRACKS_DIR, 'tracks.json');
+const TRACKS_INDEX = join(bundledDir(), 'tracks.json');
 const SESSION_ID_LOG_LENGTH = 8;
 /** At or below this there are not enough distinguishable lines to give sessions one
  *  each, so the piece can only work as hold music. */
@@ -221,7 +221,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   let recordedTrack = false;
 
   const midiStatus = await midi.start();
-  ensureUserTracksDir();
+  ensurePlaylistsDir();
   let trackFile = options.track ?? defaultTrack();
   const startPath = trackFile ? resolveTrack(trackFile) : null;
   // A recorded file cannot be parsed into a score, and must not take the daemon down on
@@ -304,7 +304,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     sessions: orchestrator.sessionViews(),
     config: config.current(),
     settingSpecs: SETTING_SPECS,
-    userTracksDir: userTracksDir(),
+    playlistsDir: playlistsDir(),
   });
 
   const api = await startApi({

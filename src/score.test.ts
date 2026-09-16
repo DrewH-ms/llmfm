@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadScore, remapProgram, isOrchestral } from './score.ts';
 
-const TRACKS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), 'tracks');
+const TRACKS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), 'playlists', 'bundled');
 const SOLO_VIOLIN = 40;
 const STRING_ENSEMBLE = 48;
 const ENGLISH_HORN = 69;
