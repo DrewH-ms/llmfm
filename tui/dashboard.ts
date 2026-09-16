@@ -1,5 +1,10 @@
 import { spawn } from 'node:child_process';
-import { DAEMON_URL } from '../src/constants.ts';
+import {
+  DAEMON_URL,
+  DEFAULT_PLAYLIST,
+  PLAYLIST_ALL,
+  PLAYLIST_BUNDLED,
+} from '../src/constants.ts';
 import {
   SETTING_DEFAULTS,
   SETTING_SPECS,
@@ -118,6 +123,12 @@ const FOLDER_OPEN_FAILED = 'could not open the folder:';
 const SKIP_UNAVAILABLE = 'nothing to skip to — the library has one track';
 const TRACK_HEADING = 'Library';
 const NOW_PLAYING_MARK = '▶';
+const PLAYLIST_ACTIVE_MARK = '●';
+const PLAYLIST_EMPTY_NOTE = 'empty — bundled music plays';
+const PLAYLIST_HELP_ACTIVE = 'Playing from here. The library below is what this playlist holds.';
+const PLAYLIST_HELP_CHOOSE = 'Play from this playlist only.';
+const PLAYLIST_HELP_EMPTY =
+  'No files in this folder yet, so the bundled music keeps playing until you add some.';
 const TRACK_UNPLAYABLE = 'hold music only';
 const TRACK_INTEGRITY_BAD = 'file changed since it was curated';
 /** `explorer` on Windows, which is the only platform the MIDI bridge supports anyway. */
@@ -180,6 +191,7 @@ type Row =
   | { kind: 'section'; key: string; id: SectionId }
   | { kind: 'setting'; key: string; spec: SettingSpec }
   | { kind: 'action'; key: string; id: ActionId }
+  | { kind: 'playlist'; key: string; playlist: PlaylistView }
   | { kind: 'track'; key: string; track: TrackView }
   | { kind: 'session'; key: string; session: SessionView };
 
@@ -191,6 +203,13 @@ type TrackView = {
   composer: string | null;
   holdMusicOnly: boolean;
   integrity: string;
+  playlist: string;
+};
+
+type PlaylistView = {
+  name: string;
+  editable: boolean;
+  count: number;
 };
 
 /** Everything a frame is drawn from. */
@@ -201,6 +220,7 @@ type View = {
   selectedKey: string | null;
   notice: string | null;
   library: readonly TrackView[];
+  playlists: readonly PlaylistView[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -271,7 +291,9 @@ function parseConfig(value: unknown, specs: readonly SettingSpec[]): LlmfmConfig
   const muted = Array.isArray(record['muted'])
     ? record['muted'].filter((entry): entry is string => typeof entry === 'string')
     : [];
-  return { ...(settings as Omit<LlmfmConfig, 'muted'>), muted };
+  const chosen = record['playlist'];
+  const playlist = typeof chosen === 'string' && chosen.length > 0 ? chosen : DEFAULT_PLAYLIST;
+  return { ...(settings as Omit<LlmfmConfig, 'muted' | 'playlist'>), muted, playlist };
 }
 
 /** Narrows a daemon payload, which arrives as text over SSE and so is untrusted here. */
@@ -330,17 +352,59 @@ function parseTracks(text: string): TrackView[] {
   const tracks: TrackView[] = [];
   for (const entry of payload['tracks']) {
     if (!isRecord(entry)) continue;
-    const { file, title, composer, holdMusicOnly, integrity } = entry;
+    const { file, title, composer, holdMusicOnly, integrity, playlist } = entry;
     if (typeof file !== 'string' || file.length === 0) continue;
     tracks.push({
       file,
-      title: typeof title === 'string' && title.length > 0 ? title : file,
+      // A file with no provenance falls back to its own name, and inside a playlist the
+      // folder is already the row above, so repeating it in every title reads as noise.
+      title: typeof title === 'string' && title.length > 0 ? title : bareName(file),
       composer: typeof composer === 'string' ? composer : null,
       holdMusicOnly: holdMusicOnly === true,
       integrity: typeof integrity === 'string' ? integrity : 'unrecorded',
+      playlist: typeof playlist === 'string' && playlist.length > 0 ? playlist : PLAYLIST_ALL,
     });
   }
   return tracks;
+}
+
+/** Narrows the daemon's playlist list, dropping a malformed entry the way the catalogue
+ *  does: a playlist the user cannot see is a smaller loss than a dashboard that died. */
+function parsePlaylists(text: string): PlaylistView[] {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!isRecord(payload) || !Array.isArray(payload['playlists'])) return [];
+  const playlists: PlaylistView[] = [];
+  for (const entry of payload['playlists']) {
+    if (!isRecord(entry)) continue;
+    const { name, editable, count } = entry;
+    if (typeof name !== 'string' || name.length === 0) continue;
+    if (typeof count !== 'number' || !Number.isFinite(count)) continue;
+    playlists.push({ name, editable: editable === true, count: Math.max(Math.trunc(count), 0) });
+  }
+  return playlists;
+}
+
+function activePlaylist(state: DaemonState): string {
+  return state.config.playlist;
+}
+
+function bareName(file: string): string {
+  const cut = file.lastIndexOf('/');
+  return cut >= 0 ? file.slice(cut + 1) : file;
+}
+
+/** Mirrors the daemon's own fallback: an empty playlist plays the bundled music, so a list
+ *  that showed nothing would claim a silence the daemon never produces. */
+function visibleTracks(library: readonly TrackView[], playlist: string): readonly TrackView[] {
+  if (playlist === PLAYLIST_ALL) return library;
+  const chosen = library.filter((track) => track.playlist === playlist);
+  if (chosen.length > 0) return chosen;
+  return library.filter((track) => track.playlist === PLAYLIST_BUNDLED);
 }
 
 function settingValue(config: LlmfmConfig, key: string): unknown {
@@ -497,7 +561,10 @@ function masterVolumeLine(options: {
 function sectionSummary(id: SectionId, state: DaemonState, library: readonly TrackView[]): string {
   if (id === SECTION_SETTINGS) return `${listedSpecs(state).length} options`;
   if (id === SECTION_MUSIC) {
-    return library.length > 0 ? `${library.length} tracks` : TRACK_HEADING.toLowerCase();
+    const shown = visibleTracks(library, activePlaylist(state));
+    return shown.length > 0
+      ? `${activePlaylist(state)} · ${shown.length} tracks`
+      : TRACK_HEADING.toLowerCase();
   }
   const muted = state.sessions.filter((session) => session.muted).length;
   const sounding = state.sessions.filter((session) => session.audible).length;
@@ -555,11 +622,16 @@ function voiceDetail(session: SessionView, width: number): Segment[] {
   ];
 }
 
-function helpSegments(row: Row | null, width: number): Segment[] {
+function helpSegments(row: Row | null, width: number, active: string): Segment[] {
   if (!row) return [];
   if (row.kind === 'section') return [{ text: SECTION_HELP[row.id], style: FG_GREY }];
   if (row.kind === 'setting') return [{ text: row.spec.help, style: FG_GREY }];
   if (row.kind === 'action') return [{ text: ACTION_HELP[row.id], style: FG_GREY }];
+  if (row.kind === 'playlist') {
+    if (row.playlist.count === 0) return [{ text: PLAYLIST_HELP_EMPTY, style: FG_GREY }];
+    const help = row.playlist.name === active ? PLAYLIST_HELP_ACTIVE : PLAYLIST_HELP_CHOOSE;
+    return [{ text: help, style: FG_GREY }];
+  }
   if (row.kind === 'track') return [{ text: row.track.file, style: FG_GREY }];
   return voiceDetail(row.session, width);
 }
@@ -586,8 +658,9 @@ function rowsFor(options: {
   state: DaemonState;
   section: SectionId | null;
   library: readonly TrackView[];
+  playlists: readonly PlaylistView[];
 }): Row[] {
-  const { state, section, library } = options;
+  const { state, section, library, playlists } = options;
   if (section === null) {
     const sections: Row[] = SECTION_IDS.map((id) => ({ kind: 'section', key: `section:${id}`, id }));
     const volume = masterVolumeSpec(state);
@@ -599,9 +672,16 @@ function rowsFor(options: {
   }
   if (section === SECTION_MUSIC) {
     const actions: Row[] = ACTION_IDS.map((id) => ({ kind: 'action', key: `action:${id}`, id }));
+    const chooser: Row[] = playlists.map((playlist) => ({
+      kind: 'playlist',
+      key: `playlist:${playlist.name}`,
+      playlist,
+    }));
+    const shown = visibleTracks(library, activePlaylist(state));
     return [
       ...actions,
-      ...library.map((track): Row => ({ kind: 'track', key: `track:${track.file}`, track })),
+      ...chooser,
+      ...shown.map((track): Row => ({ kind: 'track', key: `track:${track.file}`, track })),
     ];
   }
   return state.sessions.map((session) => ({
@@ -617,6 +697,27 @@ function actionLine(options: { id: ActionId; selected: boolean; width: number })
     cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
     { text: clip(ACTION_TITLES[id], Math.max(width - 4, 0)), style: selected ? STYLE_BOLD : STYLE_NONE },
+  ];
+}
+
+function playlistLine(options: {
+  playlist: PlaylistView;
+  active: boolean;
+  selected: boolean;
+  width: number;
+}): Segment[] {
+  const { playlist, active, selected, width } = options;
+  const note =
+    playlist.count === 0
+      ? PLAYLIST_EMPTY_NOTE
+      : `${playlist.count} ${playlist.count === 1 ? 'track' : 'tracks'}`;
+  const room = Math.max(width - note.length - 6, 0);
+  const nameStyle = selected || active ? STYLE_BOLD : STYLE_NONE;
+  return [
+    cursorSegment(selected),
+    { text: active ? ` ${PLAYLIST_ACTIVE_MARK} ` : '   ', style: active ? FG_GREEN : STYLE_NONE },
+    { text: fit(playlist.name, Math.min(TITLE_COLUMN_WIDTH, room)), style: nameStyle },
+    { text: `  ${note}`, style: playlist.count === 0 ? FG_YELLOW : FG_CYAN },
   ];
 }
 
@@ -656,6 +757,10 @@ function rowLine(options: {
   if (row.kind === 'section') return sectionLine({ id: row.id, state, library, selected, width });
   if (row.kind === 'session') return sessionLine({ session: row.session, selected, width });
   if (row.kind === 'action') return actionLine({ id: row.id, selected, width });
+  if (row.kind === 'playlist') {
+    const active = row.playlist.name === activePlaylist(state);
+    return playlistLine({ playlist: row.playlist, active, selected, width });
+  }
   if (row.kind === 'track') {
     return trackLine({ track: row.track, playing: row.track.file === state.track, selected, width });
   }
@@ -666,8 +771,7 @@ function rowLine(options: {
 }
 
 function buildLines(view: View): string[] {
-  const { snapshot, link, section, selectedKey, notice, library } = view;
-  const width = clamp(process.stdout.columns ?? FALLBACK_COLUMNS, MIN_COLUMNS, MAX_COLUMNS);
+  const { snapshot, link, section, selectedKey, notice, library, playlists } = view;  const width = clamp(process.stdout.columns ?? FALLBACK_COLUMNS, MIN_COLUMNS, MAX_COLUMNS);
   if (!snapshot) {
     return [
       composeLine([{ text: 'LLMFM', style: STYLE_BOLD }], width),
@@ -734,7 +838,7 @@ function buildLines(view: View): string[] {
     ),
   ];
 
-  const rows = rowsFor({ state, section, library });
+  const rows = rowsFor({ state, section, library, playlists });
   const room = Math.max((process.stdout.rows ?? FALLBACK_ROWS) - CHROME_LINE_COUNT, 1);
   const selectedIndexInRows = rows.findIndex((row) => row.key === selectedKey);
   const start = Math.max(Math.min(selectedIndexInRows - room + 1, rows.length - room), 0);
@@ -764,7 +868,10 @@ function buildLines(view: View): string[] {
   lines.push('');
   lines.push(
     composeLine(
-      [{ text: '  ', style: STYLE_NONE }, ...helpSegments(selected, width - 2)],
+      [
+        { text: '  ', style: STYLE_NONE },
+        ...helpSegments(selected, width - 2, activePlaylist(state)),
+      ],
       width,
     ),
   );
@@ -785,6 +892,7 @@ let notice: string | null = null;
  *  every state broadcast: it changes only when a file is added, and it is larger than the
  *  rest of the payload put together. */
 let library: TrackView[] = [];
+let playlists: PlaylistView[] = [];
 let restored = false;
 let quitting = false;
 
@@ -794,7 +902,7 @@ function viewKey(): string {
 
 function currentRows(): Row[] {
   if (!snapshot) return [];
-  return rowsFor({ state: snapshot.state, section, library });
+  return rowsFor({ state: snapshot.state, section, library, playlists });
 }
 
 function selectRow(rows: Row[], index: number): void {
@@ -818,7 +926,8 @@ function restoreCursor(): void {
 function paint(): void {
   if (restored) return;
   const frame = [CURSOR_HOME];
-  for (const line of buildLines({ snapshot, link, section, selectedKey, notice, library })) {
+  const view = { snapshot, link, section, selectedKey, notice, library, playlists };
+  for (const line of buildLines(view)) {
     frame.push(line, ERASE_TO_LINE_END, '\n');
   }
   frame.push(ERASE_BELOW);
@@ -836,7 +945,7 @@ function restoreTerminal(): void {
 function applyState(state: DaemonState, next: LinkState): void {
   snapshot = { state, receivedAt: Date.now() };
   link = next;
-  const rows = rowsFor({ state, section, library });
+  const rows = rowsFor({ state, section, library, playlists });
   const index = rows.findIndex((row) => row.key === selectedKey);
   selectRow(rows, index >= 0 ? index : selectedIndex);
   paint();
@@ -874,11 +983,12 @@ async function command(path: string, body?: unknown): Promise<void> {
  *  file dropped in the folder appear without restarting the dashboard. */
 async function refreshLibrary(): Promise<void> {
   try {
-    const response = await fetch(`${DAEMON_URL}/tracks`, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) return;
-    library = parseTracks(await response.text());
+    const [tracks, chooser] = await Promise.all([
+      fetch(`${DAEMON_URL}/tracks`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) }),
+      fetch(`${DAEMON_URL}/playlists`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) }),
+    ]);
+    if (tracks.ok) library = parseTracks(await tracks.text());
+    if (chooser.ok) playlists = parsePlaylists(await chooser.text());
     restoreCursor();
     paint();
   } catch {
@@ -920,12 +1030,20 @@ function runAction(id: ActionId): void {
     void refreshLibrary();
     return;
   }
-  if (library.length < 2) {
+  const playable = snapshot ? visibleTracks(library, activePlaylist(snapshot.state)) : library;
+  if (playable.length < 2) {
     notice = SKIP_UNAVAILABLE;
     paint();
     return;
   }
   void command('/skip');
+}
+
+/** Switching playlist re-reads the catalogue as well as the state: the counts beside each
+ *  name are only as fresh as the last read of the folders. */
+async function choosePlaylist(name: string): Promise<void> {
+  await command('/playlist', { name });
+  await refreshLibrary();
 }
 
 function cycleSetting(spec: SettingSpec, direction: 1 | -1): void {
@@ -992,6 +1110,11 @@ function onHorizontal(direction: 1 | -1): void {
     else leaveSection();
     return;
   }
+  if (row.kind === 'playlist') {
+    if (direction === 1) void choosePlaylist(row.playlist.name);
+    else leaveSection();
+    return;
+  }
   if (row.kind === 'track') {
     if (direction === 1) void command('/track', { file: row.track.file });
     else leaveSection();
@@ -1006,6 +1129,7 @@ function onActivate(): void {
   if (row.kind === 'section') enterSection(row.id);
   else if (row.kind === 'session') toggleMute(row.session);
   else if (row.kind === 'action') runAction(row.id);
+  else if (row.kind === 'playlist') void choosePlaylist(row.playlist.name);
   else if (row.kind === 'track') void command('/track', { file: row.track.file });
   else cycleSetting(row.spec, 1);
 }
