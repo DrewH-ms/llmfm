@@ -19,16 +19,20 @@ import { createConfigStore } from './config.ts';
 import { SETTING_SPECS } from './settings.ts';
 import { buildVoiceTree } from './voices.ts';
 import { listUserTracks, userTracksDir, ensureUserTracksDir } from './user-tracks.ts';
-import { WATCH_OPEN_SESSIONS, LOG_EVENTS, DEFAULT_TRACK } from './constants.ts';
+import {
+  WATCH_OPEN_SESSIONS,
+  LOG_EVENTS,
+  DEFAULT_TRACK,
+  PLAYABLE_FILE_PATTERN,
+  isRecordedTrack,
+} from './constants.ts';
 import type { AutoplayMode } from './constants.ts';
 import type { DaemonState } from './types.ts';
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TRACKS_DIR = join(PROJECT_ROOT, 'tracks');
 const TRACKS_INDEX = join(TRACKS_DIR, 'tracks.json');
-const MIDI_FILE_PATTERN = /\.midi?$/i;
-const SESSION_ID_LOG_LENGTH = 8;
-/** At or below this there are not enough distinguishable lines to give sessions one
+const SESSION_ID_LOG_LENGTH = 8;/** At or below this there are not enough distinguishable lines to give sessions one
  *  each, so the piece can only work as hold music. */
 const MAX_HOLD_MUSIC_VOICES = 2;
 /** Rotating needs somewhere else to go. */
@@ -40,7 +44,7 @@ const AUTOPLAY_SEQUENTIAL: AutoplayMode = 'sequential';
 export type Daemon = { stop(): Promise<void> };
 
 export function listTracks(): string[] {
-  return readdirSync(TRACKS_DIR).filter((file) => MIDI_FILE_PATTERN.test(file));
+  return readdirSync(TRACKS_DIR).filter((file) => PLAYABLE_FILE_PATTERN.test(file));
 }
 
 /** Shipped files first, so a user's copy of a name we ship can never shadow the file its
@@ -106,8 +110,11 @@ function readProvenance(): Map<string, TrackProvenance> {
 }
 
 /** A file we cannot parse counts as no voices, which marks it hold-music-only rather
- *  than removing it from a list the user can see on disk. */
+ *  than removing it from a list the user can see on disk. Recorded audio answers the same
+ *  way without being parsed at all: a mixdown has no parts, so there is nothing a session
+ *  could be given that the rest of the file would not still be sounding. */
 function countVoices(file: string): number {
+  if (isRecordedTrack(file)) return 0;
   const path = resolveTrack(file);
   if (!path) return 0;
   try {

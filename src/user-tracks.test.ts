@@ -28,13 +28,13 @@ test('the folder is created so the instruction to drop files in it is not a dead
   assert.doesNotThrow(() => ensureUserTracksDir());
 });
 
-test('only MIDI files are listed, sorted, whatever else is in the folder', () => {
+test('only playable files are listed, sorted, whatever else is in the folder', () => {
   const dir = ensureUserTracksDir();
-  for (const name of ['b.mid', 'a.MIDI', 'notes.txt', 'cover.png']) {
+  for (const name of ['b.mid', 'a.MIDI', 'd.WAV', 'c.mp3', 'notes.txt', 'cover.png', 'song.flac']) {
     writeFileSync(join(dir, name), '');
   }
   mkdirSync(join(dir, 'subfolder'), { recursive: true });
-  assert.deepEqual(listUserTracks(), ['a.MIDI', 'b.mid']);
+  assert.deepEqual(listUserTracks(), ['a.MIDI', 'b.mid', 'c.mp3', 'd.WAV']);
 });
 
 test.after(() => rmSync(home, { recursive: true, force: true }));

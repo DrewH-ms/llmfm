@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { copilotHooksDir } from './install.ts';
+import { PLAYABLE_FILE_PATTERN } from './constants.ts';
 
 /** Kept local rather than shared with the daemon's copy while another agent holds that
  *  file; they should be folded together once the tree is quiet. */
-const MIDI_FILE_PATTERN = /\.midi?$/i;
 const USER_TRACKS_DIR_NAME = 'llmfm-tracks';
 
 /** Sits beside the config rather than inside the install, so tracks a user added survive
@@ -26,6 +26,6 @@ export function listUserTracks(): string[] {
   const dir = userTracksDir();
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
-    .filter((file) => MIDI_FILE_PATTERN.test(file))
+    .filter((file) => PLAYABLE_FILE_PATTERN.test(file))
     .sort((a, b) => a.localeCompare(b));
 }

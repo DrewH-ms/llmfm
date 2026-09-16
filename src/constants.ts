@@ -218,6 +218,19 @@ export const SECTION_PROGRAM_RANGES = [
 
 export const FALLBACK_SECTION: SectionName = 'Other';
 
+/** What the daemon will offer as a track. Shared so the shipped folder and the user's
+ *  drop-in folder cannot come to disagree about what counts as playable. */
+export const MIDI_FILE_PATTERN = /\.midi?$/i;
+/** Recorded audio is a finished mixdown, so it has no parts to gate and can only ever be
+ *  turned up or down as a whole. Everything that treats a track as an ensemble has to ask
+ *  this first. */
+export const RECORDED_FILE_PATTERN = /\.(mp3|wav)$/i;
+export const PLAYABLE_FILE_PATTERN = /\.(midi?|mp3|wav)$/i;
+
+export function isRecordedTrack(file: string): boolean {
+  return RECORDED_FILE_PATTERN.test(file);
+}
+
 /** Fraction of the piece a node must be sounding in to be offered as a voice. Below it
  *  the rests are long enough that a silent part reads as a blocked agent rather than as
  *  the music, which inverts the signal. */
