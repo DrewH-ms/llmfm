@@ -281,19 +281,28 @@ function toVoice(node: VoiceNode): Voice {
  * would carry a session: how much of the piece it sounds in, how little it doubles another
  * line, and how far its register sits from the voices already offered.
  *
- * Parts too sparse to pass `MIN_VOICE_CONTINUITY` are held back as backing, so no session
- * is ever given a line whose written rests would be mistaken for it stopping.
+ * `MIN_VOICE_CONTINUITY` is tested against whole nodes rather than bare parts, because
+ * aggregation is what answers written rests: four leads that each drop out for stretches
+ * still sound as a section almost throughout. Testing parts first would discard them
+ * before the section that redeems them could be built, leaving intermittent music with a
+ * single thin voice and most of the mix playing on regardless of who is working.
  */
 export function buildVoiceTree(score: Score): VoiceTree {
-  const voicedParts = score.parts.filter(
-    (part) => continuityOf(part.notes, score.duration) >= MIN_VOICE_CONTINUITY,
+  const roots = sectionNodes(score.parts).map((node) => withPaths(collapsed(node), []));
+  const everyNode = roots.flatMap(descendants);
+  const offerable = new Map(
+    everyNode.map((node) => [
+      node.voiceId,
+      continuityOf(node.notes, score.duration) >= MIN_VOICE_CONTINUITY,
+    ]),
   );
+  const canOffer = (node: VoiceNode): boolean => offerable.get(node.voiceId) === true;
+
+  const covered = new Set(everyNode.filter(canOffer).flatMap((node) => node.partIds));
   const backingPartIds = score.parts
-    .filter((part) => !voicedParts.includes(part))
+    .filter((part) => !covered.has(part.partId))
     .map((part) => part.partId);
 
-  const roots = sectionNodes(voicedParts).map((node) => withPaths(collapsed(node), []));
-  const everyNode = roots.flatMap(descendants);
   const shapes = new Map(everyNode.map((node) => [node.voiceId, onsetShapeOf(node.notes)]));
   const meanPitch = new Map(everyNode.map((node) => [node.voiceId, meanPitchOf(node.notes)]));
 
@@ -351,7 +360,7 @@ export function buildVoiceTree(score: Score): VoiceTree {
     return picked;
   };
 
-  const rootOrder = offerOrder(roots, []);
+  const rootOrder = offerOrder(roots.filter(canOffer), []);
 
   return {
     backingPartIds,
@@ -360,13 +369,15 @@ export function buildVoiceTree(score: Score): VoiceTree {
       let offered = rootOrder.slice(0, Math.min(wanted, rootOrder.length));
 
       while (offered.length < wanted) {
-        const splittable = offered.filter((node) => node.children.length >= MIN_SPLIT_CHILDREN);
+        const splittable = offered.filter(
+          (node) => node.children.filter(canOffer).length >= MIN_SPLIT_CHILDREN,
+        );
         if (splittable.length === 0) break;
         const target = splittable.reduce((best, node) => (rankOf(node) > rankOf(best) ? node : best));
         const index = offered.indexOf(target);
         const alongside = offered.filter((node) => node !== target);
         const needed = wanted - offered.length + 1;
-        const children = offerOrder(target.children, alongside).slice(0, needed);
+        const children = offerOrder(target.children.filter(canOffer), alongside).slice(0, needed);
         offered = [...offered.slice(0, index), ...children, ...offered.slice(index + 1)];
       }
 

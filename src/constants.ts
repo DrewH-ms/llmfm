@@ -175,6 +175,9 @@ export const SECTIONS = [
   'Percussion',
   'Keyboard',
   'Voices',
+  'Guitar',
+  'Bass',
+  'Synth',
   'Other',
 ] as const;
 export type SectionName = (typeof SECTIONS)[number];
@@ -185,7 +188,15 @@ export type SectionName = (typeof SECTIONS)[number];
  *  These deliberately cut across the GM family boundaries. Timpani (47) sits at the end
  *  of the string range, the harp (46) beside it reads as keyboard, and the tuned
  *  percussion block (8-15) reads as percussion — grouping by what a listener hears
- *  matters more here than grouping by the spec. */
+ *  matters more here than grouping by the spec.
+ *
+ *  The electronic half of the GM set is covered too, coarsely and on purpose. A score
+ *  that names nothing the parser recognises is classified entirely from these ranges, and
+ *  leaving them out put every pitched part in one 'Other' lump: it then competed with the
+ *  drum kit as a single node, and lost, so the only session on an electronic track was
+ *  given percussion while every synth part played on as backing. Splitting bass from lead
+ *  and pad is enough to keep the first voice melodic. Sound effects (120-127) stay
+ *  unmatched deliberately — they are noise cues, not a line anyone can follow. */
 export const SECTION_PROGRAM_RANGES = [
   { section: 'Percussion', from: 8, to: 15 },
   { section: 'Percussion', from: 47, to: 47 },
@@ -193,11 +204,16 @@ export const SECTION_PROGRAM_RANGES = [
   { section: 'Keyboard', from: 0, to: 7 },
   { section: 'Keyboard', from: 16, to: 23 },
   { section: 'Keyboard', from: 46, to: 46 },
+  { section: 'Guitar', from: 24, to: 31 },
+  { section: 'Bass', from: 32, to: 39 },
   { section: 'Strings', from: 40, to: 45 },
   { section: 'Strings', from: 48, to: 51 },
   { section: 'Voices', from: 52, to: 54 },
-  { section: 'Brass', from: 56, to: 63 },
+  { section: 'Brass', from: 55, to: 63 },
   { section: 'Woodwinds', from: 64, to: 79 },
+  { section: 'Synth', from: 80, to: 95 },
+  { section: 'Synth', from: 96, to: 103 },
+  { section: 'Guitar', from: 104, to: 111 },
 ] as const satisfies readonly { section: SectionName; from: number; to: number }[];
 
 export const FALLBACK_SECTION: SectionName = 'Other';
