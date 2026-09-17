@@ -15,12 +15,17 @@
 
 import type { SystemVolume, SystemVolumeStatus } from './system-volume.ts';
 
+const MS_PER_SECOND = 1000;
+
 export type Duck = {
   /** Brings up the volume bridge. Resolves to its status and never rejects. */
   start(): Promise<SystemVolumeStatus>;
   /** The gate. Audible is the user's audio as they left it; silent is a mute flag.
-   *  `fadeSeconds` is not honoured: a mute flag is instantaneous and has no ramp. It is
-   *  present because every sink the orchestrator drives is gated the same way. */
+   *
+   *  A mute flag has no ramp, so `fadeSeconds` is spent before it rather than across it:
+   *  the mute is held back that long, and an agent that comes back inside the window is
+   *  never muted at all. Coming back is instant — a delay there would be the product
+   *  lying about which agents are waiting on you. */
   setAudible(options: { audible: boolean; fadeSeconds: number }): void;
   /** Unmutes and releases the bridge. */
   stop(): Promise<void>;
@@ -46,6 +51,14 @@ export function createDuck(options: {
    *  time, and a mute racing the restore that should outlive it is the one ordering this
    *  module cannot afford to get wrong. */
   let queue: Promise<void> = Promise.resolve();
+  /** A mute waiting out its hold-off. Held rather than restarted while it runs, so a
+   *  session flickering does not push the mute back indefinitely. */
+  let pending: NodeJS.Timeout | null = null;
+
+  const cancelPending = (): void => {
+    if (pending) clearTimeout(pending);
+    pending = null;
+  };
 
   const release = async (): Promise<void> => {
     if (heldSession) {
@@ -98,12 +111,36 @@ export function createDuck(options: {
     },
 
     setAudible(gateOptions: { audible: boolean; fadeSeconds: number }): void {
-      audible = gateOptions.audible;
-      void apply();
+      if (gateOptions.audible) {
+        // Cancelling here is the whole point of the hold-off: a gap shorter than the fade
+        // never becomes a mute, so brief blocked moments do not chop the user's audio.
+        cancelPending();
+        audible = true;
+        void apply();
+        return;
+      }
+      // Already committed to silence: a repeat call is the orchestrator retrying a gate
+      // the bridge could not answer, and the hold-off has already been served.
+      if (!audible) {
+        void apply();
+        return;
+      }
+      if (pending) return;
+      if (gateOptions.fadeSeconds <= 0) {
+        audible = false;
+        void apply();
+        return;
+      }
+      pending = setTimeout(() => {
+        pending = null;
+        audible = false;
+        void apply();
+      }, gateOptions.fadeSeconds * MS_PER_SECOND);
     },
 
     async stop(): Promise<void> {
       if (!started) return;
+      cancelPending();
       audible = true;
       // A command already in flight has to land before the release, or it would mute
       // after it.

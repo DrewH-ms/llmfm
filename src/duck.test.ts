@@ -233,6 +233,48 @@ test('a gate that has not moved is not reissued to the bridge', async () => {
   await duck.stop();
 });
 
+test('a gap shorter than the fade never becomes a mute', async () => {
+  const volume = fakeVolume(60);
+  const duck = createDuck({ volume, sessionName: () => null });
+  await duck.start();
+
+  duck.setAudible({ audible: false, fadeSeconds: 0.3 });
+  await wait(60);
+  assert.equal(volume.current.muted, false, 'the mute must wait out the fade');
+
+  duck.setAudible({ audible: true, fadeSeconds: 0.3 });
+  await wait(400);
+  assert.equal(volume.current.muted, false, 'an agent back inside the window is never muted');
+  assert.deepEqual(volume.muteWrites, [], 'nothing should have reached the bridge at all');
+
+  await duck.stop();
+});
+
+test('a gap that outlasts the fade does mute, once', async () => {
+  const volume = fakeVolume(60);
+  const duck = createDuck({ volume, sessionName: () => null });
+  await duck.start();
+
+  duck.setAudible({ audible: false, fadeSeconds: 0.1 });
+  // A session flickering must not keep pushing the mute further out.
+  duck.setAudible({ audible: false, fadeSeconds: 0.1 });
+  await until(() => volume.current.muted, 'the gate never closed after its hold-off');
+  assert.deepEqual(volume.muteWrites, [true]);
+
+  await duck.stop();
+});
+
+test('shutdown inside the hold-off leaves nothing muted behind', async () => {
+  const volume = fakeVolume(45);
+  const duck = createDuck({ volume, sessionName: () => null });
+  await duck.start();
+
+  duck.setAudible({ audible: false, fadeSeconds: 0.3 });
+  await duck.stop();
+  await wait(400);
+  assert.equal(volume.current.muted, false, 'a pending mute must not fire after teardown');
+});
+
 test('a bridge that fails leaves the gate to be retried, not assumed applied', async () => {
   const volume = fakeVolume(90);
   const duck = createDuck({ volume, sessionName: () => null });
