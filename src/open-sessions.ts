@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { OPEN_SESSIONS_POLL_MS } from './constants.ts';
 import type { SessionRegistry } from './sessions.ts';
+import type { OpenSessionEntry } from './types.ts';
 
 const COPILOT_DIR_NAME = '.copilot';
 const OPEN_SESSIONS_FILE_NAME = 'open-sessions-state.json';
@@ -17,7 +18,7 @@ function openSessionsPath(): string {
 }
 
 /** Null when the file is absent, mid-rewrite, or not the shape we expect — all normal. */
-function readOpenSessions(filePath: string): { sessionId: string; working: boolean }[] | null {
+function readOpenSessions(filePath: string): OpenSessionEntry[] | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(filePath, 'utf8'));
@@ -26,12 +27,19 @@ function readOpenSessions(filePath: string): { sessionId: string; working: boole
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
 
-  const entries: { sessionId: string; working: boolean }[] = [];
+  const entries: OpenSessionEntry[] = [];
   for (const [sessionId, value] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof value !== 'object' || value === null) continue;
-    const working = (value as Record<string, unknown>).working;
+    const record = value as Record<string, unknown>;
+    const working = record['working'];
     if (typeof working !== 'boolean') continue;
-    entries.push({ sessionId, working });
+    const stamp = record['refreshedAt'];
+    const refreshedAt = typeof stamp === 'string' ? Date.parse(stamp) : Number.NaN;
+    entries.push({
+      sessionId,
+      working,
+      refreshedAt: Number.isFinite(refreshedAt) ? refreshedAt : null,
+    });
   }
   return entries;
 }

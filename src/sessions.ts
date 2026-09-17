@@ -1,6 +1,6 @@
 import { HOOK_AUTHORITY_MS } from './constants.ts';
 import { outcomeOf } from './intake.ts';
-import type { HookEvent, Session } from './types.ts';
+import type { HookEvent, OpenSessionEntry, Session } from './types.ts';
 
 /** Enough of the session id to tell two sessions apart when there is no cwd. */
 const SESSION_ID_LABEL_LENGTH = 8;
@@ -9,7 +9,7 @@ export type SessionRegistry = {
   /** Applies an already-narrowed hook event. Hook readings are authoritative. */
   applyHookEvent(event: HookEvent): void;
   /** Corroboration from open-sessions-state.json; must not override a fresh hook reading. */
-  applyFileState(entries: { sessionId: string; working: boolean }[]): void;
+  applyFileState(entries: OpenSessionEntry[]): void;
   /** Drives simulation mode without pretending to be a real session source. */
   applySimulated(options: { sessionId: string; working: boolean; label: string }): void;
   removeSimulated(): void;
@@ -27,6 +27,9 @@ export function createSessionRegistry(): SessionRegistry {
   const sessions = new Map<string, Session>();
   /** Sessions the open-sessions file has ever listed. Internal bookkeeping, not published. */
   const seenInFile = new Set<string>();
+  /** Ids a `sessionEnd` retired. The CLI leaves an ended session in its file for days, so
+   *  without this the next poll re-creates what the hook just closed. */
+  const endedByHook = new Set<string>();
   const listeners = new Set<() => void>();
 
   function emit(): void {
@@ -39,6 +42,7 @@ export function createSessionRegistry(): SessionRegistry {
       const previous = sessions.get(event.sessionId);
 
       if (outcome === 'ended') {
+        endedByHook.add(event.sessionId);
         if (!previous) return;
         sessions.delete(event.sessionId);
         seenInFile.delete(event.sessionId);
@@ -69,24 +73,29 @@ export function createSessionRegistry(): SessionRegistry {
         updatedAt: now,
       };
       sessions.set(event.sessionId, next);
+      endedByHook.delete(event.sessionId);
 
       if (
         !previous ||
         previous.working !== next.working ||
         previous.cwd !== next.cwd ||
-        previous.source !== next.source
+        previous.source !== next.source ||
+        previous.blockedMidTurn !== next.blockedMidTurn
       ) {
         emit();
       }
     },
 
-    applyFileState(entries: { sessionId: string; working: boolean }[]): void {
+    applyFileState(entries: OpenSessionEntry[]): void {
       const now = Date.now();
       const present = new Set<string>();
       let changed = false;
 
       for (const entry of entries) {
         present.add(entry.sessionId);
+        // `sessionEnd` is the one authoritative word that a session is over, and the file
+        // outlives it by days. Honouring the file here would undo the hook within a poll.
+        if (endedByHook.has(entry.sessionId)) continue;
         seenInFile.add(entry.sessionId);
         const previous = sessions.get(entry.sessionId);
         if (previous?.source === 'simulation') continue;
@@ -119,8 +128,10 @@ export function createSessionRegistry(): SessionRegistry {
           blockedMidTurn: false,
           blockedSince: null,
           listedByCli: true,
-          startedAt: previous?.startedAt ?? now,
-          updatedAt: now,
+          // The CLI's own timestamp, not ours: dating an entry from daemon start would
+          // give a terminal closed days ago a full idle-dropout window of voice.
+          startedAt: previous?.startedAt ?? entry.refreshedAt ?? now,
+          updatedAt: previous?.updatedAt ?? entry.refreshedAt ?? now,
         });
         changed = true;
       }
@@ -138,6 +149,12 @@ export function createSessionRegistry(): SessionRegistry {
           seenInFile.delete(sessionId);
           changed = true;
         }
+      }
+
+      // Once the CLI has dropped the entry there is nothing left to suppress, and the
+      // tombstone would otherwise outlive the daemon's interest in the id.
+      for (const sessionId of endedByHook) {
+        if (!present.has(sessionId)) endedByHook.delete(sessionId);
       }
 
       if (changed) emit();

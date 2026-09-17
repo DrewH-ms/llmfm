@@ -2,7 +2,16 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createOrchestrator } from './orchestrator.ts';
 import { SETTING_DEFAULTS } from './settings.ts';
-import { BLOCK_SETTLE_MS, DEFAULT_PLAYLIST, SUBAGENT_GRACE_MS } from './constants.ts';
+import {
+  BLOCK_SETTLE_MS,
+  DEFAULT_PLAYLIST,
+  FOLD_EVIDENCE_MAX_MS,
+  MS_PER_MINUTE,
+  PROMPT_GAP_RESUME_MS,
+  SETTLE_MARGIN_MS,
+  SUBAGENT_GRACE_MS,
+  WORKING_CLAIM_MAX_MS,
+} from './constants.ts';
 import type { ConfigStore, LlmfmConfig } from './config.ts';
 import type { Mixer } from './mixer.ts';
 import type { Scheduler } from './scheduler.ts';
@@ -361,4 +370,71 @@ test('a sub-agent on another repo does not hold a parent on', () => {
     fakeConfig({ gate: 'per-agent' }),
   );
   assert.equal(viewOf(orchestrator, 'parent')?.audible, false);
+});
+
+
+test('a working claim nothing can refresh eventually gives up its voice', () => {
+  // Close the terminal mid-tool and no sessionEnd ever arrives; the CLI leaves
+  // `working: true` in its file for ever, and the file may silence but never assert, so
+  // nothing else can correct it. Without a ceiling the voice sounds until a restart.
+  const killed = session({
+    sessionId: 'a',
+    working: true,
+    updatedAt: Date.now() - WORKING_CLAIM_MAX_MS - 1,
+  });
+  const { orchestrator, mixer } = harness([killed], fakeConfig({ gate: 'per-agent' }));
+
+  assert.equal(viewOf(orchestrator, 'a')?.voiceName, null, 'a dead claim must hold no voice');
+  assert.equal(mixer.anyAudible(), false);
+});
+
+test('a long tool call is not mistaken for a dead terminal', () => {
+  const busy = session({
+    sessionId: 'a',
+    working: true,
+    updatedAt: Date.now() - WORKING_CLAIM_MAX_MS + MS_PER_MINUTE,
+  });
+  const { orchestrator } = harness([busy], fakeConfig({ gate: 'per-agent' }));
+
+  assert.equal(viewOf(orchestrator, 'a')?.audible, true, 'silencing a live agent is the inverse lie');
+});
+
+test('folding expires, so a dead sub-agent stops holding its parent on', () => {
+  // A sub-agent is never listed by the CLI, so the registry can never retire it. Folding
+  // is an inference from a shared cwd rather than a reading, so the inference expires.
+  const dead = subAgent({ updatedAt: Date.now() - FOLD_EVIDENCE_MAX_MS - 1 });
+  const { orchestrator } = harness([parent(), dead], fakeConfig({ gate: 'per-agent' }));
+
+  const view = viewOf(orchestrator, 'parent');
+  assert.equal(view?.folded, false, 'stale evidence must not keep claiming work');
+  assert.equal(view?.audible, false);
+});
+
+test('resume brings the music back on its own clock', (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  const gates: boolean[] = [];
+  const blocked = session({
+    sessionId: 'a',
+    working: false,
+    blockedMidTurn: true,
+    blockedSince: Date.now(),
+  });
+  const orchestrator = createOrchestrator({
+    registry: { list: () => [blocked] } as unknown as SessionRegistry,
+    mixer: fakeMixer(),
+    scheduler: fakeScheduler(),
+    config: fakeConfig({ audio: 'duck', gate: 'any', promptGap: 'resume' }),
+    duck: { setAudible: ({ audible }) => void gates.push(audible) },
+  });
+  built.push(orchestrator);
+  orchestrator.bindScore(score());
+
+  assert.equal(gates.at(-1), true, 'an unsettled block must not cut the music');
+  t.mock.timers.tick(BLOCK_SETTLE_MS + SETTLE_MARGIN_MS + 1);
+  assert.equal(gates.at(-1), false, 'a settled block silences');
+
+  // Approving a prompt fires no hook at all, so this instant is unobservable: if nothing
+  // is scheduled for it, the shipped default never resumes anything on its own.
+  t.mock.timers.tick(PROMPT_GAP_RESUME_MS + SETTLE_MARGIN_MS + 1);
+  assert.equal(gates.at(-1), true, 'resume must wake itself at the prompt-gap mark');
 });

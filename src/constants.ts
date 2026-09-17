@@ -179,8 +179,10 @@ export const PROMPT_GAP_RESUME_MS = 8000;
 export const WORKING_CLAIM_MAX_MS = 30 * MS_PER_MINUTE;
 /** How long a cwd match may keep folding a parent audible. Folding is an inference, not
  *  a reading, so it expires: a sub-agent that dies mid-tool is never retired by the
- *  registry and would otherwise hold its parent's voice open for ever. */
-export const FOLD_EVIDENCE_MAX_MS = 5 * MS_PER_MINUTE;
+ *  registry and would otherwise hold its parent's voice open for ever. Set well above a
+ *  long build or test run, since a sub-agent only refreshes between tool calls and
+ *  silencing a parent whose work is still running is the inverse lie. */
+export const FOLD_EVIDENCE_MAX_MS = 15 * MS_PER_MINUTE;
 /** How often the daemon checks whether a bridge it believes is running has died. */
 export const BRIDGE_HEALTH_TICK_MS = 1000;
 

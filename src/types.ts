@@ -10,6 +10,16 @@ export type HookEvent = {
   notificationType: string | null;
 };
 
+/** One session as the CLI's open-sessions file describes it. */
+export type OpenSessionEntry = {
+  sessionId: string;
+  working: boolean;
+  /** When the CLI last touched this entry, or null when it gave no usable timestamp.
+   *  The CLI never deletes an entry, so this is the only thing that separates the session
+   *  the user is in from a terminal they closed days ago. */
+  refreshedAt: number | null;
+};
+
 export const SESSION_SOURCES = ['hook', 'file', 'simulation'] as const;
 export type SessionSource = (typeof SESSION_SOURCES)[number];
 

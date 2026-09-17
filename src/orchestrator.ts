@@ -2,11 +2,13 @@ import {
   SETTLE_MARGIN_MS,
   BLOCK_SETTLE_MS,
   FOCUS_SESSION_ID,
+  FOLD_EVIDENCE_MAX_MS,
   MS_PER_MINUTE,
   PROMPT_GAP_RESUME_MS,
   SUBAGENT_GRACE_MS,
   VOICE_RESPLIT_DEBOUNCE_MS,
   WATCH_OPEN_SESSIONS,
+  WORKING_CLAIM_MAX_MS,
 } from './constants.ts';
 import type { GateMode } from './constants.ts';
 import { assignVoices } from './assignment.ts';
@@ -119,15 +121,28 @@ export function createOrchestrator(options: {
     if (session.blockedMidTurn || !session.listedByCli || session.cwd === null) return false;
     return registry
       .list()
-      .some((other) => other.working && other.cwd === session.cwd && isSubAgent(other, now));
+      .some(
+        (other) =>
+          other.working &&
+          other.cwd === session.cwd &&
+          // Folding is inferred from a shared cwd, never read off a hook, so it expires.
+          // A sub-agent killed mid-tool is never retired — it is by construction absent
+          // from the CLI's file — and would otherwise hold its parent audible for ever.
+          now - other.updatedAt < FOLD_EVIDENCE_MAX_MS &&
+          isSubAgent(other, now),
+      );
   };
 
   /** A terminal that was closed is never removed from the CLI's session file, so without
-   *  this it keeps its instrument forever. Only idle sessions are dropped: a working one
-   *  is legitimately holding its voice however long it has been at it. */
-  const isIdleTooLong = (session: Session, now: number): boolean => {
+   *  this it keeps its instrument forever. A working session normally keeps its voice
+   *  however long it has been at it, but only up to a ceiling: a terminal killed mid-tool
+   *  leaves `working` standing with nothing that can ever correct it, because the file
+   *  may silence and never assert. */
+  const isExpired = (session: Session, now: number): boolean => {
+    if (isFolded(session, now)) return false;
+    if (session.working) return now - session.updatedAt >= WORKING_CLAIM_MAX_MS;
     const minutes = config.current().idleDropoutMinutes;
-    if (minutes <= 0 || session.working || isFolded(session, now)) return false;
+    if (minutes <= 0) return false;
     return now - session.updatedAt >= minutes * MS_PER_MINUTE;
   };
 
@@ -143,7 +158,7 @@ export function createOrchestrator(options: {
         (session) =>
           !isHiddenSubAgent(session, now) &&
           !isMuted(muteRules, session) &&
-          !isIdleTooLong(session, now),
+          !isExpired(session, now),
       );
     if (!FOCUS_SESSION_ID) return sessions;
     return sessions.filter((session) => session.sessionId === FOCUS_SESSION_ID);
@@ -214,13 +229,21 @@ export function createOrchestrator(options: {
     return [...names];
   };
 
-  /** How long until the youngest still-settling block can be trusted, or null when none
-   *  is pending. A block inside its window has to be revisited or a prompt the user really
-   *  is waiting on would never silence anything. */
-  const soonestSettle = (sessions: Session[]): number | null => {
-    const pending = sessions
-      .filter(settling)
-      .map((session) => BLOCK_SETTLE_MS - (Date.now() - (session.blockedSince ?? 0)));
+  /** How long until the next moment a block changes what should sound, or null when none
+   *  is pending. Two deadlines: a block inside its settle window has to be revisited or a
+   *  prompt the user really is waiting on would never silence anything, and under
+   *  `resume` the 8-second mark is where the music comes back — a moment the CLI emits
+   *  nothing to announce, so nothing but this timer can find it. */
+  const soonestRecheck = (sessions: Session[]): number | null => {
+    const resuming = config.current().promptGap === 'resume';
+    const now = Date.now();
+    const pending: number[] = [];
+    for (const session of sessions) {
+      if (!session.blockedMidTurn || session.blockedSince === null) continue;
+      const age = now - session.blockedSince;
+      if (age < BLOCK_SETTLE_MS) pending.push(BLOCK_SETTLE_MS - age);
+      if (resuming && age < PROMPT_GAP_RESUME_MS) pending.push(PROMPT_GAP_RESUME_MS - age);
+    }
     return pending.length > 0 ? Math.max(0, Math.min(...pending)) : null;
   };
 
@@ -247,7 +270,7 @@ export function createOrchestrator(options: {
         audible: mixAudible(sessions),
         fadeSeconds: config.current().fadeSeconds,
       });
-      scheduleSettle(soonestSettle(sessions));
+      scheduleSettle(soonestRecheck(sessions));
       return;
     }
     if (!score) return;
@@ -284,9 +307,7 @@ export function createOrchestrator(options: {
 
     // `mute` keeps our own transport running through the silence, trading the
     // resume-in-place effect for not stopping the piece.
-    // A block still inside its settle window has to be revisited, or a prompt the user
-    // really is waiting on would never silence its part.
-    const soonest = soonestSettle(sessions);
+    const soonest = soonestRecheck(sessions);
 
     if (mixer.anyAudible() || config.current().silenceMode === 'mute') {
       scheduler.play();
