@@ -34,6 +34,9 @@ export type LlmfmConfig = {
   masterVolume: number;
   idleDropoutMinutes: number;
   autoplay: AutoplayMode;
+  /** Whether Windows holds an A2DP sink open for the user's phone. The device itself is
+   *  machine state and lives in the bridge's claim file, not here. */
+  bluetoothReceive: boolean;
   startupMotif: boolean;
   /** Which playlist the library is drawn from. Not a spec-driven setting: the valid
    *  values are whatever folders exist right now, so it is validated against the disk

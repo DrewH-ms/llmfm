@@ -11,6 +11,7 @@ import { createAudioOut } from './audio-out.ts';
 import { createRecordedPlayer } from './recorded.ts';
 import { createSystemVolume } from './system-volume.ts';
 import { createDuck } from './duck.ts';
+import { createBluetoothReceive } from './bluetooth-receive.ts';
 import { createSessionRegistry } from './sessions.ts';
 import { watchOpenSessions } from './open-sessions.ts';
 import { parseHookEvent } from './intake.ts';
@@ -208,6 +209,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const recorded = createRecordedPlayer(audio);
   const volume = createSystemVolume();
   const duck = createDuck({ volume });
+  const bluetooth = createBluetoothReceive();
   const orchestrator = createOrchestrator({
     registry,
     mixer,
@@ -226,6 +228,8 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   let recordedTrack = false;
   /** True while the user's own audio carries the signal and LLMFM plays nothing itself. */
   let ducking = false;
+  /** True while a bridge is holding the A2DP sink open for the user's phone. */
+  let receivingBluetooth = false;
 
   /** `silenceMode` describes LLMFM's own transport, and duck has no transport of ours. */
   const holdOurTransport = (): boolean =>
@@ -294,30 +298,48 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
 
   /** Only one of ducking and playing our own score ever runs. Switches queue behind each
    *  other so a toggle cannot leave duck mode before the bridge that must restore the
-   *  level exists, and the chain is kept resolved so one failure cannot skip the unmute. */
+   *  level exists, and the chain is kept resolved so one failure cannot skip the unmute.
+   *
+   *  Bluetooth receive rides the same chain. It is not a third mode: it supplies audio to
+   *  the endpoint duck mode gates, so it is switched on its own setting. */
   let audioModeSwitch: Promise<void> = Promise.resolve();
   const applyAudioMode = (): Promise<void> => {
     audioModeSwitch = audioModeSwitch
       .then(async () => {
         const wanted = config.current().audio === 'duck';
-        if (wanted === ducking) return;
-        if (wanted) {
-          motif?.cancel();
-          scheduler.pause();
-          mixer.silenceAll();
-          recorded.setHoldTransport(holdOurTransport());
-          recorded.setAudible({ audible: false, fadeSeconds: 0 });
-          const status = await duck.start();
-          if (!status.ready) console.log(`Duck unavailable: ${status.error}`);
-          // Only a bridge that answered counts as ducking, so a failed start is retried by
-          // the next switch rather than leaving the mode on with nothing behind it.
-          ducking = status.ready;
-        } else {
-          await duck.stop();
-          ducking = false;
-          recorded.setHoldTransport(holdOurTransport());
+        if (wanted !== ducking) {
+          if (wanted) {
+            motif?.cancel();
+            scheduler.pause();
+            mixer.silenceAll();
+            recorded.setHoldTransport(holdOurTransport());
+            recorded.setAudible({ audible: false, fadeSeconds: 0 });
+            const status = await duck.start();
+            if (!status.ready) console.log(`Duck unavailable: ${status.error}`);
+            // Only a bridge that answered counts as ducking, so a failed start is retried
+            // by the next switch rather than leaving the mode on with nothing behind it.
+            ducking = status.ready;
+          } else {
+            await duck.stop();
+            ducking = false;
+            recorded.setHoldTransport(holdOurTransport());
+          }
+          orchestrator.refresh();
+          publish();
         }
-        orchestrator.refresh();
+
+        const wantedBluetooth = config.current().bluetoothReceive;
+        if (wantedBluetooth === receivingBluetooth) return;
+        if (wantedBluetooth) {
+          const status = await bluetooth.start();
+          if (!status.ready) console.log(`Bluetooth receive unavailable: ${status.error}`);
+          // A bridge that did not come up is not recorded as holding the sink, so the next
+          // switch tries again instead of leaving the setting on with nothing behind it.
+          receivingBluetooth = status.ready;
+        } else {
+          await bluetooth.stop();
+          receivingBluetooth = false;
+        }
         publish();
       })
       .catch((error: unknown) => {
@@ -347,6 +369,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     transport: recordedTrack ? recorded.state() : scheduler.state(),
     midi: midi.status(),
     duck: volume.status(),
+    bluetooth: bluetooth.status(),
     sessions: orchestrator.sessionViews(),
     config: config.current(),
     settingSpecs: SETTING_SPECS,
@@ -378,6 +401,12 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       config.setMute({ session, muted, preferLabel });
     },
     onSetSetting: ({ key, value }) => config.setSetting(key, value),
+    listBluetooth: () => bluetooth.list(),
+    async onConnectBluetooth({ id }) {
+      const status = await bluetooth.connect({ id });
+      publish();
+      return status.device !== null;
+    },
     tracks: trackCatalogue,
     playlists: listPlaylists,
     onSetPlaylist(name) {
@@ -469,10 +498,16 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       // A leaked MCI device keeps sounding after the process it belonged to is gone.
       recorded.stop();
       // The system volume is the user's, and must never outlive us changed.
+      // Ordered so the sink is released first, nested so a bridge that fails on the way
+      // out cannot skip the unmute.
       try {
         await audioModeSwitch;
       } finally {
-        await duck.stop();
+        try {
+          await bluetooth.stop();
+        } finally {
+          await duck.stop();
+        }
       }
       config.stop();
       watcher?.stop();

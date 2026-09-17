@@ -1,5 +1,9 @@
 import { spawn } from 'node:child_process';
 import {
+  BLUETOOTH_CLOSED,
+  BLUETOOTH_NONE,
+  BLUETOOTH_OPENED,
+  BLUETOOTH_STATES,
   DAEMON_URL,
   DEFAULT_PLAYLIST,
   PLAYLIST_ALL,
@@ -17,6 +21,7 @@ import type { SettingSpec } from '../src/settings.ts';
 import { SESSION_SOURCES } from '../src/types.ts';
 import type { DaemonState, MidiStatus, SessionView, TransportState } from '../src/types.ts';
 import type { SystemVolumeStatus } from '../src/system-volume.ts';
+import type { BluetoothDevice, BluetoothStatus } from '../src/bluetooth-receive.ts';
 import type { LlmfmConfig } from '../src/config.ts';
 
 const ESC = '\x1b[';
@@ -117,9 +122,32 @@ const ACTION_TITLES: Readonly<Record<ActionId, string>> = {
 const ACTION_HELP: Readonly<Record<ActionId, string>> = {
   [ACTION_SKIP]: 'Play the next track now, whatever this track does when it ends.',
   [ACTION_FOLDER]: 'Opens the folder the daemon reads. Drop .mid files in and they appear here.',
-  [ACTION_BLUETOOTH]: 'Not built yet — the daemon plays through the Windows synth for now.',
+  [ACTION_BLUETOOTH]:
+    'Lists the phones already paired with this PC, so one of them can play into it.',
 };
-const BLUETOOTH_NOTICE = 'Bluetooth output is not built yet';
+/** Enumerating paired devices goes over the radio and is slow by nature, and opening a
+ *  link waits on the phone, so neither can be held to the timeout a state read uses. */
+const BLUETOOTH_LIST_TIMEOUT_MS = 60000;
+const BLUETOOTH_CONNECT_TIMEOUT_MS = 40000;
+const BLUETOOTH_SEARCHING = 'looking for paired devices — this takes a moment';
+const BLUETOOTH_CONNECTING = 'connecting to';
+const BLUETOOTH_CONNECT_FAILED =
+  'could not connect — on the phone, connect to this PC, then try again';
+const BLUETOOTH_NONE_PAIRED =
+  'no paired phone found — pair it first in Settings › Bluetooth & devices';
+const BLUETOOTH_SETTING_OFF = 'turn Bluetooth audio on under Settings first';
+/** Windows cannot make the phone send audio; the phone has to be told where to send it,
+ *  and a user who is not told this concludes the connection is broken. */
+const BLUETOOTH_PHONE_STEP = 'On your phone: pick this PC as the output and press play.';
+const BLUETOOTH_STARTING = 'Bluetooth: starting the receiver…';
+const BLUETOOTH_CHOOSE = 'Bluetooth: no phone connected — Music › Connect Bluetooth.';
+/** A refused link reports an HRESULT the user can do nothing with; what they can do is
+ *  connect the PC from the phone, which is also what pairing alone does not do. */
+const BLUETOOTH_NOT_LINKED = 'Bluetooth: connect this PC from the phone, then try again — ';
+const BLUETOOTH_DROPPED = 'dropped the link — connect it again.';
+const BLUETOOTH_NOT_LINKED_SHORT = 'not linked';
+const BLUETOOTH_LABEL = 'BT  ';
+const BLUETOOTH_CONNECTED_MARK = '●';
 const FOLDER_OPEN_FAILED = 'could not open the folder:';
 const SKIP_UNAVAILABLE = 'nothing to skip to — the library has one track';
 const TRACK_HEADING = 'Library';
@@ -192,6 +220,7 @@ type Row =
   | { kind: 'section'; key: string; id: SectionId }
   | { kind: 'setting'; key: string; spec: SettingSpec }
   | { kind: 'action'; key: string; id: ActionId }
+  | { kind: 'bluetooth'; key: string; device: BluetoothDevice }
   | { kind: 'playlist'; key: string; playlist: PlaylistView }
   | { kind: 'track'; key: string; track: TrackView }
   | { kind: 'session'; key: string; session: SessionView };
@@ -222,6 +251,7 @@ type View = {
   notice: string | null;
   library: readonly TrackView[];
   playlists: readonly PlaylistView[];
+  bluetoothDevices: readonly BluetoothDevice[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -256,8 +286,23 @@ function parseDuck(value: unknown): SystemVolumeStatus {
   };
 }
 
-function parseSession(value: unknown): SessionView | null {
-  if (!isRecord(value)) return null;
+/** Read on the same rule as the duck status: an unreadable field costs its own fact, not
+ *  the snapshot. */
+function parseBluetooth(value: unknown): BluetoothStatus {
+  const absent: BluetoothStatus = { ready: false, state: BLUETOOTH_NONE, device: null, error: null };
+  if (!isRecord(value)) return absent;
+  const device = isRecord(value['device']) ? value['device'] : null;
+  const id = device?.['id'];
+  const name = device?.['name'];
+  return {
+    ready: value['ready'] === true,
+    state: BLUETOOTH_STATES.find((candidate) => candidate === value['state']) ?? BLUETOOTH_NONE,
+    device: typeof id === 'string' ? { id, name: typeof name === 'string' ? name : id } : null,
+    error: typeof value['error'] === 'string' ? value['error'] : null,
+  };
+}
+
+function parseSession(value: unknown): SessionView | null {  if (!isRecord(value)) return null;
   const { sessionId, working, cwd, label, blockedMidTurn, updatedAt, voiceName, audible } = value;
   const { handle, muted, blockedSince } = value;
   const source = SESSION_SOURCES.find((candidate) => candidate === value['source']);
@@ -345,6 +390,7 @@ function parseDaemonState(text: string): DaemonState | null {
     transport,
     midi,
     duck: parseDuck(payload['duck']),
+    bluetooth: parseBluetooth(payload['bluetooth']),
     sessions,
     config,
     settingSpecs,
@@ -400,6 +446,26 @@ function parsePlaylists(text: string): PlaylistView[] {
     playlists.push({ name, editable: editable === true, count: Math.max(Math.trunc(count), 0) });
   }
   return playlists;
+}
+
+/** Narrows the daemon's list of paired devices, dropping a malformed entry the way the
+ *  catalogue does. */
+function parseBluetoothDevices(text: string): BluetoothDevice[] {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!isRecord(payload) || !Array.isArray(payload['devices'])) return [];
+  const devices: BluetoothDevice[] = [];
+  for (const entry of payload['devices']) {
+    if (!isRecord(entry)) continue;
+    const { id, name } = entry;
+    if (typeof id !== 'string' || id.length === 0) continue;
+    devices.push({ id, name: typeof name === 'string' && name.length > 0 ? name : id });
+  }
+  return devices;
 }
 
 function activePlaylist(state: DaemonState): string {
@@ -640,6 +706,7 @@ function helpSegments(row: Row | null, width: number, active: string): Segment[]
   if (row.kind === 'section') return [{ text: SECTION_HELP[row.id], style: FG_GREY }];
   if (row.kind === 'setting') return [{ text: row.spec.help, style: FG_GREY }];
   if (row.kind === 'action') return [{ text: ACTION_HELP[row.id], style: FG_GREY }];
+  if (row.kind === 'bluetooth') return [{ text: BLUETOOTH_PHONE_STEP, style: FG_GREY }];
   if (row.kind === 'playlist') {
     if (row.playlist.count === 0) return [{ text: PLAYLIST_HELP_EMPTY, style: FG_GREY }];
     const help = row.playlist.name === active ? PLAYLIST_HELP_ACTIVE : PLAYLIST_HELP_CHOOSE;
@@ -672,8 +739,9 @@ function rowsFor(options: {
   section: SectionId | null;
   library: readonly TrackView[];
   playlists: readonly PlaylistView[];
+  bluetoothDevices: readonly BluetoothDevice[];
 }): Row[] {
-  const { state, section, library, playlists } = options;
+  const { state, section, library, playlists, bluetoothDevices } = options;
   if (section === null) {
     const sections: Row[] = SECTION_IDS.map((id) => ({ kind: 'section', key: `section:${id}`, id }));
     const volume = masterVolumeSpec(state);
@@ -685,6 +753,11 @@ function rowsFor(options: {
   }
   if (section === SECTION_MUSIC) {
     const actions: Row[] = ACTION_IDS.map((id) => ({ kind: 'action', key: `action:${id}`, id }));
+    const paired: Row[] = bluetoothDevices.map((device) => ({
+      kind: 'bluetooth',
+      key: `bluetooth:${device.id}`,
+      device,
+    }));
     const chooser: Row[] = playlists.map((playlist) => ({
       kind: 'playlist',
       key: `playlist:${playlist.name}`,
@@ -693,6 +766,7 @@ function rowsFor(options: {
     const shown = visibleTracks(library, activePlaylist(state));
     return [
       ...actions,
+      ...paired,
       ...chooser,
       ...shown.map((track): Row => ({ kind: 'track', key: `track:${track.file}`, track })),
     ];
@@ -710,6 +784,27 @@ function actionLine(options: { id: ActionId; selected: boolean; width: number })
     cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
     { text: clip(ACTION_TITLES[id], Math.max(width - 4, 0)), style: selected ? STYLE_BOLD : STYLE_NONE },
+  ];
+}
+
+/** One paired phone, marked when it is the device currently holding the sink. */
+function bluetoothLine(options: {
+  device: BluetoothDevice;
+  connected: boolean;
+  selected: boolean;
+  width: number;
+}): Segment[] {
+  const { device, connected, selected, width } = options;
+  return [
+    cursorSegment(selected),
+    {
+      text: connected ? ` ${BLUETOOTH_CONNECTED_MARK} ` : '   ',
+      style: connected ? FG_GREEN : STYLE_NONE,
+    },
+    {
+      text: clip(device.name, Math.max(width - 6, 0)),
+      style: selected || connected ? STYLE_BOLD : STYLE_NONE,
+    },
   ];
 }
 
@@ -770,6 +865,14 @@ function rowLine(options: {
   if (row.kind === 'section') return sectionLine({ id: row.id, state, library, selected, width });
   if (row.kind === 'session') return sessionLine({ session: row.session, selected, width });
   if (row.kind === 'action') return actionLine({ id: row.id, selected, width });
+  if (row.kind === 'bluetooth') {
+    return bluetoothLine({
+      device: row.device,
+      connected: row.device.id === state.bluetooth.device?.id,
+      selected,
+      width,
+    });
+  }
   if (row.kind === 'playlist') {
     const active = row.playlist.name === activePlaylist(state);
     return playlistLine({ playlist: row.playlist, active, selected, width });
@@ -784,7 +887,8 @@ function rowLine(options: {
 }
 
 /** What is actually carrying the signal. In duck mode that is the volume bridge, and a
- *  bridge that never came up is the whole feature quietly doing nothing. */
+ *  bridge that never came up is the whole feature quietly doing nothing. Bluetooth is
+ *  shown beside it, because it is what the phone's audio arrives on. */
 function sourceSegments(state: DaemonState): Segment[] {
   if (state.config.audio === 'duck') {
     return [
@@ -793,6 +897,7 @@ function sourceSegments(state: DaemonState): Segment[] {
         text: state.duck.error ?? (state.duck.ready ? 'system output' : 'no endpoint'),
         style: state.duck.error ? FG_RED : state.duck.ready ? FG_GREEN : FG_YELLOW,
       },
+      ...bluetoothSegments(state),
     ];
   }
   return [
@@ -801,11 +906,51 @@ function sourceSegments(state: DaemonState): Segment[] {
       text: state.midi.error ?? state.midi.device ?? 'no device',
       style: state.midi.error ? FG_RED : state.midi.ready ? FG_GREEN : FG_YELLOW,
     },
+    ...bluetoothSegments(state),
+  ];
+}
+
+/** The phone holding the sink open, or what is standing in the way of one. */
+function bluetoothSegments(state: DaemonState): Segment[] {
+  if (!state.config.bluetoothReceive) return [];
+  const { ready, device, error } = state.bluetooth;
+  const open = state.bluetooth.state === BLUETOOTH_OPENED;
+  return [
+    { text: `   ${BLUETOOTH_LABEL}`, style: STYLE_DIM },
+    {
+      text: error ? BLUETOOTH_NOT_LINKED_SHORT : (device?.name ?? (ready ? 'no phone' : 'starting')),
+      style: error ? FG_RED : open ? FG_GREEN : FG_YELLOW,
+    },
+  ];
+}
+
+/** The §6.2 state the user has to act on. An open link is reported as needing the phone
+ *  whatever it is doing: nothing here can see whether audio is actually arriving, and a
+ *  silent open link is the state that reads as a broken feature. */
+function bluetoothAdvice(state: DaemonState): Segment[] {
+  if (!state.config.bluetoothReceive) return [];
+  const { ready, device, error } = state.bluetooth;
+  if (error) {
+    return [
+      { text: BLUETOOTH_NOT_LINKED, style: FG_YELLOW },
+      { text: error, style: FG_RED },
+    ];
+  }
+  if (!ready) return [{ text: BLUETOOTH_STARTING, style: FG_YELLOW }];
+  if (!device) return [{ text: BLUETOOTH_CHOOSE, style: FG_YELLOW }];
+  if (state.bluetooth.state === BLUETOOTH_CLOSED) {
+    return [{ text: `${device.name} ${BLUETOOTH_DROPPED}`, style: FG_YELLOW }];
+  }
+  return [
+    { text: `${device.name} connected. `, style: FG_GREEN },
+    { text: BLUETOOTH_PHONE_STEP, style: FG_YELLOW },
   ];
 }
 
 function buildLines(view: View): string[] {
-  const { snapshot, link, section, selectedKey, notice, library, playlists } = view;  const width = clamp(process.stdout.columns ?? FALLBACK_COLUMNS, MIN_COLUMNS, MAX_COLUMNS);
+  const { snapshot, link, section, selectedKey, notice, library, playlists, bluetoothDevices } =
+    view;
+  const width = clamp(process.stdout.columns ?? FALLBACK_COLUMNS, MIN_COLUMNS, MAX_COLUMNS);
   if (!snapshot) {
     return [
       composeLine([{ text: 'LLMFM', style: STYLE_BOLD }], width),
@@ -824,6 +969,7 @@ function buildLines(view: View): string[] {
       }
     : state.transport;
 
+  const advice = bluetoothAdvice(state);
   const lines = [
     composeLine(
       [
@@ -839,6 +985,7 @@ function buildLines(view: View): string[] {
     ),
     composeLine(transportSegments(transport, width), width),
     composeLine(sourceSegments(state), width),
+    ...(advice.length > 0 ? [composeLine(advice, width)] : []),
     composeLine(
       [
         { text: `sim(${KEY_TOGGLE_SIMULATION}) `, style: STYLE_DIM },
@@ -863,8 +1010,11 @@ function buildLines(view: View): string[] {
     ),
   ];
 
-  const rows = rowsFor({ state, section, library, playlists });
-  const room = Math.max((process.stdout.rows ?? FALLBACK_ROWS) - CHROME_LINE_COUNT, 1);
+  const rows = rowsFor({ state, section, library, playlists, bluetoothDevices });
+  const room = Math.max(
+    (process.stdout.rows ?? FALLBACK_ROWS) - CHROME_LINE_COUNT - (advice.length > 0 ? 1 : 0),
+    1,
+  );
   const selectedIndexInRows = rows.findIndex((row) => row.key === selectedKey);
   const start = Math.max(Math.min(selectedIndexInRows - room + 1, rows.length - room), 0);
   const shown = rows.slice(start, start + room);
@@ -918,6 +1068,9 @@ let notice: string | null = null;
  *  rest of the payload put together. */
 let library: TrackView[] = [];
 let playlists: PlaylistView[] = [];
+/** The phones paired with this machine, listed only when the user asks: enumerating them
+ *  goes over the radio and takes tens of seconds. */
+let bluetoothDevices: BluetoothDevice[] = [];
 let restored = false;
 let quitting = false;
 
@@ -927,7 +1080,7 @@ function viewKey(): string {
 
 function currentRows(): Row[] {
   if (!snapshot) return [];
-  return rowsFor({ state: snapshot.state, section, library, playlists });
+  return rowsFor({ state: snapshot.state, section, library, playlists, bluetoothDevices });
 }
 
 function selectRow(rows: Row[], index: number): void {
@@ -951,7 +1104,7 @@ function restoreCursor(): void {
 function paint(): void {
   if (restored) return;
   const frame = [CURSOR_HOME];
-  const view = { snapshot, link, section, selectedKey, notice, library, playlists };
+  const view = { snapshot, link, section, selectedKey, notice, library, playlists, bluetoothDevices };
   for (const line of buildLines(view)) {
     frame.push(line, ERASE_TO_LINE_END, '\n');
   }
@@ -970,7 +1123,7 @@ function restoreTerminal(): void {
 function applyState(state: DaemonState, next: LinkState): void {
   snapshot = { state, receivedAt: Date.now() };
   link = next;
-  const rows = rowsFor({ state, section, library, playlists });
+  const rows = rowsFor({ state, section, library, playlists, bluetoothDevices });
   const index = rows.findIndex((row) => row.key === selectedKey);
   selectRow(rows, index >= 0 ? index : selectedIndex);
   paint();
@@ -1044,10 +1197,55 @@ function openTracksFolder(): void {
   }
 }
 
+/** Listing waits on the radio, so the notice goes up before the request rather than after
+ *  it: a frame that says nothing for half a minute reads as a dashboard that has hung. */
+async function scanBluetooth(): Promise<void> {
+  notice = BLUETOOTH_SEARCHING;
+  paint();
+  try {
+    const response = await fetch(`${DAEMON_URL}/bluetooth/devices`, {
+      signal: AbortSignal.timeout(BLUETOOTH_LIST_TIMEOUT_MS),
+    });
+    bluetoothDevices = response.ok ? parseBluetoothDevices(await response.text()) : [];
+  } catch {
+    bluetoothDevices = [];
+  }
+  if (bluetoothDevices.length > 0) notice = BLUETOOTH_PHONE_STEP;
+  else notice = snapshot?.state.config.bluetoothReceive ? BLUETOOTH_NONE_PAIRED : BLUETOOTH_SETTING_OFF;
+  restoreCursor();
+  paint();
+}
+
+/** Opening the link waits on the phone, and the state that follows it is the one the user
+ *  has to act on, so the phone step stands as the notice rather than a success message. */
+async function connectBluetooth(device: BluetoothDevice): Promise<void> {
+  notice = `${BLUETOOTH_CONNECTING} ${device.name}…`;
+  paint();
+  try {
+    const response = await fetch(`${DAEMON_URL}/bluetooth/connect`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: device.id }),
+      signal: AbortSignal.timeout(BLUETOOTH_CONNECT_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      notice = BLUETOOTH_CONNECT_FAILED;
+      paint();
+      return;
+    }
+    notice = BLUETOOTH_PHONE_STEP;
+    const state = parseDaemonState(await response.text());
+    if (state) applyState(state, link);
+    else paint();
+  } catch {
+    notice = BLUETOOTH_CONNECT_FAILED;
+    paint();
+  }
+}
+
 function runAction(id: ActionId): void {
   if (id === ACTION_BLUETOOTH) {
-    notice = BLUETOOTH_NOTICE;
-    paint();
+    void scanBluetooth();
     return;
   }
   if (id === ACTION_FOLDER) {
@@ -1135,6 +1333,11 @@ function onHorizontal(direction: 1 | -1): void {
     else leaveSection();
     return;
   }
+  if (row.kind === 'bluetooth') {
+    if (direction === 1) void connectBluetooth(row.device);
+    else leaveSection();
+    return;
+  }
   if (row.kind === 'playlist') {
     if (direction === 1) void choosePlaylist(row.playlist.name);
     else leaveSection();
@@ -1154,6 +1357,7 @@ function onActivate(): void {
   if (row.kind === 'section') enterSection(row.id);
   else if (row.kind === 'session') toggleMute(row.session);
   else if (row.kind === 'action') runAction(row.id);
+  else if (row.kind === 'bluetooth') void connectBluetooth(row.device);
   else if (row.kind === 'playlist') void choosePlaylist(row.playlist.name);
   else if (row.kind === 'track') void command('/track', { file: row.track.file });
   else cycleSetting(row.spec, 1);

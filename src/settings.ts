@@ -141,6 +141,12 @@ export const SETTING_SPECS: readonly SettingSpec[] = [
   },
   {
     kind: 'toggle',
+    key: 'bluetoothReceive',
+    title: 'Bluetooth audio',
+    help: 'Take audio from a phone paired with this PC, so the gate rides what the phone plays.',
+  },
+  {
+    kind: 'toggle',
     key: 'startupMotif',
     title: 'Startup motif',
     help: 'Play the opening four notes when the daemon starts.',
@@ -157,6 +163,7 @@ export const SETTING_DEFAULTS = {
   idleDropoutMinutes: DEFAULT_IDLE_DROPOUT_MINUTES,
   promptGap: DEFAULT_PROMPT_GAP,
   autoplay: DEFAULT_AUTOPLAY,
+  bluetoothReceive: false,
   startupMotif: true,
 } as const;
 

@@ -124,6 +124,14 @@ export const AUDIO_MODES = ['midi', 'duck'] as const;
 export type AudioMode = (typeof AUDIO_MODES)[number];
 export const DEFAULT_AUDIO: AudioMode = 'midi';
 
+/** The A2DP link states the Bluetooth bridge reports. `None` is nothing connected, and
+ *  is distinct from the `Closed` a connection reports once it has been opened and lost. */
+export const BLUETOOTH_STATES = ['None', 'Closed', 'Opened'] as const;
+export type BluetoothState = (typeof BLUETOOTH_STATES)[number];
+export const BLUETOOTH_NONE: BluetoothState = 'None';
+export const BLUETOOTH_CLOSED: BluetoothState = 'Closed';
+export const BLUETOOTH_OPENED: BluetoothState = 'Opened';
+
 export const MASTER_VOLUME_MAX = 100;
 export const DEFAULT_MASTER_VOLUME = 100;
 export const MASTER_VOLUME_STEP = 5;

@@ -3,6 +3,7 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import { DAEMON_HOST, DAEMON_PORT, GATE_MODES } from './constants.ts';
 import type { GateMode } from './constants.ts';
 import type { DaemonState } from './types.ts';
+import type { BluetoothDevice } from './bluetooth-receive.ts';
 
 /** One shipped file as the UI sees it. Search and filtering happen client side, so this
  *  carries the provenance and the shape of the piece rather than a curated subset. */
@@ -45,6 +46,12 @@ export type ApiHandlers = {
   /** False when the key is unknown or the value fails its spec, which the route turns
    *  into a 400 rather than silently accepting a setting that was never applied. */
   onSetSetting(options: { key: string; value: unknown }): boolean;
+  /** The phones paired with this machine. Enumeration waits on the radio and can take
+   *  tens of seconds, so a caller must show that something is happening. */
+  listBluetooth(): Promise<BluetoothDevice[]>;
+  /** False when the device did not give us a connection, which the route turns into a
+   *  400 rather than reporting a sink that is not open. */
+  onConnectBluetooth(options: { id: string }): Promise<boolean>;
   tracks(): TrackInfo[];
   playlists(): PlaylistInfo[];
   /** False when the name is not a playlist that exists, which the route turns into a 400. */
@@ -189,6 +196,27 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
         }
         res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(handlers.state()));
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/bluetooth/connect') {
+      void readBody(req).then(async (body) => {
+        const id = stringField(fields(body), 'id');
+        if (!id || !(await handlers.onConnectBluetooth({ id }))) {
+          res.writeHead(HTTP_BAD_REQUEST).end();
+          return;
+        }
+        res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(handlers.state()));
+      });
+      return;
+    }
+
+    if (url.pathname === '/bluetooth/devices') {
+      void handlers.listBluetooth().then((devices) => {
+        res.writeHead(HTTP_OK, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ devices }));
       });
       return;
     }

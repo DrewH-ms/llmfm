@@ -90,6 +90,9 @@ export type DaemonState = {
   /** The volume bridge duck mode rides. Published whatever the mode, so a bridge that
    *  never came up is visible rather than silently doing nothing. */
   duck: import('./system-volume.ts').SystemVolumeStatus;
+  /** The A2DP sink that supplies the audio duck mode gates. Published whatever the
+   *  setting, so a bridge that never came up is visible rather than silently absent. */
+  bluetooth: import('./bluetooth-receive.ts').BluetoothStatus;
   sessions: SessionView[];
   config: import('./config.ts').LlmfmConfig;
   /** The settings this daemon actually accepts. The dashboard builds its menu from this
