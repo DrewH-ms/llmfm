@@ -12,7 +12,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createSystemVolume, claimPath } from './system-volume.ts';
-import type { VolumeLevel } from './system-volume.ts';
+import type { ChildProcess } from 'node:child_process';
+import type { SystemVolume, VolumeLevel } from './system-volume.ts';
 
 const MODULE_PATH = path.join(import.meta.dirname, 'system-volume.ts');
 /** Distinguishable from the starting level without being audible as a jump. */
@@ -22,6 +23,10 @@ const READBACK_TOLERANCE = 1.5;
 const RESTORE_TOLERANCE = 1.0;
 /** Leaves no doubt that nothing restored the level before the next start did. */
 const AFTER_KILL_SETTLE_MS = 2000;
+/** The mixer names a session after its process when it sets no display name of its own,
+ *  so a player started by this suite appears under the host it was started from. */
+const PLAYER_SESSION_NAME = 'powershell';
+const SESSION_SETTLE_TIMEOUT_MS = 20000;
 
 let home: string;
 let startedFrom: VolumeLevel;
@@ -163,6 +168,128 @@ test('recovers a level left behind by a hard-killed daemon', async () => {
     console.log(
       `daemon killed holding ${ducked.held.level.toFixed(1)}, next start recovered ${recovered.level.toFixed(1)} (was ${ducked.original.level.toFixed(1)})`,
     );
+  } finally {
+    await restarted.stop();
+  }
+});
+
+/** A second of silence: a real render session has to exist for matching to mean anything,
+ *  and the suite runs on a machine somebody is listening to. */
+function writeSilentWav(file: string): void {
+  const rate = 8000;
+  const data = Buffer.alloc(rate * 2);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(rate, 24);
+  header.writeUInt32LE(rate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(data.length, 40);
+  writeFileSync(file, Buffer.concat([header, data]));
+}
+
+function startPlayer(wav: string): ChildProcess {
+  return spawn(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-Command',
+      `$player = New-Object Media.SoundPlayer ${JSON.stringify(wav)}; $player.PlayLooping(); Start-Sleep -Seconds 120`,
+    ],
+    { stdio: 'ignore' },
+  );
+}
+
+async function countMatching(volume: SystemVolume, name: string): Promise<number> {
+  const sessions = await volume.sessions();
+  return sessions.filter((session) => session.name.toLowerCase().includes(name)).length;
+}
+
+/** The gate the product actually wants: the stream we can name goes quiet and nothing else
+ *  on the endpoint does. Two players, because the audio service shows one name across
+ *  several sessions and a gate that stopped at the first would leave audio playing. */
+test('gates every live session matching a name, and nothing when none does', async () => {
+  const wav = path.join(home, 'silence.wav');
+  writeSilentWav(wav);
+
+  const volume = createSystemVolume();
+  assert.equal((await volume.start()).ready, true);
+  const players = [startPlayer(wav), startPlayer(wav)];
+
+  try {
+    const before = await countMatching(volume, PLAYER_SESSION_NAME);
+    const deadline = Date.now() + SESSION_SETTLE_TIMEOUT_MS;
+    let live = before;
+    while (live < before + players.length && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      live = await countMatching(volume, PLAYER_SESSION_NAME);
+    }
+    assert.equal(live, before + players.length, 'the players never appeared as live sessions');
+    console.log(
+      `live sessions: ${(await volume.sessions()).map((s) => `${s.processId} ${s.name}`).join(' | ')}`,
+    );
+
+    const endpointBefore = await volume.read();
+    assert.ok(endpointBefore);
+    const muted = await volume.setSessionMute({ name: PLAYER_SESSION_NAME, muted: true });
+    assert.equal(muted, live, 'not every live match was gated');
+    assert.equal(volume.status().gated, true, 'a closed gate was not published');
+    assert.equal(volume.status().gatedSessions, live);
+    const endpoint = await volume.read();
+    assert.deepEqual(endpoint, endpointBefore, 'a session gate must leave the endpoint where it was');
+
+    const unmuted = await volume.setSessionMute({ name: PLAYER_SESSION_NAME, muted: false });
+    assert.equal(unmuted, live);
+    assert.equal(volume.status().gated, false, 'an open gate was still published as closed');
+    assert.equal(volume.status().gatedSessions, 0);
+    assert.equal(existsSync(claimPath()), false, 'the claim is released once the gate reopens');
+
+    const missed = await volume.setSessionMute({ name: 'llmfm-no-such-session', muted: true });
+    assert.equal(missed, 0, 'a name nothing answers to must report nothing gated');
+    assert.equal(volume.status().gated, false, 'a gate that reached nothing reads as silence');
+    assert.equal(existsSync(claimPath()), false, 'a gate that matched nothing claimed anyway');
+  } finally {
+    for (const player of players) player.kill();
+    await volume.setSessionMute({ name: PLAYER_SESSION_NAME, muted: false });
+    await volume.stop();
+  }
+});
+
+/** A per-session mute belongs to the audio service, so a hard-killed daemon leaves it
+ *  behind where a hard-killed endpoint mute would at least have a level to compare. */
+test('clears a session mute left behind by a killed daemon', async () => {
+  const volume = createSystemVolume();
+  const status = await volume.start();
+  assert.equal(status.ready, true);
+  const level = await volume.read();
+  assert.ok(level && status.deviceId);
+  await volume.stop();
+
+  writeFileSync(
+    claimPath(),
+    JSON.stringify({
+      deviceId: status.deviceId,
+      baseline: level,
+      held: level,
+      sessionName: PLAYER_SESSION_NAME,
+      at: Date.now(),
+    }),
+  );
+
+  const restarted = createSystemVolume();
+  assert.equal((await restarted.start()).ready, true);
+  try {
+    assert.equal(existsSync(claimPath()), false, 'the claim outlived the start that honoured it');
+    const after = await restarted.read();
+    assert.ok(after && Math.abs(after.level - level.level) <= RESTORE_TOLERANCE);
+    assert.equal(after.muted, level.muted, 'clearing a session claim moved the endpoint');
   } finally {
     await restarted.stop();
   }

@@ -208,8 +208,10 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const audio = createAudioOut();
   const recorded = createRecordedPlayer(audio);
   const volume = createSystemVolume();
-  const duck = createDuck({ volume });
   const bluetooth = createBluetoothReceive();
+  // The phone's stream is the one thing on this machine we can name, so it is the one we
+  // gate on its own rather than by silencing the whole output.
+  const duck = createDuck({ volume, sessionName: () => bluetooth.status().device?.name ?? null });
   const orchestrator = createOrchestrator({
     registry,
     mixer,

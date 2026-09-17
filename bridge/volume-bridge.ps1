@@ -1,8 +1,13 @@
 # System volume bridge: reads commands on stdin and drives the default audio
-# render endpoint through the Core Audio IAudioEndpointVolume COM interface.
+# render endpoint through the Core Audio IAudioEndpointVolume COM interface, and
+# individual playback sessions on it through IAudioSessionControl2.
 #
 # This is how LLMFM rides music the user already chose: it cannot pause someone
 # else's stream, only change the level it plays at.
+#
+# The endpoint gate silences the whole device. When the caller knows which
+# application is playing what we mean to gate, it names that session instead and
+# only that stream goes quiet.
 #
 # The endpoint's level at startup is the baseline, and this process restores it
 # from its own `finally` block, including when the process that started it exits
@@ -27,6 +32,10 @@
 #                       which is how a level left behind by a killed daemon is
 #                       recovered on the next start
 #   R                   restore the baseline and release the claim
+#   M <match>           mute every live session whose display name contains
+#                       <match>, matched case-insensitively
+#   U <match>           unmute the same
+#   E                   list the live sessions on the endpoint
 #   Q                   quit
 # Responses:
 #   OK <scalar> <0|1> <deviceId>            once, at startup
@@ -34,6 +43,8 @@
 #                                           current level and mute, then the
 #                                           level and mute we would restore to,
 #                                           then the endpoint they belong to
+#   A <count>                               sessions the gate was applied to
+#   P <processId> <name>                    one per live session, then N <count>
 #   ERR <message>
 
 param([int] $ParentPid = 0)
@@ -44,7 +55,7 @@ Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
-[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IAudioEndpointVolume {
     int RegisterControlChangeNotify(IntPtr pNotify);
     int UnregisterControlChangeNotify(IntPtr pNotify);
@@ -61,18 +72,65 @@ interface IAudioEndpointVolume {
     int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
 }
 
-[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+// Declaration order is the vtable in every interface below, so a slot nothing calls is
+// still load-bearing: removing one silently rebinds the methods after it.
+
+[ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ISimpleAudioVolume {
+    int SetMasterVolume(float level, ref Guid eventContext);
+    int GetMasterVolume(out float level);
+    int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid eventContext);
+    int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+}
+
+[ComImport, Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionControl2 {
+    // IAudioSessionControl first: the derived interface extends its vtable.
+    int GetState(out int state);
+    int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+    int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string value, ref Guid eventContext);
+    int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string path);
+    int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string value, ref Guid eventContext);
+    int GetGroupingParam(out Guid groupingParam);
+    int SetGroupingParam(ref Guid grouping, ref Guid eventContext);
+    int RegisterAudioSessionNotification(IntPtr newNotifications);
+    int UnregisterAudioSessionNotification(IntPtr newNotifications);
+    int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+    int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string id);
+    int GetProcessId(out uint processId);
+    int IsSystemSoundsSession();
+    int SetDuckingPreference([MarshalAs(UnmanagedType.Bool)] bool optOut);
+}
+
+[ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionEnumerator {
+    int GetCount(out int count);
+    // Hands back an IAudioSessionControl; the caller queries it for the rest.
+    int GetSession(int index, [MarshalAs(UnmanagedType.IUnknown)] out object session);
+}
+
+[ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionManager2 {
+    // IAudioSessionManager first, for the same reason as IAudioSessionControl2.
+    int GetAudioSessionControl(IntPtr audioSessionGuid, int streamFlags, out IntPtr sessionControl);
+    int GetSimpleAudioVolume(IntPtr audioSessionGuid, int streamFlags, out IntPtr audioVolume);
+    int GetSessionEnumerator(out IAudioSessionEnumerator sessions);
+    int RegisterSessionNotification(IntPtr sessionNotification);
+    int UnregisterSessionNotification(IntPtr sessionNotification);
+    int RegisterDuckNotification([MarshalAs(UnmanagedType.LPWStr)] string sessionId, IntPtr duckNotification);
+    int UnregisterDuckNotification(IntPtr duckNotification);
+}
+
+[ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IMMDevice {
-    int Activate(ref Guid iid, int clsCtx, IntPtr activationParams, out IAudioEndpointVolume endpointVolume);
+    int Activate(ref Guid iid, int clsCtx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object instance);
     int OpenPropertyStore(int stgmAccess, out IntPtr properties);
     int GetId([MarshalAs(UnmanagedType.LPWStr)] out string id);
     int GetState(out int state);
 }
 
-[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IMMDeviceEnumerator {
-    // Declaration order is the vtable, so this slot is load-bearing even though nothing
-    // calls it. Removing it would silently rebind the method below to the wrong function.
     int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr devices);
     int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice device);
 }
@@ -84,6 +142,7 @@ public class LlmfmSystemVolume {
     const int RENDER = 0;
     const int CONSOLE = 0;
     const int CLSCTX_ALL = 23;
+    const int SESSION_EXPIRED = 2;
 
     // Identifies our own changes in the endpoint's change notifications, so a
     // volume OSD or another listener can tell them from the user's.
@@ -111,9 +170,9 @@ public class LlmfmSystemVolume {
         IMMDevice device;
         if (enumerator.GetDefaultAudioEndpoint(RENDER, CONSOLE, out device) != 0) return null;
         Guid iid = typeof(IAudioEndpointVolume).GUID;
-        IAudioEndpointVolume volume;
+        object volume;
         if (device.Activate(ref iid, CLSCTX_ALL, IntPtr.Zero, out volume) != 0) return null;
-        endpoint = volume;
+        endpoint = (IAudioEndpointVolume)volume;
         string id;
         if (device.GetId(out id) != 0) id = "unknown";
         deviceId = id;
@@ -140,6 +199,96 @@ public class LlmfmSystemVolume {
 
     public static void SetMute(bool mute) {
         if (endpoint.SetMute(mute, ref eventContext) != 0) throw new Exception("SetMute failed");
+    }
+
+    // Sessions are enumerated fresh for every call: they come and go on their own, a
+    // reconnecting device gets a new one, and a pointer kept from last time would gate
+    // something that has already ended.
+    static IAudioSessionEnumerator OpenSessions() {
+        IMMDeviceEnumerator enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
+        IMMDevice device;
+        if (enumerator.GetDefaultAudioEndpoint(RENDER, CONSOLE, out device) != 0) return null;
+        Guid iid = typeof(IAudioSessionManager2).GUID;
+        object manager;
+        if (device.Activate(ref iid, CLSCTX_ALL, IntPtr.Zero, out manager) != 0) return null;
+        IAudioSessionEnumerator sessions;
+        if (((IAudioSessionManager2)manager).GetSessionEnumerator(out sessions) != 0) return null;
+        return sessions;
+    }
+
+    // What the volume mixer shows for a session: its own display name, or the name of the
+    // process behind it when it does not set one.
+    static string Label(IAudioSessionControl2 session) {
+        string name;
+        if (session.GetDisplayName(out name) == 0 && !string.IsNullOrEmpty(name)) return name;
+        uint pid;
+        if (session.GetProcessId(out pid) != 0 || pid == 0) return "";
+        try {
+            return System.Diagnostics.Process.GetProcessById((int)pid).ProcessName;
+        } catch {
+            return "";
+        }
+    }
+
+    // Live sessions only. An expired session is a leftover of a stream that has already
+    // ended, and the mixer keeps showing several of them; gating one would look like
+    // success while the stream we meant to reach played on.
+    static IAudioSessionControl2 Live(IAudioSessionEnumerator sessions, int index) {
+        object control;
+        if (sessions.GetSession(index, out control) != 0) return null;
+        IAudioSessionControl2 session = control as IAudioSessionControl2;
+        if (session == null) return null;
+        int state;
+        if (session.GetState(out state) != 0 || state == SESSION_EXPIRED) {
+            Marshal.ReleaseComObject(session);
+            return null;
+        }
+        return session;
+    }
+
+    // "<processId> <label>" for every live session on the endpoint, so a gate that matched
+    // nothing can say what was actually playing.
+    public static string[] ListSessions() {
+        var found = new System.Collections.Generic.List<string>();
+        IAudioSessionEnumerator sessions = OpenSessions();
+        if (sessions == null) return found.ToArray();
+        int count;
+        if (sessions.GetCount(out count) != 0) count = 0;
+        for (int index = 0; index < count; index++) {
+            IAudioSessionControl2 session = Live(sessions, index);
+            if (session == null) continue;
+            uint pid;
+            if (session.GetProcessId(out pid) != 0) pid = 0;
+            found.Add(pid.ToString() + " " + Label(session));
+            Marshal.ReleaseComObject(session);
+        }
+        Marshal.ReleaseComObject(sessions);
+        return found.ToArray();
+    }
+
+    // Every live match is acted on, not just the first: the same name can belong to more
+    // than one live stream, and missing one leaves the gate half open.
+    public static int SetSessionMute(string match, bool mute) {
+        IAudioSessionEnumerator sessions = OpenSessions();
+        if (sessions == null) return 0;
+        int count;
+        if (sessions.GetCount(out count) != 0) count = 0;
+        int acted = 0;
+        for (int index = 0; index < count; index++) {
+            IAudioSessionControl2 session = Live(sessions, index);
+            if (session == null) continue;
+            string label = Label(session);
+            if (label.IndexOf(match, StringComparison.OrdinalIgnoreCase) >= 0) {
+                ISimpleAudioVolume volume = session as ISimpleAudioVolume;
+                if (volume != null) {
+                    if (volume.SetMute(mute, ref eventContext) == 0) acted++;
+                    Marshal.ReleaseComObject(volume);
+                }
+            }
+            Marshal.ReleaseComObject(session);
+        }
+        Marshal.ReleaseComObject(sessions);
+        return acted;
     }
 }
 '@
@@ -281,6 +430,17 @@ try {
             } elseif ($command -eq 'R') {
                 Restore-Baseline
                 Write-Line (Format-State)
+            } elseif ($command -eq 'M' -or $command -eq 'U') {
+                $match = $line.Substring(2)
+                if ($match.Length -eq 0) {
+                    Write-Line "ERR no session match given"
+                } else {
+                    Write-Line ('A ' + [LlmfmSystemVolume]::SetSessionMute($match, ($command -eq 'M')))
+                }
+            } elseif ($command -eq 'E') {
+                $sessions = [LlmfmSystemVolume]::ListSessions()
+                foreach ($session in $sessions) { Write-Line ('P ' + $session) }
+                Write-Line ('N ' + $sessions.Count)
             } else {
                 Write-Line "ERR unknown command"
             }

@@ -26,7 +26,7 @@ function daemonState(): DaemonState {
     track: null,
     transport: { playing: false, position: 0, duration: 0 },
     midi: { ready: false, device: null, error: null },
-    duck: { ready: false, deviceId: null, error: null },
+    duck: { ready: false, deviceId: null, gated: false, gatedSessions: 0, error: null },
     bluetooth: {
       ready: true,
       state: connected ? 'Opened' : 'None',

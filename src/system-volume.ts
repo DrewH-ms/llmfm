@@ -30,14 +30,29 @@ const SCALAR_DIGITS = 6;
 /** Half a percentage point, below any step the volume keys or the slider take. */
 const MANUAL_CHANGE_TOLERANCE = 0.5;
 const CLAIM_FILE_NAME = 'llmfm-volume-claim.json';
+const ERROR_PREFIX = 'ERR ';
+const ACTED_PREFIX = 'A ';
+const SESSION_PREFIX = 'P ';
+const SESSION_LIST_END_PREFIX = 'N ';
+/** No gate of ours is in place: the starting state, and what every path that gives the
+ *  endpoint back returns to. */
+const UNGATED = { gated: false, gatedSessions: 0 };
 
 /** Level is 0–100, matching the Windows volume slider. */
 export type VolumeLevel = { level: number; muted: boolean };
+
+/** A playback stream on the endpoint, named as the volume mixer names it. */
+export type AudioSession = { processId: number; name: string };
 
 export type SystemVolumeStatus = {
   ready: boolean;
   /** Core Audio endpoint id of the device we hold, or null before the bridge reports. */
   deviceId: string | null;
+  /** True while a mute we applied is in place — the silence downstream hears is ours. */
+  gated: boolean;
+  /** How many audio sessions that mute reached. Zero while the endpoint carries the gate,
+   *  and also what a gate that matched nothing leaves behind. */
+  gatedSessions: number;
   error: string | null;
 };
 
@@ -51,6 +66,9 @@ type VolumeClaim = {
   baseline: VolumeLevel;
   /** What we left the level at. The next start restores only if it is still there. */
   held: VolumeLevel;
+  /** The session we muted instead of the endpoint, which outlives us because the session
+   *  belongs to the audio service rather than to this process. */
+  sessionName: string | null;
   at: number;
 };
 
@@ -61,6 +79,11 @@ export type SystemVolume = {
   read(): Promise<VolumeLevel | null>;
   /** Captures the baseline on the first call. Omitted fields keep their current value. */
   set(target: { level?: number; muted?: boolean }): Promise<VolumeLevel | null>;
+  /** Gates every live session whose mixer name contains `name`, case-insensitively, and
+   *  reports how many were acted on. Null when the bridge could not answer. */
+  setSessionMute(options: { name: string; muted: boolean }): Promise<number | null>;
+  /** The live playback streams on the endpoint. */
+  sessions(): Promise<AudioSession[]>;
   /** What the level would return to, or null before anything has been read. */
   baseline(): VolumeLevel | null;
   restore(): Promise<VolumeLevel | null>;
@@ -101,10 +124,11 @@ function readClaim(): VolumeClaim | null {
   const record = payload as Record<string, unknown>;
   const deviceId = record['deviceId'];
   const at = record['at'];
+  const sessionName = record['sessionName'];
   const baseline = asVolumeLevel(record['baseline']);
   const held = asVolumeLevel(record['held']);
   if (typeof deviceId !== 'string' || typeof at !== 'number' || !baseline || !held) return null;
-  return { deviceId, baseline, held, at };
+  return { deviceId, baseline, held, sessionName: typeof sessionName === 'string' ? sessionName : null, at };
 }
 
 function asVolumeLevel(value: unknown): VolumeLevel | null {
@@ -139,49 +163,90 @@ function clearClaim(): void {
 
 export function createSystemVolume(): SystemVolume {
   let proc: ChildProcessWithoutNullStreams | null = null;
-  let state: SystemVolumeStatus = { ready: false, deviceId: null, error: null };
+  let state: SystemVolumeStatus = { ready: false, deviceId: null, ...UNGATED, error: null };
   let last: VolumeReading | null = null;
   /** One in-flight command at a time; the bridge answers each line in order. */
   const waiting: Array<(line: string) => void> = [];
 
   const fail = (error: string): void => {
-    state = { ready: false, deviceId: state.deviceId, error };
-    while (waiting.length > 0) waiting.shift()?.(`ERR ${error}`);
+    state = { ready: false, deviceId: state.deviceId, ...UNGATED, error };
+    while (waiting.length > 0) waiting.shift()?.(`${ERROR_PREFIX}${error}`);
   };
 
-  const request = (command: string): Promise<VolumeReading | null> => {
-    if (!state.ready || !proc) return Promise.resolve(null);
+  /** Collects reply lines until `isLast` accepts one. Resolves empty when the bridge is
+   *  not running, so no caller has to know whether it is. */
+  const exchange = (options: {
+    command: string;
+    isLast: (line: string) => boolean;
+  }): Promise<string[]> => {
+    if (!state.ready || !proc) return Promise.resolve([]);
     return new Promise((resolve) => {
+      const lines: string[] = [];
       let settled = false;
-      const timer = setTimeout(() => settle('ERR bridge did not answer'), COMMAND_TIMEOUT_MS);
-      timer.unref();
 
-      const settle = (line: string): void => {
+      const finish = (line: string): void => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        const parts = line.split(' ');
-        const current = parseLevel(parts[1], parts[2]);
-        const baseline = parseLevel(parts[3], parts[4]);
-        if (parts[0] !== 'V' || !current || !baseline) {
-          state = { ...state, error: line.startsWith('ERR ') ? line.slice('ERR '.length) : line };
-          resolve(null);
-          return;
-        }
-        last = { current, baseline };
-        // The bridge follows the default endpoint, so which device the claim is about can
-        // change under a running daemon.
-        if (parts[5]) state = { ...state, deviceId: parts[5] };
-        resolve(last);
+        lines.push(line);
+        resolve(lines);
       };
 
-      waiting.push(settle);
+      const receive = (line: string): void => {
+        if (settled) return;
+        if (line.startsWith(ERROR_PREFIX) || options.isLast(line)) {
+          finish(line);
+          return;
+        }
+        lines.push(line);
+        waiting.push(receive);
+      };
+
+      const timer = setTimeout(
+        () => finish(`${ERROR_PREFIX}bridge did not answer`),
+        COMMAND_TIMEOUT_MS,
+      );
+      timer.unref();
+
+      waiting.push(receive);
       try {
-        proc?.stdin.write(`${command}\n`);
+        proc?.stdin.write(`${options.command}\n`);
       } catch {
         fail('bridge stdin closed');
       }
     });
+  };
+
+  /** Records the reply the bridge could not give as the reason the caller got nothing. */
+  const refuse = (line: string): null => {
+    state = {
+      ...state,
+      error: line.startsWith(ERROR_PREFIX) ? line.slice(ERROR_PREFIX.length) : line,
+    };
+    return null;
+  };
+
+  const request = async (command: string): Promise<VolumeReading | null> => {
+    const line = (await exchange({ command, isLast: () => true }))[0];
+    if (!line) return null;
+    const parts = line.split(' ');
+    const current = parseLevel(parts[1], parts[2]);
+    const baseline = parseLevel(parts[3], parts[4]);
+    if (parts[0] !== 'V' || !current || !baseline) return refuse(line);
+    last = { current, baseline };
+    // The bridge follows the default endpoint, so which device the claim is about can
+    // change under a running daemon.
+    if (parts[5]) state = { ...state, deviceId: parts[5] };
+    return last;
+  };
+
+  const gateSessions = async (options: { name: string; muted: boolean }): Promise<number | null> => {
+    const command = `${options.muted ? 'M' : 'U'} ${options.name}`;
+    const line = (await exchange({ command, isLast: () => true }))[0];
+    if (!line) return null;
+    if (!line.startsWith(ACTED_PREFIX)) return refuse(line);
+    const acted = Number(line.slice(ACTED_PREFIX.length));
+    return Number.isFinite(acted) ? acted : refuse(line);
   };
 
   /** A level left behind when the daemon and its bridge were killed together. Restored
@@ -190,12 +255,14 @@ export function createSystemVolume(): SystemVolume {
   const recover = async (): Promise<void> => {
     const claim = readClaim();
     if (!claim) return;
-    if (claim.deviceId !== state.deviceId || !last || !sameLevel(last.current, claim.held)) {
-      clearClaim();
-      return;
+    if (claim.sessionName) {
+      // A session mute survives the process that set it and belongs to no device level,
+      // so it is cleared whatever the endpoint has done since.
+      await gateSessions({ name: claim.sessionName, muted: false });
+    } else if (claim.deviceId === state.deviceId && last && sameLevel(last.current, claim.held)) {
+      const baseline = claim.baseline;
+      await request(`B ${toScalar(baseline.level)} ${baseline.muted ? 1 : 0}`);
     }
-    const baseline = claim.baseline;
-    await request(`B ${toScalar(baseline.level)} ${baseline.muted ? 1 : 0}`);
     clearClaim();
   };
 
@@ -212,7 +279,7 @@ export function createSystemVolume(): SystemVolume {
         };
 
         const timer = setTimeout(
-          () => settle({ ready: false, deviceId: null, error: 'bridge did not report an endpoint' }),
+          () => settle({ ready: false, deviceId: null, ...UNGATED, error: 'bridge did not report an endpoint' }),
           BRIDGE_START_TIMEOUT_MS,
         );
         timer.unref();
@@ -224,7 +291,7 @@ export function createSystemVolume(): SystemVolume {
             { stdio: ['pipe', 'pipe', 'pipe'] },
           );
         } catch (error) {
-          settle({ ready: false, deviceId: null, error: String(error) });
+          settle({ ready: false, deviceId: null, ...UNGATED, error: String(error) });
           return;
         }
 
@@ -246,13 +313,13 @@ export function createSystemVolume(): SystemVolume {
                 last = { current, baseline: current };
                 // Ready before the claim is honoured, because recovery goes through the
                 // same commands; start() still only resolves once the level is settled.
-                state = { ready: true, deviceId, error: null };
+                state = { ready: true, deviceId, ...UNGATED, error: null };
                 void recover().then(() => settle(state));
               } else {
-                settle({ ready: false, deviceId: null, error: 'bridge reported no endpoint' });
+                settle({ ready: false, deviceId: null, ...UNGATED, error: 'bridge reported no endpoint' });
               }
             } else if (line.startsWith('ERR ') && !settled) {
-              settle({ ready: false, deviceId: null, error: line.slice('ERR '.length) });
+              settle({ ready: false, deviceId: null, ...UNGATED, error: line.slice(ERROR_PREFIX.length) });
             } else if (waiting.length > 0) {
               waiting.shift()?.(line);
             }
@@ -260,11 +327,11 @@ export function createSystemVolume(): SystemVolume {
           }
         });
 
-        proc.on('error', (error) => settle({ ready: false, deviceId: null, error: error.message }));
+        proc.on('error', (error) => settle({ ready: false, deviceId: null, ...UNGATED, error: error.message }));
         proc.on('exit', () => {
           proc = null;
           fail(state.error ?? 'bridge exited');
-          settle({ ready: false, deviceId: null, error: state.error });
+          settle({ ready: false, deviceId: null, ...UNGATED, error: state.error });
         });
       });
     },
@@ -283,14 +350,59 @@ export function createSystemVolume(): SystemVolume {
       const level = target.level ?? current.current.level;
       const muted = target.muted ?? current.current.muted;
       const reading = await request(`S ${toScalar(level)} ${muted ? 1 : 0}`);
-      if (!reading || !state.deviceId) return null;
+      const deviceId = state.deviceId;
+      if (!reading || !deviceId) return null;
+      state = { ...state, gated: reading.current.muted, gatedSessions: 0 };
       writeClaim({
-        deviceId: state.deviceId,
+        deviceId,
         baseline: reading.baseline,
         held: reading.current,
+        sessionName: null,
         at: Date.now(),
       });
       return reading.current;
+    },
+
+    async setSessionMute(options: { name: string; muted: boolean }): Promise<number | null> {
+      const acted = await gateSessions(options);
+      if (acted === null) return null;
+      // A gate that reached nothing is not a gate, so it is published as open rather than
+      // as silence somebody would go looking for.
+      const held = options.muted && acted > 0;
+      state = { ...state, gated: held, gatedSessions: held ? acted : 0 };
+      if (!options.muted) {
+        clearClaim();
+        return acted;
+      }
+      const reading = acted > 0 ? await request('G') : null;
+      // The endpoint is untouched by a session gate, so the claim owes back the level
+      // exactly as it stands and exists only to clear the mute after a hard kill.
+      if (reading && state.deviceId) {
+        writeClaim({
+          deviceId: state.deviceId,
+          baseline: reading.current,
+          held: reading.current,
+          sessionName: options.name,
+          at: Date.now(),
+        });
+      }
+      return acted;
+    },
+
+    async sessions(): Promise<AudioSession[]> {
+      const lines = await exchange({
+        command: 'E',
+        isLast: (line) => line.startsWith(SESSION_LIST_END_PREFIX),
+      });
+      const found: AudioSession[] = [];
+      for (const line of lines) {
+        if (!line.startsWith(SESSION_PREFIX)) continue;
+        const parts = line.split(' ');
+        const processId = Number(parts[1]);
+        if (!Number.isFinite(processId)) continue;
+        found.push({ processId, name: parts.slice(2).join(' ') });
+      }
+      return found;
     },
 
     baseline(): VolumeLevel | null {
@@ -301,14 +413,17 @@ export function createSystemVolume(): SystemVolume {
       const reading = await request('R');
       // A restore the bridge could not confirm is the moment the claim matters most, so
       // the durable record outlives it and the next start puts the level back.
-      if (reading) clearClaim();
+      if (reading) {
+        state = { ...state, ...UNGATED };
+        clearClaim();
+      }
       return reading?.current ?? null;
     },
 
     async stop(): Promise<void> {
       const restored = state.ready ? await request('R') : null;
       if (!state.ready || restored) clearClaim();
-      state = { ready: false, deviceId: state.deviceId, error: state.error };
+      state = { ready: false, deviceId: state.deviceId, ...UNGATED, error: state.error };
       try {
         proc?.stdin.write('Q\n');
         proc?.stdin.end();

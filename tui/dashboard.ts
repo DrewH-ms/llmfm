@@ -285,11 +285,20 @@ function parseMidi(value: unknown): MidiStatus | null {
 
 /** An unreadable field reads as "no endpoint" rather than rejecting the whole snapshot. */
 function parseDuck(value: unknown): SystemVolumeStatus {
-  if (!isRecord(value)) return { ready: false, deviceId: null, error: null };
-  const { ready, deviceId, error } = value;
+  const absent: SystemVolumeStatus = {
+    ready: false,
+    deviceId: null,
+    gated: false,
+    gatedSessions: 0,
+    error: null,
+  };
+  if (!isRecord(value)) return absent;
+  const { ready, deviceId, gated, gatedSessions, error } = value;
   return {
     ready: ready === true,
     deviceId: typeof deviceId === 'string' ? deviceId : null,
+    gated: gated === true,
+    gatedSessions: typeof gatedSessions === 'number' && gatedSessions >= 0 ? gatedSessions : 0,
     error: typeof error === 'string' ? error : null,
   };
 }

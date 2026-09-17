@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createDuck } from './duck.ts';
-import type { SystemVolume, SystemVolumeStatus, VolumeLevel } from './system-volume.ts';
+import type { AudioSession, SystemVolume, SystemVolumeStatus, VolumeLevel } from './system-volume.ts';
 
 const DEVICE_ID = 'fake-endpoint';
 /** Half a percentage point, matching what the bridge treats as the user's own move. */
@@ -13,6 +13,9 @@ type FakeVolume = SystemVolume & {
   /** Every level the duck asked for. It must never ask for one. */
   levelWrites: number[];
   muteWrites: boolean[];
+  /** The streams on the endpoint, and which of them are muted. */
+  live: AudioSession[];
+  sessionMutes: string[];
   restores: number;
   fail: boolean;
   /** How long the bridge takes to answer a `set`, so a command can be genuinely in
@@ -36,11 +39,19 @@ function fakeVolume(startLevel: number): FakeVolume {
     current: { level: startLevel, muted: false },
     levelWrites: [],
     muteWrites: [],
+    live: [],
+    sessionMutes: [],
     restores: 0,
     fail: false,
     delayMs: 0,
     start: (): Promise<SystemVolumeStatus> => Promise.resolve(volume.status()),
-    status: (): SystemVolumeStatus => ({ ready: true, deviceId: DEVICE_ID, error: null }),
+    status: (): SystemVolumeStatus => ({
+      ready: true,
+      deviceId: DEVICE_ID,
+      gated: volume.current.muted || volume.sessionMutes.length > 0,
+      gatedSessions: volume.sessionMutes.length,
+      error: null,
+    }),
     read: (): Promise<VolumeLevel | null> =>
       Promise.resolve(volume.fail ? null : { ...volume.current }),
     set: async ({ level, muted }): Promise<VolumeLevel | null> => {
@@ -56,6 +67,20 @@ function fakeVolume(startLevel: number): FakeVolume {
       held = { ...volume.current };
       return { ...volume.current };
     },
+    setSessionMute: async ({ name, muted }): Promise<number | null> => {
+      if (volume.delayMs > 0) await wait(volume.delayMs);
+      if (volume.fail) return null;
+      const matched = volume.live.filter((session) =>
+        session.name.toLowerCase().includes(name.toLowerCase()),
+      );
+      for (const session of matched) {
+        volume.sessionMutes = muted
+          ? [...volume.sessionMutes, session.name]
+          : volume.sessionMutes.filter((entry) => entry !== session.name);
+      }
+      return matched.length;
+    },
+    sessions: (): Promise<AudioSession[]> => Promise.resolve(volume.live.map((s) => ({ ...s }))),
     baseline: (): VolumeLevel | null => ({ ...baseline }),
     restore: (): Promise<VolumeLevel | null> => {
       if (volume.fail) return Promise.resolve(null);
@@ -88,7 +113,7 @@ async function until(predicate: () => boolean, what: string): Promise<void> {
 
 test('a closed gate mutes the endpoint, and an open one gives it back', async () => {
   const volume = fakeVolume(70);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
   await duck.start();
   assert.equal(volume.current.muted, false, 'starting must not change anything');
 
@@ -108,7 +133,7 @@ test('a closed gate mutes the endpoint, and an open one gives it back', async ()
  *  A ramp down to zero must not creep back in. */
 test('the level is never written, at zero or at anything else', async () => {
   const volume = fakeVolume(55);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
   await duck.start();
 
   for (let round = 0; round < 3; round += 1) {
@@ -125,7 +150,7 @@ test('the level is never written, at zero or at anything else', async () => {
 
 test('stopping leaves the endpoint unmuted', async () => {
   const volume = fakeVolume(42);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
   await duck.start();
 
   duck.setAudible({ audible: false, fadeSeconds: 0 });
@@ -140,7 +165,7 @@ test('stopping leaves the endpoint unmuted', async () => {
  *  restore that was supposed to undo it, or the machine is left silent. */
 test('a mute still in flight cannot outlive the stop that follows it', async () => {
   const volume = fakeVolume(80);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
   await duck.start();
   volume.delayMs = 80;
 
@@ -159,7 +184,7 @@ test('a mute still in flight cannot outlive the stop that follows it', async () 
 
 test('a duck that never started leaves the endpoint alone', async () => {
   const volume = fakeVolume(33);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
 
   duck.setAudible({ audible: false, fadeSeconds: 0 });
   await wait(50);
@@ -173,7 +198,7 @@ test('a duck that never started leaves the endpoint alone', async () => {
 
 test('switching the gate repeatedly settles where the last switch asked', async () => {
   const volume = fakeVolume(60);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
   await duck.start();
 
   for (let round = 0; round < 6; round += 1) {
@@ -197,7 +222,7 @@ test('switching the gate repeatedly settles where the last switch asked', async 
 
 test('a gate that has not moved is not reissued to the bridge', async () => {
   const volume = fakeVolume(50);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
   await duck.start();
 
   for (let round = 0; round < 5; round += 1) duck.setAudible({ audible: false, fadeSeconds: 0 });
@@ -210,7 +235,7 @@ test('a gate that has not moved is not reissued to the bridge', async () => {
 
 test('a bridge that fails leaves the gate to be retried, not assumed applied', async () => {
   const volume = fakeVolume(90);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
   await duck.start();
 
   volume.fail = true;
@@ -228,7 +253,7 @@ test('a bridge that fails leaves the gate to be retried, not assumed applied', a
 
 test('a flag the user cleared themselves is not set again behind them', async () => {
   const volume = fakeVolume(25);
-  const duck = createDuck({ volume });
+  const duck = createDuck({ volume, sessionName: () => null });
   await duck.start();
 
   duck.setAudible({ audible: false, fadeSeconds: 0 });
@@ -241,5 +266,86 @@ test('a flag the user cleared themselves is not set again behind them', async ()
   assert.equal(volume.current.muted, false, 'we muted over the user unmuting themselves');
 
   await duck.stop();
+  assert.equal(volume.current.muted, false);
+});
+
+
+/** The point of naming a session: a call, a notification or anything else on the machine
+ *  keeps playing while the stream we were asked to gate goes quiet. */
+test('a named session is gated on its own and the endpoint is left alone', async () => {
+  const volume = fakeVolume(65);
+  volume.live = [
+    { processId: 5348, name: 'Microphone (The Static A2DP SNK)' },
+    { processId: 1234, name: 'Teams' },
+  ];
+  const duck = createDuck({ volume, sessionName: () => 'The Static' });
+  await duck.start();
+
+  duck.setAudible({ audible: false, fadeSeconds: 0 });
+  await until(() => volume.sessionMutes.length > 0, 'the gate never muted a session');
+  assert.deepEqual(volume.sessionMutes, ['Microphone (The Static A2DP SNK)']);
+  assert.equal(volume.current.muted, false, 'the endpoint was muted behind the session gate');
+  assert.deepEqual(volume.muteWrites, []);
+
+  duck.setAudible({ audible: true, fadeSeconds: 0 });
+  await until(() => volume.sessionMutes.length === 0, 'the session was never unmuted');
+
+  await duck.stop();
+  assert.deepEqual(volume.sessionMutes, []);
+  assert.equal(volume.current.muted, false);
+});
+
+/** The audio service shows several sessions under one name and only some are live, so a
+ *  gate that stopped at the first match would leave the stream playing. */
+test('every live session sharing the name is gated', async () => {
+  const volume = fakeVolume(65);
+  const name = 'Microphone (The Static A2DP SNK)';
+  volume.live = [
+    { processId: 5348, name },
+    { processId: 5348, name },
+    { processId: 1234, name: 'wmplayer' },
+  ];
+  const duck = createDuck({ volume, sessionName: () => 'The Static' });
+  await duck.start();
+
+  duck.setAudible({ audible: false, fadeSeconds: 0 });
+  await until(() => volume.sessionMutes.length === 2, 'not every live match was gated');
+
+  await duck.stop();
+  assert.deepEqual(volume.sessionMutes, []);
+});
+
+/** Matching nothing means the audio is not where we think it is. Muting the endpoint in
+ *  its place would silence the whole machine and still not gate the stream. */
+test('a name that matches nothing does not fall back to muting the endpoint', async () => {
+  const volume = fakeVolume(65);
+  volume.live = [{ processId: 1234, name: 'wmplayer' }];
+  const duck = createDuck({ volume, sessionName: () => 'The Static' });
+  await duck.start();
+
+  duck.setAudible({ audible: false, fadeSeconds: 0 });
+  await wait(100);
+  assert.deepEqual(volume.sessionMutes, []);
+  assert.equal(volume.current.muted, false, 'the endpoint was muted for a session we never found');
+  assert.deepEqual(volume.muteWrites, []);
+
+  await duck.stop();
+});
+
+/** The phone is released before the duck on the way down, so the gate has to remember
+ *  what it muted rather than ask again. */
+test('a session is released even once nothing can name it any more', async () => {
+  const volume = fakeVolume(65);
+  volume.live = [{ processId: 5348, name: 'Microphone (The Static A2DP SNK)' }];
+  let device: string | null = 'The Static';
+  const duck = createDuck({ volume, sessionName: () => device });
+  await duck.start();
+
+  duck.setAudible({ audible: false, fadeSeconds: 0 });
+  await until(() => volume.sessionMutes.length === 1, 'the gate never closed');
+
+  device = null;
+  await duck.stop();
+  assert.deepEqual(volume.sessionMutes, [], 'a muted session outlived the daemon');
   assert.equal(volume.current.muted, false);
 });
