@@ -172,7 +172,7 @@ export const SETTING_DEFAULTS = {
   promptGap: DEFAULT_PROMPT_GAP,
   subagents: DEFAULT_SUBAGENTS,
   autoplay: DEFAULT_AUTOPLAY,
-  bluetoothReceive: false,
+  bluetoothReceive: true,
 } as const;
 
 export function specFor(key: string): SettingSpec | null {

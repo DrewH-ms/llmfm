@@ -200,7 +200,10 @@ test('the transport runs while anything sounds and pauses when nothing does', ()
   const { scheduler } = harness([session({ sessionId: 'a', working: true })], fakeConfig());
   assert.ok(scheduler.calls.includes('play'));
 
-  const stopped = harness([session({ sessionId: 'a', working: false })], fakeConfig());
+  const stopped = harness(
+    [session({ sessionId: 'a', working: false })],
+    fakeConfig({ silenceMode: 'pause' }),
+  );
   assert.ok(stopped.scheduler.calls.at(-1) === 'pause', 'nothing audible must pause the transport');
 });
 

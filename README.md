@@ -77,11 +77,11 @@ When you approve a permission prompt, the CLI emits **no event**. The next signa
 tool *finishing*. So between approving and completion, nothing distinguishes "still
 waiting on you" from "working hard". Neither setting is free:
 
-- `silent` (default) — the part stays quiet until the tool completes. Silence never lies
+- `silent` — the part stays quiet until the tool completes. Silence never lies
   about needing you, but a long approved command sounds exactly like a blocked one. The
   dashboard marks these `BLOCKED?` so the screen can say what the audio cannot.
-- `resume` — the part rejoins a few seconds after the prompt. Long commands sound right,
-  but step away mid-prompt and the music returns while you are still needed.
+- `resume` (default) — the part rejoins a few seconds after the prompt. Long commands
+  sound right, but step away mid-prompt and the music returns while you are still needed.
 
 ### `subagents` — work nobody is sitting in front of
 

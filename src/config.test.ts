@@ -137,6 +137,7 @@ test('turning Bluetooth receive on switches the sound source to ducking', (t) =>
   useTempHome(t);
 
   const store = createConfigStore();
+  assert.equal(store.setSetting('audio', 'midi'), true);
   assert.equal(store.current().audio, 'midi');
   assert.equal(store.setSetting('bluetoothReceive', true), true);
   assert.equal(store.current().audio, 'duck');

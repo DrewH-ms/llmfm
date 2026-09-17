@@ -38,7 +38,7 @@ export const MAX_MIDI_VALUE = 127;
 export const LOOKAHEAD_SECONDS = 0.2;
 export const SCHEDULER_TICK_MS = 25;
 export const FADE_STEP_HZ = 30;
-export const DEFAULT_FADE_SECONDS = 1;
+export const DEFAULT_FADE_SECONDS = 3;
 /** Range the fade control offers. The floor is a real crossfade rather than zero: an
  *  instant cut lands as a click, and every part changing state at once would click
  *  together. */
@@ -105,28 +105,29 @@ export const HANDLE_ID_LENGTH = 8;
  *    means the music returns and the alert is lost. */
 export const PROMPT_GAP_MODES = ['silent', 'resume'] as const;
 export type PromptGapMode = (typeof PROMPT_GAP_MODES)[number];
-export const DEFAULT_PROMPT_GAP: PromptGapMode = 'silent';
+export const DEFAULT_PROMPT_GAP: PromptGapMode = 'resume';
 
 /** Which sessions' work the music answers to. `per-agent` is the ensemble: each session
  *  gates its own voice. The rest gate the whole mix together, which is what a user who
  *  wants plain hold music across a fleet is asking for. `mode` inverts any of them. */
 export const GATE_POLICIES = ['per-agent', 'any', 'all', 'always'] as const;
 export type GatePolicy = (typeof GATE_POLICIES)[number];
-export const DEFAULT_GATE_POLICY: GatePolicy = 'per-agent';
+export const DEFAULT_GATE_POLICY: GatePolicy = 'any';
 
 /** What "silent" means. `pause` stops the transport and resumes in place. `mute` keeps it
  *  running inaudibly, which costs the resume-mid-phrase effect but is the only option once
  *  something other than us owns the audio, since we cannot pause another app's stream. */
 export const SILENCE_MODES = ['pause', 'mute'] as const;
 export type SilenceMode = (typeof SILENCE_MODES)[number];
-export const DEFAULT_SILENCE_MODE: SilenceMode = 'pause';
+export const DEFAULT_SILENCE_MODE: SilenceMode = 'mute';
 
 /** Where the signal comes from. `midi` plays LLMFM's own score; `duck` mutes and unmutes
- *  the system output endpoint to gate whatever the user is already playing and we do not
- *  own. The two are exclusive: a score played over someone else's music says nothing. */
+ *  audio we do not own — the phone's session where there is one, the output endpoint
+ *  otherwise. The two are exclusive: a score played over someone else's music says
+ *  nothing. */
 export const AUDIO_MODES = ['midi', 'duck'] as const;
 export type AudioMode = (typeof AUDIO_MODES)[number];
-export const DEFAULT_AUDIO: AudioMode = 'midi';
+export const DEFAULT_AUDIO: AudioMode = 'duck';
 
 /** The A2DP link states the Bluetooth bridge reports. `None` is nothing connected, and
  *  is distinct from the `Closed` a connection reports once it has been opened and lost. */
@@ -154,16 +155,17 @@ export const MASTER_VOLUME_CURVE_EXPONENT = 0.75;
  *  silent instead of numbering it. */
 export const DEFAULT_TRACK = 'mutopia-beethoven-coriolan-overture.mid';
 
-/** What happens when the score runs out. Off is the default because a track ending is
- *  the one moment the user can be sure the silence is not about them. */
+/** What happens when the score runs out. A track ending is the one moment the user can be
+ *  sure the silence is not about them, so it is also the one silence worth spending on
+ *  variety rather than meaning. */
 export const AUTOPLAY_MODES = ['off', 'sequential', 'random'] as const;
 export type AutoplayMode = (typeof AUTOPLAY_MODES)[number];
-export const DEFAULT_AUTOPLAY: AutoplayMode = 'off';
+export const DEFAULT_AUTOPLAY: AutoplayMode = 'random';
 
 /** Minutes a session may sit untouched before it gives up its voice; 0 disables it.
  *  The open-sessions file is never cleaned up by the CLI, so without this a closed
  *  terminal holds an instrument indefinitely. */
-export const DEFAULT_IDLE_DROPOUT_MINUTES = 0;
+export const DEFAULT_IDLE_DROPOUT_MINUTES = 20;
 export const IDLE_DROPOUT_MAX_MINUTES = 120;
 export const IDLE_DROPOUT_STEP_MINUTES = 5;
 export const MS_PER_MINUTE = 60_000;
