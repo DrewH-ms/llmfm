@@ -1,6 +1,9 @@
 node_modules/
 *.log
 
+# Kept locally as working guardrails, not shipped as part of the product.
+.github/
+
 # Settings and music are now kept with the install, so the folder a user drops files into
 # is also a git working tree. Ignore what they add; keep what ships.
 llmfm.config.json
