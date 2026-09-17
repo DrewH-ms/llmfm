@@ -3,6 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "description": "Radio for your coding agents — the music stops when they need you",
+  "keywords": [
+    "copilot-cli",
+    "copilot",
+    "hooks",
+    "midi",
+    "ambient",
+    "notifications",
+    "windows"
+  ],
+  "homepage": "https://github.com/DrewH-ms/llmfm#readme",
+  "bugs": {
+    "url": "https://github.com/DrewH-ms/llmfm/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrewH-ms/llmfm.git"
+  },
+  "license": "MIT",
+  "author": "Drew Hardie",
+  "os": [
+    "win32"
+  ],
   "type": "module",
   "bin": {
     "llmfm": "bin/llmfm.ts"

@@ -7,12 +7,7 @@ when one needs you. Sound means "still going". Silence means "you're up".
 Nothing is downloaded, nothing leaves the machine, and if the daemon is not running the
 CLI behaves exactly as normal.
 
-## Requirements
-
-- Windows with the Microsoft GS Wavetable Synth (present by default)
-- Node 24+ (runs TypeScript directly; there is no build step)
-
-## Quick start
+## How to install
 
 ```powershell
 npm install
@@ -20,15 +15,24 @@ node bin/llmfm.ts install   # install the Copilot CLI hooks
 node bin/llmfm.ts            # start the daemon and open the dashboard
 ```
 
+Then **open a new Copilot CLI session** — hooks load once at session start, so a terminal
+that was already open will not report to the daemon.
+
+## Requirements
+
+- Windows with the Microsoft GS Wavetable Synth (present by default)
+- Node 24+ (runs TypeScript directly; there is no build step)
+
+## Running it
+
 The dashboard is the program: it runs the daemon in the same process, so quitting it with
 `q` stops the music and hands your audio back. Leave the terminal open while you work.
 Daemon output goes to `llmfm.log` rather than the screen, so it cannot land in the middle
 of a frame. If a daemon is already running, this attaches to it instead and leaves it
 playing when you quit.
 
-Then **open a new Copilot CLI session**. Hooks are loaded once at session start, so a
-terminal that was already open will not report to the daemon. Resuming an existing
-session in a new terminal also works — resume starts a fresh process, which loads hooks.
+Resuming an existing session in a new terminal also works — resume starts a fresh
+process, which loads hooks.
 
 To stop observing entirely:
 
@@ -62,7 +66,8 @@ Uninstall removes only our own hook file and restores the prior state.
 
 ### Muting sessions
 
-`~/.copilot/llmfm.config.json` is re-read about once a second, so edits apply mid-piece.
+`llmfm.config.json`, in this folder beside `playlists/`, is re-read about once a second, so
+edits apply mid-piece.
 Press `m` in the dashboard to toggle the highlighted session, or write it by hand:
 
 ```json
@@ -188,7 +193,7 @@ Each track also reports `integrity`. The licence in `tracks.json` was recorded a
 specific sha256, so sourcing a track and trusting a track are separate questions: a file
 whose bytes no longer match its record reads `mismatch`, and a file with no recorded
 digest — anything you supplied yourself — reads `unrecorded` rather than borrowing the
-licence of the name it was given. `src/catalogue.test.ts` fails if any shipped file drifts
+licence of the name it was given. `src/tracks.test.ts` fails if any shipped file drifts
 from the record that licensed it.
 
 MIDI is what the product is really built for: per-part volume gating means addressing each
@@ -224,6 +229,9 @@ because we have not verified one for it. See `playlists/README.md`.
 
 ## Music and licensing
 
+LLMFM's own source is MIT — see [`LICENSE`](LICENSE). The bundled music is **not**: it is
+third-party content redistributed under the licence each publisher states for it.
+
 MIDI messages are sent to the synthesizer already installed on your machine. The
 synthesizer's sample data (`gm.dls`) is never read, copied, extracted, or redistributed —
 that is what its licence requires, and it is why there is nothing to download.
@@ -231,9 +239,9 @@ that is what its licence requires, and it is why there is nothing to download.
 Bundled music comes from the [Mutopia Project](https://www.mutopiaproject.org/), which
 states a licence per file. Some files are public domain; others are Creative Commons
 Attribution or Attribution-ShareAlike and are redistributed with the credit their licence
-requires. **See [`tracks/ATTRIBUTION.md`](tracks/ATTRIBUTION.md) for the credits**, and
-`tracks/tracks.json` for the full provenance record — source URL, stated licence, and the
-date retrieved — of every file.
+requires. **See [`playlists/bundled/ATTRIBUTION.md`](playlists/bundled/ATTRIBUTION.md) for
+the credits**, and `playlists/bundled/tracks.json` for the full provenance record — source
+URL, stated licence, and the date retrieved — of every file.
 
 A public-domain composition does not imply a public-domain sequence: a MIDI file of a
 Beethoven symphony is its own copyrightable work. Only files whose licence is stated by
@@ -241,8 +249,8 @@ the publisher are shipped. `tools/curate-tracks.ts` fetches the library and reco
 provenance; it is run by hand, and the daemon itself never touches the network.
 
 Curation also screens for dynamics. A score whose notes all share one velocity is refused
-before it is written into `tracks/`, because the signal this product sends is one part
-fading out while the others carry on, and a flat score gives that fade nothing to move
+before it is written into `playlists/bundled/`, because the signal this product sends is
+one part fading out while the others carry on, and a flat score gives that fade nothing to move
 against — it reads as the music breaking rather than as a voice leaving. Engraving tools
 write a flat velocity unless dynamics were engraved, so every file is measured and none is
 trusted for its source. `src/dynamics.test.ts` holds the bundled library to the same bar.
