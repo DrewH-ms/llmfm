@@ -13,6 +13,7 @@ import type {
   GatePolicy,
   PromptGapMode,
   SilenceMode,
+  SubagentMode,
 } from './constants.ts';
 import { SETTING_DEFAULTS, coerceSetting } from './settings.ts';
 import { copilotHooksDir } from './install.ts';
@@ -24,6 +25,9 @@ export type LlmfmConfig = {
   /** Handles whose sessions take no voice. See `matchesHandle` for what a handle matches. */
   muted: string[];
   promptGap: PromptGapMode;
+  /** What a sub-agent's work counts for: nothing, the session that dispatched it, or a
+   *  voice of its own. */
+  subagents: SubagentMode;
   gate: GatePolicy;
   /** Whether an instrument sounds while its agent works, or only when it needs you. */
   mode: GateMode;

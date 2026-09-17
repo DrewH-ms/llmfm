@@ -9,6 +9,7 @@ import {
   DEFAULT_MASTER_VOLUME,
   DEFAULT_PROMPT_GAP,
   DEFAULT_SILENCE_MODE,
+  DEFAULT_SUBAGENTS,
   FADE_MAX_SECONDS,
   FADE_MIN_SECONDS,
   FADE_STEP_SECONDS,
@@ -20,6 +21,7 @@ import {
   MASTER_VOLUME_STEP,
   PROMPT_GAP_MODES,
   SILENCE_MODES,
+  SUBAGENT_MODES,
 } from './constants.ts';
 
 /** A setting the dashboard can render and cycle without knowing what it means. Adding a
@@ -121,6 +123,18 @@ export const SETTING_SPECS: readonly SettingSpec[] = [
     labels: { silent: 'assume still blocked', resume: 'assume work resumed' },
   },
   {
+    kind: 'choice',
+    key: 'subagents',
+    title: 'Sub-agents',
+    help: 'A sub-agent is never listed as a session of its own. This is what its work counts for.',
+    choices: SUBAGENT_MODES,
+    labels: {
+      ignore: 'nothing',
+      fold: 'the agent that dispatched it',
+      voice: 'a voice of its own',
+    },
+  },
+  {
     kind: 'number',
     key: 'idleDropoutMinutes',
     title: 'Drop idle sessions',
@@ -162,6 +176,7 @@ export const SETTING_DEFAULTS = {
   silenceMode: DEFAULT_SILENCE_MODE,
   idleDropoutMinutes: DEFAULT_IDLE_DROPOUT_MINUTES,
   promptGap: DEFAULT_PROMPT_GAP,
+  subagents: DEFAULT_SUBAGENTS,
   autoplay: DEFAULT_AUTOPLAY,
   bluetoothReceive: false,
   startupMotif: true,

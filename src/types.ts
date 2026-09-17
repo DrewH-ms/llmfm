@@ -113,6 +113,9 @@ export type SessionView = Pick<
 > & {
   /** What a user types to mute this session, e.g. "Rasa (cb75a9e8)". */
   handle: string;
+  /** True when this session sounds on work a sub-agent is doing rather than its own, so
+   *  the row can say why a voice the CLI reports as stopped is still playing. */
+  folded: boolean;
   /** True when a config rule currently mutes this session; it then holds no voice. */
   muted: boolean;
   /** Null when the session is unvoiced. */

@@ -58,6 +58,9 @@ const BADGE_TEXT_SOUNDING = ' SOUNDING ';
 const BADGE_TEXT_SILENT = '  silent  ';
 const BADGE_TEXT_MUTED = '  muted   ';
 const TAG_BLOCKED = 'BLOCKED?';
+/** Says the row is sounding on a sub-agent's work, not on its own: the CLI reports this
+ *  session as stopped, and without the tag the music would look like it was lying. */
+const TAG_FOLDED = 'SUB-AGENT';
 const CURSOR_SELECTED = '▸';
 const CURSOR_UNSELECTED = ' ';
 const CYCLE_LEFT = '‹ ';
@@ -349,6 +352,9 @@ function parseSession(value: unknown): SessionView | null {  if (!isRecord(value
     audible,
     handle,
     muted,
+    // Absent rather than rejected for the same reason as the part list: an older daemon
+    // that does not send it is still telling the truth about the rest of the row.
+    folded: value['folded'] === true,
   };
 }
 
@@ -578,6 +584,7 @@ function sessionLine(options: {
   if (session.blockedMidTurn && !session.muted) {
     tags.push({ text: blockedTag(session.blockedSince), style: FG_YELLOW });
   }
+  if (session.folded && !session.muted) tags.push({ text: TAG_FOLDED, style: FG_CYAN });
 
   const badge = session.muted
     ? BADGE_TEXT_MUTED

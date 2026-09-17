@@ -142,6 +142,29 @@ test('startedAt is fixed for the lifetime of a session', (t) => {
   assert.notEqual(later.updatedAt, first.updatedAt);
 });
 
+test('a busy sub-agent does not let the file wake the session that dispatched it', (t) => {
+  t.mock.timers.enable({ apis: ['Date'] });
+  const registry = createSessionRegistry();
+  const SUB_ID = 'f0e7c1a2-0000-4000-8000-000000000001';
+
+  registry.applyHookEvent(hookEvent('userPromptSubmitted'));
+  registry.applyFileState([{ sessionId: SESSION_ID, working: true }]);
+  registry.applyHookEvent(hookEvent('agentStop'));
+
+  // The CLI stays busy while the sub-agent it dispatched runs, and reports the parent
+  // working again. Attributing that work is the orchestrator's job, and only under the
+  // rules it applies there; a registry that took the file's word would sound the parent
+  // even while it sat on a prompt.
+  registry.applyHookEvent({ ...hookEvent('preToolUse'), sessionId: SUB_ID });
+  elapseHookAuthority(t);
+  registry.applyFileState([{ sessionId: SESSION_ID, working: true }]);
+
+  assert.equal(workingOf(registry), false, 'the file must not assert work for the parent');
+  const sub = registry.list().find((entry) => entry.sessionId === SUB_ID);
+  assert.equal(sub?.working, true, 'the sub-agent is the only one actually working');
+  assert.equal(sub?.listedByCli, false, 'and it is unlisted, which is what marks it one');
+});
+
 test('a repeated prompt notification does not restart the block clock', (t) => {
   t.mock.timers.enable({ apis: ['Date'] });
   const registry = createSessionRegistry();

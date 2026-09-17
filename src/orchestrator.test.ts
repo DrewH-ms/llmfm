@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createOrchestrator } from './orchestrator.ts';
 import { SETTING_DEFAULTS } from './settings.ts';
-import { BLOCK_SETTLE_MS, DEFAULT_PLAYLIST } from './constants.ts';
+import { BLOCK_SETTLE_MS, DEFAULT_PLAYLIST, SUBAGENT_GRACE_MS } from './constants.ts';
 import type { ConfigStore, LlmfmConfig } from './config.ts';
 import type { Mixer } from './mixer.ts';
 import type { Scheduler } from './scheduler.ts';
@@ -278,4 +278,84 @@ test('ducking takes the gate from a recorded track, and gives it back', () => {
   orchestrator.refresh();
   assert.deepEqual(recordedGates, [true, false], 'the recorded track never got the gate back');
   assert.deepEqual(duckGates, [false], 'the duck was still driven after the switch back');
+});
+
+const REPO = '/repos/app';
+
+/** A session the CLI never listed, old enough that the file's lag no longer explains it.
+ *  This is all a sub-agent ever looks like from the outside. */
+const subAgent = (over: Partial<Session> = {}): Session =>
+  session({
+    sessionId: 'sub',
+    cwd: REPO,
+    working: true,
+    listedByCli: false,
+    startedAt: Date.now() - SUBAGENT_GRACE_MS - 1,
+    ...over,
+  });
+
+/** The session the user is sitting in front of, between turns because it dispatched the
+ *  work and is waiting on it. */
+const parent = (over: Partial<Session> = {}): Session =>
+  session({ sessionId: 'parent', cwd: REPO, working: false, ...over });
+
+const viewOf = (orchestrator: ReturnType<typeof harness>['orchestrator'], sessionId: string) =>
+  orchestrator.sessionViews().find((view) => view.sessionId === sessionId);
+
+test('a parent waiting on a sub-agent keeps sounding, and says why', () => {
+  // The defect this exists to prevent: the parent fires agentStop the moment it hands off,
+  // so its voice faded while the work ran on and the silence claimed the user was needed.
+  const { orchestrator } = harness([parent(), subAgent()], fakeConfig({ gate: 'per-agent' }));
+
+  const view = viewOf(orchestrator, 'parent');
+  assert.equal(view?.audible, true, 'the dispatching session must not fall silent');
+  assert.equal(view?.folded, true, 'the row has to show the work is not its own');
+  assert.equal(view?.working, false, 'folding must not rewrite what the CLI reported');
+  assert.equal(viewOf(orchestrator, 'sub'), undefined, 'a folded sub-agent holds no voice');
+});
+
+test('a blocked parent stays silent however busy its sub-agents are', () => {
+  // The hard rule. A permission prompt is a positive request for the user, and inferred
+  // activity that talked over it would mask exactly the moment the product exists for.
+  const blocked = parent({
+    blockedMidTurn: true,
+    blockedSince: Date.now() - BLOCK_SETTLE_MS - 1,
+  });
+  const { orchestrator } = harness([blocked, subAgent()], fakeConfig({ gate: 'per-agent' }));
+
+  const view = viewOf(orchestrator, 'parent');
+  assert.equal(view?.audible, false, 'a prompt must outrank a working sub-agent');
+  assert.equal(view?.folded, false);
+});
+
+test('ignore leaves the parent silent, voice gives the sub-agent its own part', () => {
+  const ignored = harness(
+    [parent(), subAgent()],
+    fakeConfig({ gate: 'per-agent', subagents: 'ignore' }),
+  );
+  assert.equal(viewOf(ignored.orchestrator, 'parent')?.audible, false);
+  assert.equal(viewOf(ignored.orchestrator, 'sub'), undefined, 'ignore means unlisted too');
+
+  const voiced = harness(
+    [parent(), subAgent()],
+    fakeConfig({ gate: 'per-agent', subagents: 'voice' }),
+  );
+  const sub = viewOf(voiced.orchestrator, 'sub');
+  assert.ok(sub?.voiceName, 'voice mode gives a sub-agent an instrument of its own');
+  assert.equal(sub.audible, true, 'and it sounds on its own work');
+  assert.equal(
+    viewOf(voiced.orchestrator, 'parent')?.audible,
+    false,
+    'a sub-agent with its own voice is not also folded into its parent',
+  );
+});
+
+test('a sub-agent on another repo does not hold a parent on', () => {
+  // cwd is the whole parent link, so a sub-agent that does not share one belongs to
+  // someone else's session and must not speak for this one.
+  const { orchestrator } = harness(
+    [parent(), subAgent({ cwd: '/repos/other' })],
+    fakeConfig({ gate: 'per-agent' }),
+  );
+  assert.equal(viewOf(orchestrator, 'parent')?.audible, false);
 });

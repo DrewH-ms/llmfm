@@ -50,7 +50,6 @@ Uninstall removes only our own hook file and restores the prior state.
 | `LLMFM_PORT` | `7777` | Port the daemon listens on |
 | `LLMFM_SESSION` | unset | Pin audio to a single session id. Scope is otherwise machine-wide. |
 | `LLMFM_WATCH_FILE` | `1` | Set to `0` to ignore `open-sessions-state.json` and rely on hooks alone |
-| `LLMFM_SUBAGENTS` | unset | Set to `1` to let sub-agents hold voices. By default they are ignored, so a fleet of background agents does not keep the music playing over the one session that is actually waiting on you. Requires `LLMFM_WATCH_FILE`. |
 | `LLMFM_LOG` | unset | Set to `1` to log hook event names and short session ids. Never logs payload contents. |
 
 ### Muting sessions
@@ -83,6 +82,24 @@ waiting on you" from "working hard". Neither setting is free:
   dashboard marks these `BLOCKED?` so the screen can say what the audio cannot.
 - `resume` — the part rejoins a few seconds after the prompt. Long commands sound right,
   but step away mid-prompt and the music returns while you are still needed.
+
+### `subagents` — work nobody is sitting in front of
+
+A sub-agent fires hooks but is never listed as an open session, so it is never a session
+you are waiting at. Its parent, meanwhile, fires `agentStop` the moment it dispatches and
+goes back to waiting:
+
+- `fold` (default) — the sub-agent's work counts as its parent working, matched on the
+  shared working directory. The dashboard marks the parent `SUB-AGENT`, so you can see the
+  music is riding work that is not its own. A parent sitting on a permission prompt is
+  never folded: a prompt is a real request for you and outranks inferred work.
+- `ignore` — sub-agents count for nothing, and a parent falls silent while the work it
+  dispatched runs.
+- `voice` — each sub-agent takes an instrument of its own, which dilutes the signal: a
+  fleet of them keeps the orchestra playing over the one session waiting on you.
+
+Two terminals open on the same repository cannot be told apart, so folded work counts for
+both.
 
 ## Sessions started before the hooks were installed
 

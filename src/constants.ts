@@ -71,13 +71,17 @@ export const FOCUS_SESSION_ID = process.env.LLMFM_SESSION ?? null;
 /** The open-sessions file is corroboration; turning it off isolates hook behaviour. */
 export const WATCH_OPEN_SESSIONS = process.env.LLMFM_WATCH_FILE !== '0';
 
-/** Sub-agents fire hooks but are never listed as open sessions, so a session the CLI does
- *  not list is one the user is not sitting in front of. Counting them dilutes the signal:
- *  a fleet of them keeps the orchestra playing while the session you are watching waits
- *  on you. Requires the open-sessions file, which is the only thing that can tell them
- *  apart. */
-export const IGNORE_SUBAGENTS =
-  WATCH_OPEN_SESSIONS && !['1', 'include'].includes(process.env.LLMFM_SUBAGENTS ?? '');
+/** What a sub-agent's work means. A sub-agent fires hooks but is never listed as an open
+ *  session, so it is never a session the user is sitting in front of:
+ *  - `ignore` leaves it out entirely. Its parent then falls silent the moment it hands
+ *    work off, which says "this agent needs you" while the work is still running.
+ *  - `fold` credits its work to the CLI-listed session sharing its cwd, so a parent that
+ *    dispatched and is waiting keeps sounding.
+ *  - `voice` gives each sub-agent an instrument of its own, which dilutes the signal: a
+ *    fleet of them keeps the orchestra playing over the session that is waiting on you. */
+export const SUBAGENT_MODES = ['ignore', 'fold', 'voice'] as const;
+export type SubagentMode = (typeof SUBAGENT_MODES)[number];
+export const DEFAULT_SUBAGENTS: SubagentMode = 'fold';
 /** How long a hook session may go unlisted before it is taken for a sub-agent. The file
  *  lags a new session by a poll or two, and a real session must never be misread. */
 export const SUBAGENT_GRACE_MS = 6000;
@@ -157,9 +161,6 @@ export const AUTOPLAY_MODES = ['off', 'sequential', 'random'] as const;
 export type AutoplayMode = (typeof AUTOPLAY_MODES)[number];
 export const DEFAULT_AUTOPLAY: AutoplayMode = 'off';
 
-/** Note onsets of the score's opening lifted for the startup sting: the three repeated
- *  notes and the held one that answers them. */
-export const MOTIF_ONSET_COUNT = 4;
 /** Ring left after the held note before the transport takes over, so the sting reads as
  *  a deliberate opening rather than as playback stuttering into life. */
 export const MOTIF_TAIL_SECONDS = 0.4;

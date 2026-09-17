@@ -2,11 +2,11 @@ import {
   SETTLE_MARGIN_MS,
   BLOCK_SETTLE_MS,
   FOCUS_SESSION_ID,
-  IGNORE_SUBAGENTS,
   MS_PER_MINUTE,
   PROMPT_GAP_RESUME_MS,
   SUBAGENT_GRACE_MS,
   VOICE_RESPLIT_DEBOUNCE_MS,
+  WATCH_OPEN_SESSIONS,
 } from './constants.ts';
 import type { GateMode } from './constants.ts';
 import { assignVoices } from './assignment.ts';
@@ -82,7 +82,8 @@ export function createOrchestrator(options: {
       session.blockedMidTurn &&
       session.blockedSince !== null &&
       Date.now() - session.blockedSince >= PROMPT_GAP_RESUME_MS;
-    const working = session.working || stale || settling(session);
+    const working =
+      session.working || stale || settling(session) || isFolded(session, Date.now());
     return config.current().mode === 'reward' ? working : !working;
   };
 
@@ -93,21 +94,40 @@ export function createOrchestrator(options: {
     session.blockedSince !== null &&
     Date.now() - session.blockedSince < BLOCK_SETTLE_MS;
 
-  /** A sub-agent fires hooks but is never listed by the CLI, and it never waits on the
-   *  user, so counting it would keep the orchestra playing over the silence that is the
-   *  whole signal. New sessions are spared until the file has had time to list them. */
+  /** A sub-agent fires hooks but is never listed by the CLI, which is the only thing that
+   *  tells it from a session the user is sitting in front of. Without the open-sessions
+   *  file nothing is ever listed, so the distinction cannot be drawn at all. New sessions
+   *  are spared until the file has had time to list them. */
   const isSubAgent = (session: Session, now: number): boolean =>
-    IGNORE_SUBAGENTS &&
+    WATCH_OPEN_SESSIONS &&
     session.source === 'hook' &&
     !session.listedByCli &&
     now - session.startedAt >= SUBAGENT_GRACE_MS;
+
+  /** Whether this session is one that sub-agent mode keeps out of the music entirely. */
+  const isHiddenSubAgent = (session: Session, now: number): boolean =>
+    config.current().subagents !== 'voice' && isSubAgent(session, now);
+
+  /** Work a sub-agent is doing that this session is waiting on. A parent that dispatches
+   *  and then waits fires `agentStop`, so without this its voice falls silent while the
+   *  work it is waiting on runs — silence that says "you are needed" when nobody is.
+   *  A session blocked mid-turn is never folded: a permission prompt is a positive request
+   *  for the user's attention and outranks work merely inferred from a cwd match. Two
+   *  terminals on one repo cannot be told apart, so the work counts for both. */
+  const isFolded = (session: Session, now: number): boolean => {
+    if (config.current().subagents !== 'fold') return false;
+    if (session.blockedMidTurn || !session.listedByCli || session.cwd === null) return false;
+    return registry
+      .list()
+      .some((other) => other.working && other.cwd === session.cwd && isSubAgent(other, now));
+  };
 
   /** A terminal that was closed is never removed from the CLI's session file, so without
    *  this it keeps its instrument forever. Only idle sessions are dropped: a working one
    *  is legitimately holding its voice however long it has been at it. */
   const isIdleTooLong = (session: Session, now: number): boolean => {
     const minutes = config.current().idleDropoutMinutes;
-    if (minutes <= 0 || session.working) return false;
+    if (minutes <= 0 || session.working || isFolded(session, now)) return false;
     return now - session.updatedAt >= minutes * MS_PER_MINUTE;
   };
 
@@ -121,7 +141,7 @@ export function createOrchestrator(options: {
       .list()
       .filter(
         (session) =>
-          !isSubAgent(session, now) &&
+          !isHiddenSubAgent(session, now) &&
           !isMuted(muteRules, session) &&
           !isIdleTooLong(session, now),
       );
@@ -331,7 +351,7 @@ export function createOrchestrator(options: {
       const muteRules = config.current();
       // Muted sessions are listed even though they hold no voice: hiding one would leave
       // no way to find it again and unmute it.
-      const visible = registry.list().filter((session) => !isSubAgent(session, now));
+      const visible = registry.list().filter((session) => !isHiddenSubAgent(session, now));
       const assignment = currentAssignment(gatingSessions());
       return visible.map((session) => {
         const voice = assignment.bySession.get(session.sessionId);
@@ -339,6 +359,7 @@ export function createOrchestrator(options: {
         return {
           sessionId: session.sessionId,
           working: session.working,
+          folded: !session.working && isFolded(session, now),
           cwd: session.cwd,
           label: session.label,
           source: session.source,
