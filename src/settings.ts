@@ -159,12 +159,6 @@ export const SETTING_SPECS: readonly SettingSpec[] = [
     title: 'Bluetooth audio',
     help: 'Take audio from a phone paired with this PC. Turning this on switches the sound source to ducking, which is what gates the phone.',
   },
-  {
-    kind: 'toggle',
-    key: 'startupMotif',
-    title: 'Startup motif',
-    help: 'Play the opening four notes when the daemon starts.',
-  },
 ];
 
 export const SETTING_DEFAULTS = {
@@ -179,7 +173,6 @@ export const SETTING_DEFAULTS = {
   subagents: DEFAULT_SUBAGENTS,
   autoplay: DEFAULT_AUTOPLAY,
   bluetoothReceive: false,
-  startupMotif: true,
 } as const;
 
 export function specFor(key: string): SettingSpec | null {
@@ -251,6 +244,22 @@ export function displayWithSpec(spec: SettingSpec, value: unknown): string {
     return `${numeric}${spec.unit ?? ''}`;
   }
   return spec.labels?.[String(value)] ?? String(value);
+}
+
+/** Under alert, sound means an agent needs you, so the gate counts the same sessions the
+ *  other way round: "any agent is working" would name the opposite of what it does. The
+ *  swap is display-only — the wire values are unchanged. */
+const GATE_ALERT_LABELS: Readonly<Record<string, string>> = {
+  any: 'any agent needs you',
+  all: 'all agents need you',
+};
+
+export function displayForMode(spec: SettingSpec, value: unknown, mode: string): string {
+  if (spec.key === 'gate' && mode === 'alert') {
+    const swapped = GATE_ALERT_LABELS[String(value)];
+    if (swapped) return swapped;
+  }
+  return displayWithSpec(spec, value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

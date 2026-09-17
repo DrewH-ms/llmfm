@@ -16,8 +16,6 @@ import { createSessionRegistry } from './sessions.ts';
 import { watchOpenSessions } from './open-sessions.ts';
 import { parseHookEvent } from './intake.ts';
 import { loadScore } from './score.ts';
-import { playStartupMotif } from './motif.ts';
-import type { StartupMotif } from './motif.ts';
 import { createSimulation } from './simulate.ts';
 import { createConfigStore } from './config.ts';
 import { SETTING_SPECS } from './settings.ts';
@@ -223,10 +221,6 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     duck,
   });
   const simulation = createSimulation(registry);
-  let motif: StartupMotif | null = null;
-  /** The sessions already working when the sting began, so only work that starts during it
-   *  cuts it short. */
-  let stingBaseline: Set<string> | null = null;
   let stopping = false;
   /** True while a recorded track holds the transport, so state and shutdown ask the right
    *  player which one is running. */
@@ -314,7 +308,6 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
         const wanted = config.current().audio === 'duck';
         if (wanted !== ducking) {
           if (wanted) {
-            motif?.cancel();
             scheduler.pause();
             mixer.silenceAll();
             recorded.setHoldTransport(holdOurTransport());
@@ -438,15 +431,6 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const unsubscribeRecordedEnd = recorded.onEnd(rotateOnEnd);
 
   const unsubscribe = registry.onChange(() => {
-    // Only work that STARTS during the sting cuts it short. A machine with terminals
-    // already open hands the daemon their sessions within a poll of startup, and treating
-    // those as new work truncated the sting to its first note on every real machine.
-    if (
-      motif &&
-      registry.list().some((session) => session.working && !stingBaseline?.has(session.sessionId))
-    ) {
-      motif.cancel();
-    }
     orchestrator.refresh();
     api.broadcast();
   });
@@ -462,34 +446,10 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   config.start();
   const watcher = WATCH_OPEN_SESSIONS ? watchOpenSessions(registry) : null;
 
-  // The transport starts only once the sting is out of the way, so the mixer's opening
-  // fade cannot write over it. Hook events arriving meanwhile are still recorded; they
-  // reach the mix when the score binds.
-  const beginPerformance = (): void => {
-    motif = null;
-    stingBaseline = null;
-    if (stopping) return;
-    if (startRecorded && trackFile) {
-      void playTrack(trackFile);
-      return;
-    }
-    if (score) orchestrator.bindScore(score);
-  };
-  // Nothing of ours announces itself over music the user is already playing.
-  if (midiStatus.ready && config.current().startupMotif && config.current().audio !== 'duck') {
-    stingBaseline = new Set(
-      registry
-        .list()
-        .filter((session) => session.working)
-        .map((session) => session.sessionId),
-    );
-    motif = playStartupMotif({
-      midi,
-      masterVolume: config.current().masterVolume,
-      onDone: beginPerformance,
-    });
-  } else {
-    beginPerformance();
+  if (startRecorded && trackFile) {
+    void playTrack(trackFile);
+  } else if (score) {
+    orchestrator.bindScore(score);
   }
   void applyAudioMode();
 
@@ -500,8 +460,6 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   return {
     async stop(): Promise<void> {
       stopping = true;
-      // Cancelling clears the sting's own channels, which the mixer does not hold yet.
-      motif?.cancel();
       unsubscribe();
       unsubscribeConfig();
       unsubscribeEnd();

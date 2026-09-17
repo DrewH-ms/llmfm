@@ -13,6 +13,7 @@ import {
   SETTING_DEFAULTS,
   SETTING_SPECS,
   coerceWithSpec,
+  displayForMode,
   displayWithSpec,
   nextWithSpec,
   parseSettingSpecs,
@@ -626,7 +627,7 @@ function settingLine(options: {
   width: number;
 }): Segment[] {
   const { spec, config, selected, width } = options;
-  const value = displayWithSpec(spec, settingValue(config, spec.key));
+  const value = displayForMode(spec, settingValue(config, spec.key), config.mode);
   return [
     cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },

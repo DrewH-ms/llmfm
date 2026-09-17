@@ -147,8 +147,7 @@ export const MASTER_VOLUME_STEP = 5;
 export const MASTER_VOLUME_CURVE_EXPONENT = 0.75;
 
 /** The track loaded when none is chosen. Named rather than taken as the first file in the
- *  directory: the motif is lifted from whatever is loaded, so a track added under an
- *  earlier-sorting name would silently replace both the music and the startup sting.
+ *  directory, so a track added under an earlier-sorting name cannot silently replace it.
  *  Coriolan is chosen on two measurements rather than taste — 75 distinct note velocities,
  *  so a fade has a living texture to move against, and every one of its twelve parts
  *  carries a name the lexicon recognises, so the dashboard can say which instrument fell
@@ -160,10 +159,6 @@ export const DEFAULT_TRACK = 'mutopia-beethoven-coriolan-overture.mid';
 export const AUTOPLAY_MODES = ['off', 'sequential', 'random'] as const;
 export type AutoplayMode = (typeof AUTOPLAY_MODES)[number];
 export const DEFAULT_AUTOPLAY: AutoplayMode = 'off';
-
-/** Ring left after the held note before the transport takes over, so the sting reads as
- *  a deliberate opening rather than as playback stuttering into life. */
-export const MOTIF_TAIL_SECONDS = 0.4;
 
 /** Minutes a session may sit untouched before it gives up its voice; 0 disables it.
  *  The open-sessions file is never cleaned up by the CLI, so without this a closed

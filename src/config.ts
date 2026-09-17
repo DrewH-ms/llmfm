@@ -42,7 +42,6 @@ export type LlmfmConfig = {
    *  machine state and lives in the bridge's claim file, not here. Never true unless
    *  `audio` is `duck` — see `coupleBluetoothToDuck`. */
   bluetoothReceive: boolean;
-  startupMotif: boolean;
   /** Which playlist the library is drawn from. Not a spec-driven setting: the valid
    *  values are whatever folders exist right now, so it is validated against the disk
    *  when it is applied rather than against a fixed list. */

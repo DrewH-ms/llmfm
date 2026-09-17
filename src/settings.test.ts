@@ -5,6 +5,7 @@ import {
   SETTING_SPECS,
   coerceSetting,
   coerceWithSpec,
+  displayForMode,
   displaySetting,
   displayWithSpec,
   nextSetting,
@@ -64,10 +65,10 @@ test('cycling a number stops at the ends instead of wrapping', () => {
 });
 
 test('a toggle takes only booleans and flips from anything', () => {
-  assert.equal(coerceSetting('startupMotif', false), false);
-  assert.equal(coerceSetting('startupMotif', 'true'), null);
-  assert.equal(nextSetting('startupMotif', true, 1), false);
-  assert.equal(nextSetting('startupMotif', undefined, 1), true);
+  assert.equal(coerceSetting('bluetoothReceive', false), false);
+  assert.equal(coerceSetting('bluetoothReceive', 'true'), null);
+  assert.equal(nextSetting('bluetoothReceive', true, 1), false);
+  assert.equal(nextSetting('bluetoothReceive', undefined, 1), true);
 });
 
 test('every choice renders a label rather than its raw value', () => {
@@ -80,7 +81,20 @@ test('every choice renders a label rather than its raw value', () => {
   }
   assert.equal(displaySetting('idleDropoutMinutes', 0), 'never');
   assert.equal(displaySetting('idleDropoutMinutes', 15), '15 min');
-  assert.equal(displaySetting('startupMotif', false), 'off');
+  assert.equal(displaySetting('bluetoothReceive', false), 'off');
+});
+
+test('the gate labels follow what sound means, since alert inverts them', () => {
+  const gate = SETTING_SPECS.find((spec) => spec.key === 'gate');
+  assert.ok(gate);
+  assert.equal(displayForMode(gate, 'any', 'reward'), 'any agent is working');
+  assert.equal(displayForMode(gate, 'any', 'alert'), 'any agent needs you');
+  assert.equal(displayForMode(gate, 'all', 'alert'), 'all agents need you');
+  // Only the two that name working invert; the others mean the same either way.
+  assert.equal(displayForMode(gate, 'always', 'alert'), displayWithSpec(gate, 'always'));
+  const mode = SETTING_SPECS.find((spec) => spec.key === 'mode');
+  assert.ok(mode);
+  assert.equal(displayForMode(mode, 'alert', 'alert'), displayWithSpec(mode, 'alert'));
 });
 
 test('a number carrying a unit prints it, so the value names a quantity', () => {
