@@ -172,6 +172,18 @@ export const MS_PER_MINUTE = 60_000;
 /** How long `resume` waits before assuming a prompt was answered. */
 export const PROMPT_GAP_RESUME_MS = 8000;
 
+/** How long one `working: true` reading may stand with no fresh evidence. A terminal
+ *  killed mid-tool leaves that reading in the CLI's file for ever, and the file may
+ *  silence but never assert, so nothing else can ever correct it. Generous on purpose:
+ *  one long tool call is legitimate, and silencing a live agent is the opposite lie. */
+export const WORKING_CLAIM_MAX_MS = 30 * MS_PER_MINUTE;
+/** How long a cwd match may keep folding a parent audible. Folding is an inference, not
+ *  a reading, so it expires: a sub-agent that dies mid-tool is never retired by the
+ *  registry and would otherwise hold its parent's voice open for ever. */
+export const FOLD_EVIDENCE_MAX_MS = 5 * MS_PER_MINUTE;
+/** How often the daemon checks whether a bridge it believes is running has died. */
+export const BRIDGE_HEALTH_TICK_MS = 1000;
+
 /** Logs event names and short session ids only — never payload contents, which carry
  *  prompt text. Opt-in, for confirming which events the CLI actually fires. */
 export const LOG_EVENTS = process.env.LLMFM_LOG === '1';
