@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { startDaemon, listTracks } from '../src/daemon.ts';
 import { installHooks, uninstallHooks, installedHookPath } from '../src/install.ts';

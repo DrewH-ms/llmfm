@@ -4,6 +4,9 @@
   "private": true,
   "description": "Radio for your coding agents — the music stops when they need you",
   "type": "module",
+  "bin": {
+    "llmfm": "bin/llmfm.ts"
+  },
   "engines": {
     "node": ">=24.0.0"
   },
