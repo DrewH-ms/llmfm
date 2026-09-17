@@ -224,6 +224,9 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   });
   const simulation = createSimulation(registry);
   let motif: StartupMotif | null = null;
+  /** The sessions already working when the sting began, so only work that starts during it
+   *  cuts it short. */
+  let stingBaseline: Set<string> | null = null;
   let stopping = false;
   /** True while a recorded track holds the transport, so state and shutdown ask the right
    *  player which one is running. */
@@ -435,10 +438,15 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const unsubscribeRecordedEnd = recorded.onEnd(rotateOnEnd);
 
   const unsubscribe = registry.onChange(() => {
-    // Only real work cuts the sting short. Merely registering sessions does not: the file
-    // watcher lists every open terminal within a poll of startup, which would truncate the
-    // motif to its first note on any machine that had a session open.
-    if (registry.list().some((session) => session.working)) motif?.cancel();
+    // Only work that STARTS during the sting cuts it short. A machine with terminals
+    // already open hands the daemon their sessions within a poll of startup, and treating
+    // those as new work truncated the sting to its first note on every real machine.
+    if (
+      motif &&
+      registry.list().some((session) => session.working && !stingBaseline?.has(session.sessionId))
+    ) {
+      motif.cancel();
+    }
     orchestrator.refresh();
     api.broadcast();
   });
@@ -459,6 +467,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   // reach the mix when the score binds.
   const beginPerformance = (): void => {
     motif = null;
+    stingBaseline = null;
     if (stopping) return;
     if (startRecorded && trackFile) {
       void playTrack(trackFile);
@@ -467,15 +476,15 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     if (score) orchestrator.bindScore(score);
   };
   // Nothing of ours announces itself over music the user is already playing.
-  if (
-    score &&
-    midiStatus.ready &&
-    config.current().startupMotif &&
-    config.current().audio !== 'duck'
-  ) {
+  if (midiStatus.ready && config.current().startupMotif && config.current().audio !== 'duck') {
+    stingBaseline = new Set(
+      registry
+        .list()
+        .filter((session) => session.working)
+        .map((session) => session.sessionId),
+    );
     motif = playStartupMotif({
       midi,
-      score,
       masterVolume: config.current().masterVolume,
       onDone: beginPerformance,
     });
