@@ -18,6 +18,10 @@ type FakeVolume = SystemVolume & {
   sessionMutes: string[];
   restores: number;
   fail: boolean;
+  /** Whether the bridge process is alive. Clearing it is the bridge dying under us. */
+  ready: boolean;
+  /** How many bridges have been spawned. */
+  starts: number;
   /** How long the bridge takes to answer a `set`, so a command can be genuinely in
    *  flight when teardown arrives. */
   delayMs: number;
@@ -43,20 +47,26 @@ function fakeVolume(startLevel: number): FakeVolume {
     sessionMutes: [],
     restores: 0,
     fail: false,
+    ready: true,
+    starts: 0,
     delayMs: 0,
-    start: (): Promise<SystemVolumeStatus> => Promise.resolve(volume.status()),
+    start: (): Promise<SystemVolumeStatus> => {
+      volume.starts += 1;
+      volume.ready = true;
+      return Promise.resolve(volume.status());
+    },
     status: (): SystemVolumeStatus => ({
-      ready: true,
+      ready: volume.ready,
       deviceId: DEVICE_ID,
       gated: volume.current.muted || volume.sessionMutes.length > 0,
       gatedSessions: volume.sessionMutes.length,
       error: null,
     }),
     read: (): Promise<VolumeLevel | null> =>
-      Promise.resolve(volume.fail ? null : { ...volume.current }),
+      Promise.resolve(volume.fail || !volume.ready ? null : { ...volume.current }),
     set: async ({ level, muted }): Promise<VolumeLevel | null> => {
       if (volume.delayMs > 0) await wait(volume.delayMs);
-      if (volume.fail) return null;
+      if (volume.fail || !volume.ready) return null;
       if (level !== undefined) volume.levelWrites.push(level);
       if (muted !== undefined) volume.muteWrites.push(muted);
       if (!ours()) baseline = { ...volume.current };
@@ -69,7 +79,7 @@ function fakeVolume(startLevel: number): FakeVolume {
     },
     setSessionMute: async ({ name, muted }): Promise<number | null> => {
       if (volume.delayMs > 0) await wait(volume.delayMs);
-      if (volume.fail) return null;
+      if (volume.fail || !volume.ready) return null;
       const matched = volume.live.filter((session) =>
         session.name.toLowerCase().includes(name.toLowerCase()),
       );
@@ -83,7 +93,7 @@ function fakeVolume(startLevel: number): FakeVolume {
     sessions: (): Promise<AudioSession[]> => Promise.resolve(volume.live.map((s) => ({ ...s }))),
     baseline: (): VolumeLevel | null => ({ ...baseline }),
     restore: (): Promise<VolumeLevel | null> => {
-      if (volume.fail) return Promise.resolve(null);
+      if (volume.fail || !volume.ready) return Promise.resolve(null);
       volume.restores += 1;
       if (ours()) volume.current = { ...baseline };
       held = null;
@@ -311,6 +321,39 @@ test('a flag the user cleared themselves is not set again behind them', async ()
   assert.equal(volume.current.muted, false);
 });
 
+
+/** A bridge that died leaves every gate request resolving as a silent no-op: agents can
+ *  block while the user's audio plays on, and a mute can stick with nothing left to clear
+ *  it. Starting again has to bring a bridge back rather than report the corpse. */
+test('a duck whose bridge died is respawned, and its gate re-established', async () => {
+  const volume = fakeVolume(70);
+  const duck = createDuck({ volume, sessionName: () => null });
+  await duck.start();
+  duck.setAudible({ audible: false, fadeSeconds: 0 });
+  await until(() => volume.current.muted, 'the gate never closed');
+
+  // The bridge exits; its own restore puts the endpoint back on the way out.
+  volume.ready = false;
+  volume.current = { level: 70, muted: false };
+
+  const status = await duck.start();
+  assert.equal(status.ready, true, 'a dead bridge was reported instead of replaced');
+  assert.equal(volume.starts, 2, 'no bridge was respawned');
+  await until(() => volume.current.muted, 'the gate was not re-established on the new bridge');
+
+  await duck.stop();
+  assert.equal(volume.current.muted, false);
+  assert.equal(volume.current.level, 70);
+});
+
+test('a live bridge is not respawned by a second start', async () => {
+  const volume = fakeVolume(50);
+  const duck = createDuck({ volume, sessionName: () => null });
+  await duck.start();
+  await duck.start();
+  assert.equal(volume.starts, 1, 'a working bridge was replaced under a running gate');
+  await duck.stop();
+});
 
 /** The point of naming a session: a call, a notification or anything else on the machine
  *  keeps playing while the stream we were asked to gate goes quiet. */

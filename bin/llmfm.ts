@@ -29,12 +29,31 @@ const [command, argument] = process.argv.slice(2);
 
 switch (command) {
   case 'start': {
-    const daemon = await startDaemon(argument ? { track: argument } : {});
-    for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-      process.on(signal, () => {
-        void daemon.stop().then(() => process.exit(0));
-      });
+    const daemon = await startDaemon(argument ? { track: argument } : {}).catch(
+      (error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+        return process.exit(1);
+      },
+    );
+    /** The daemon can be holding the user's audio muted, and a mute that outlives the
+     *  process is invisible and recoverable only through Task Manager. Every way this
+     *  process can end therefore goes through one teardown, and it runs once: a second
+     *  signal, or an exception thrown while shutting down, must not restart it. On
+     *  Windows the console close is `SIGHUP` and Ctrl+Break is `SIGBREAK`, neither of
+     *  which takes the POSIX `SIGTERM` path, and the close window is short. */
+    let shutdown: Promise<void> | null = null;
+    const requestShutdown = (code: number, reason?: unknown): void => {
+      if (reason !== undefined) console.error(reason);
+      shutdown ??= daemon
+        .stop()
+        .catch((error: unknown) => console.error(`Shutdown failed: ${String(error)}`))
+        .finally(() => process.exit(code));
+    };
+    for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) {
+      process.once(signal, () => requestShutdown(0));
     }
+    process.once('uncaughtException', (error: unknown) => requestShutdown(1, error));
+    process.once('unhandledRejection', (reason: unknown) => requestShutdown(1, reason));
     break;
   }
   case 'install':

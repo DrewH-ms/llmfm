@@ -39,6 +39,7 @@ const FAKE_BRIDGE_SOURCE = [
   "        Write-Line 'N 1'",
   "    } elseif ($command -eq 'C') {",
   '        $reference = $line.Substring(2).Trim()',
+  "        if ($reference -eq 'die') { exit 1 }",
   "        if ($reference -eq '0' -or $reference -eq $id) {",
   '            $connected = $true',
   '            Write-Line (Format-State)',
@@ -168,6 +169,28 @@ test('reports a bridge that cannot start instead of rejecting', async () => {
   } finally {
     await bluetooth.stop();
     process.env['LLMFM_BT_BRIDGE'] = FAKE_BRIDGE;
+  }
+});
+
+/** The bridge process is the sink: when it dies the phone's stream disappears, which is
+ *  silence that says nothing about any agent. The daemon latches "the sink is held" from
+ *  the start result, so this module reporting its own death is the only thing a health
+ *  check has to go on. */
+test('a bridge that dies reports itself as not ready rather than still holding the sink', async () => {
+  rmSync(bluetoothClaimPath(), { force: true });
+  const bluetooth = createBluetoothReceive();
+  assert.equal((await bluetooth.start()).ready, true);
+  try {
+    assert.equal((await bluetooth.connect({ id: DEVICE_ID })).state, 'Opened');
+    assert.equal(bluetooth.status().ready, true);
+
+    const lost = await bluetooth.connect({ id: 'die' });
+    assert.equal(lost.ready, false, 'a dead bridge still claimed to be holding the sink');
+    assert.equal(bluetooth.status().ready, false);
+    assert.equal(bluetooth.status().device, null);
+  } finally {
+    await bluetooth.stop();
+    rmSync(bluetoothClaimPath(), { force: true });
   }
 });
 

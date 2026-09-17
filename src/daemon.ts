@@ -1,15 +1,15 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, extname } from 'node:path';
 import { startApi } from './api.ts';
-import type { TrackInfo } from './api.ts';
+import type { Api, TrackInfo } from './api.ts';
 import { createMidiOut } from './midi-out.ts';
 import { createMixer } from './mixer.ts';
 import { createOrchestrator } from './orchestrator.ts';
 import { createScheduler } from './scheduler.ts';
 import { createAudioOut } from './audio-out.ts';
 import { createRecordedPlayer } from './recorded.ts';
-import { createSystemVolume } from './system-volume.ts';
+import { createSystemVolume, claimPath } from './system-volume.ts';
 import { createDuck } from './duck.ts';
 import { createBluetoothReceive } from './bluetooth-receive.ts';
 import { createSessionRegistry } from './sessions.ts';
@@ -35,10 +35,12 @@ import {
   WATCH_OPEN_SESSIONS,
   LOG_EVENTS,
   DEFAULT_TRACK,
+  DAEMON_URL,
+  BRIDGE_HEALTH_TICK_MS,
   isRecordedTrack,
 } from './constants.ts';
 import type { AutoplayMode } from './constants.ts';
-import type { DaemonState } from './types.ts';
+import type { DaemonState, Score } from './types.ts';
 
 export { listTracks, playableTracks, resolveTrack, listPlaylists };
 
@@ -197,6 +199,36 @@ export function createTrackRotation(random: () => number = Math.random): TrackRo
   };
 }
 
+/** Plays the next track the rotation offers, walking past any that will not load. A file
+ *  deleted, locked or unparseable must not end autoplay for the rest of the run: the
+ *  transport would sit paused, which is silence that means nothing.
+ *
+ *  Resolves to the file that started, or null once the rotation has come back to the
+ *  first candidate it offered — the only bound available when every file is broken. */
+export async function advanceRotation(options: {
+  current: string | null;
+  next(current: string | null): string | null;
+  play(file: string): Promise<boolean>;
+}): Promise<string | null> {
+  let current = options.current;
+  let firstTried: string | null = null;
+  for (;;) {
+    const candidate = options.next(current);
+    if (candidate === null || candidate === firstTried) return null;
+    firstTried ??= candidate;
+    if (await options.play(candidate)) return candidate;
+    current = candidate;
+  }
+}
+
+/** The API rejects with whatever `listen` failed with, and a second `llmfm start` is the
+ *  one failure worth naming rather than printing. */
+const isPortInUse = (error: unknown): boolean =>
+  (typeof error === 'object' &&
+    error !== null &&
+    (error as NodeJS.ErrnoException).code === 'EADDRINUSE') ||
+  String(error).includes('EADDRINUSE');
+
 export async function startDaemon(options: { track?: string } = {}): Promise<Daemon> {
   const midi = createMidiOut();
   const mixer = createMixer(midi);
@@ -241,7 +273,15 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   // A recorded file cannot be parsed into a score, and must not take the daemon down on
   // the way up; it is bound through `playTrack` once the server is listening instead.
   const startRecorded = trackFile !== undefined && isRecordedTrack(trackFile);
-  let score = startPath && !startRecorded ? loadScore(startPath) : null;
+  let score: Score | null = null;
+  if (startPath && !startRecorded) {
+    try {
+      score = loadScore(startPath);
+    } catch (error) {
+      console.log(`Failed to load initial track ${trackFile}: ${String(error)}`);
+      trackFile = undefined;
+    }
+  }
   const rotation = createTrackRotation();
   let publish = (): void => {};
 
@@ -305,6 +345,8 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const applyAudioMode = (): Promise<void> => {
     audioModeSwitch = audioModeSwitch
       .then(async () => {
+        // A switch queued before teardown must not bring a bridge back up behind it.
+        if (stopping) return;
         const wanted = config.current().audio === 'duck';
         if (wanted !== ducking) {
           if (wanted) {
@@ -349,14 +391,19 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   /** A skip is an instruction, not a consequence, so "when a track ends: stop" must not
    *  disable it. Random still draws from the bag, so skipping repeatedly still covers the
    *  library before anything repeats. */
-  const skipTrack = (): Promise<boolean> => {
+  const skipTrack = async (): Promise<boolean> => {
     const mode = config.current().autoplay;
-    const next = rotation.next({
-      library: libraryFor(config.current().playlist),
+    const started = await advanceRotation({
       current: trackFile ?? null,
-      mode: mode === AUTOPLAY_OFF ? AUTOPLAY_SEQUENTIAL : mode,
+      next: (current) =>
+        rotation.next({
+          library: libraryFor(config.current().playlist),
+          current,
+          mode: mode === AUTOPLAY_OFF ? AUTOPLAY_SEQUENTIAL : mode,
+        }),
+      play: playTrack,
     });
-    return next ? playTrack(next) : Promise.resolve(false);
+    return started !== null;
   };
 
   const state = (): DaemonState => ({
@@ -374,57 +421,89 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     playlistsDir: playlistsDir(),
   });
 
-  const api = await startApi({
-    onHookEvent({ name, body }) {
-      const event = parseHookEvent({ name, body });
-      if (LOG_EVENTS) {
-        const id = event ? event.sessionId.slice(0, SESSION_ID_LOG_LENGTH) : '????????';
-        const kind = event?.notificationType ? ` type=${event.notificationType}` : '';
-        console.log(`[hook] ${name}${kind} session=${id}${event ? '' : ' UNPARSED'}`);
-      }
-      if (event) registry.applyHookEvent(event);
-    },
-    onSetMode: (mode) => orchestrator.setMode(mode),
-    onSetFade: (seconds) => orchestrator.setFadeSeconds(seconds),
-    onSimulate: ({ running }) => (running ? simulation.start() : simulation.stop()),
-    onSetMute({ sessionId, muted }) {
-      const session = registry.list().find((entry) => entry.sessionId === sessionId);
-      if (!session) return;
-      // Persist the folder name where it is unambiguous: session ids change on every
-      // restart, so a rule keyed on one would quietly stop applying tomorrow. Fall back to
-      // the fuller handle only when another live session shares the label.
-      const preferLabel = !registry
-        .list()
-        .some((other) => other.sessionId !== sessionId && other.label === session.label);
-      config.setMute({ session, muted, preferLabel });
-    },
-    onSetSetting: ({ key, value }) => config.setSetting(key, value),
-    listBluetooth: () => bluetooth.list(),
-    async onConnectBluetooth({ id }) {
-      const status = await bluetooth.connect({ id });
-      publish();
-      return status.device !== null;
-    },
-    tracks: trackCatalogue,
-    playlists: listPlaylists,
-    onSetPlaylist(name) {
-      if (!isPlaylist(name)) return false;
-      config.setPlaylist(name);
-      return true;
-    },
-    onSetTrack: playTrack,
-    onSkipTrack: skipTrack,
-    state,
-  });
+  // A mute left behind by a hard kill is recovered inside the volume bridge's start, so
+  // that start has to happen before anything else on the way up can fail — the API bind
+  // included — and whatever mode is configured now: a claim written in duck mode outlives
+  // a switch to `midi`. In `midi` the bridge comes up only when there is a claim on disk
+  // to honour, and stands down again without gating anything. The mode itself is still
+  // applied below; this start is idempotent.
+  if (config.current().audio === 'duck' || existsSync(claimPath())) {
+    await duck.start();
+    if (config.current().audio !== 'duck') await duck.stop();
+  }
+
+  let api: Api;
+  try {
+    api = await startApi({
+      onHookEvent({ name, body }) {
+        const event = parseHookEvent({ name, body });
+        if (LOG_EVENTS) {
+          const id = event ? event.sessionId.slice(0, SESSION_ID_LOG_LENGTH) : '????????';
+          const kind = event?.notificationType ? ` type=${event.notificationType}` : '';
+          console.log(`[hook] ${name}${kind} session=${id}${event ? '' : ' UNPARSED'}`);
+        }
+        if (event) registry.applyHookEvent(event);
+      },
+      onSetMode: (mode) => orchestrator.setMode(mode),
+      onSetFade: (seconds) => orchestrator.setFadeSeconds(seconds),
+      onSimulate: ({ running }) => (running ? simulation.start() : simulation.stop()),
+      onSetMute({ sessionId, muted }) {
+        const session = registry.list().find((entry) => entry.sessionId === sessionId);
+        if (!session) return;
+        // Persist the folder name where it is unambiguous: session ids change on every
+        // restart, so a rule keyed on one would quietly stop applying tomorrow. Fall back
+        // to the fuller handle only when another live session shares the label.
+        const preferLabel = !registry
+          .list()
+          .some((other) => other.sessionId !== sessionId && other.label === session.label);
+        config.setMute({ session, muted, preferLabel });
+      },
+      onSetSetting: ({ key, value }) => config.setSetting(key, value),
+      listBluetooth: () => bluetooth.list(),
+      async onConnectBluetooth({ id }) {
+        const status = await bluetooth.connect({ id });
+        publish();
+        return status.device !== null;
+      },
+      tracks: trackCatalogue,
+      playlists: listPlaylists,
+      onSetPlaylist(name) {
+        if (!isPlaylist(name)) return false;
+        config.setPlaylist(name);
+        return true;
+      },
+      onSetTrack: playTrack,
+      onSkipTrack: skipTrack,
+      state,
+    });
+  } catch (error) {
+    // Nothing brought up on the way in may outlive a start that did not finish — least of
+    // all a gate holding the user's audio muted.
+    await duck.stop().catch((failure: unknown) => console.log(`Duck teardown failed: ${String(failure)}`));
+    await bluetooth
+      .stop()
+      .catch((failure: unknown) => console.log(`Bluetooth teardown failed: ${String(failure)}`));
+    recorded.stop();
+    midi.stop();
+    throw new Error(
+      isPortInUse(error)
+        ? `LLMFM is already running at ${DAEMON_URL}.`
+        : `LLMFM could not listen at ${DAEMON_URL}: ${String(error)}`,
+    );
+  }
   publish = () => api.broadcast();
 
   const rotateOnEnd = (): void => {
-    const next = rotation.next({
-      library: libraryFor(config.current().playlist),
+    void advanceRotation({
       current: trackFile ?? null,
-      mode: config.current().autoplay,
+      next: (current) =>
+        rotation.next({
+          library: libraryFor(config.current().playlist),
+          current,
+          mode: config.current().autoplay,
+        }),
+      play: playTrack,
     });
-    if (next) void playTrack(next);
   };
 
   const unsubscribeEnd = scheduler.onEnd(rotateOnEnd);
@@ -453,29 +532,48 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   }
   void applyAudioMode();
 
-  console.log(`LLMFM listening on http://127.0.0.1:7777`);
+  /** A bridge that dies takes its half of the signal with it — silence unrelated to any
+   *  agent, or a gate that resolves as a no-op — and says nothing about it. The latches
+   *  above are what `applyAudioMode` compares against, so a death is only actionable once
+   *  they are cleared; clearing them on the transition means a bridge that keeps failing
+   *  to start is retried by the next switch rather than every tick. */
+  const health = setInterval(() => {
+    if (stopping) return;
+    const lost =
+      (ducking && !volume.status().ready) || (receivingBluetooth && !bluetooth.status().ready);
+    if (!lost) return;
+    if (ducking && !volume.status().ready) ducking = false;
+    if (receivingBluetooth && !bluetooth.status().ready) receivingBluetooth = false;
+    void applyAudioMode();
+    publish();
+  }, BRIDGE_HEALTH_TICK_MS);
+  health.unref();
+
+  console.log(`LLMFM listening on ${DAEMON_URL}`);
   console.log(midiStatus.ready ? `MIDI out: ${midiStatus.device}` : `MIDI unavailable: ${midiStatus.error}`);
   if (trackFile) console.log(`Track: ${trackFile}`);
 
   return {
     async stop(): Promise<void> {
       stopping = true;
+      clearInterval(health);
       unsubscribe();
       unsubscribeConfig();
       unsubscribeEnd();
       unsubscribeRecordedEnd();
       // A leaked MCI device keeps sounding after the process it belonged to is gone.
       recorded.stop();
-      // The system volume is the user's, and must never outlive us changed.
-      // Ordered so the sink is released first, nested so a bridge that fails on the way
-      // out cannot skip the unmute.
+      // The system volume is the user's, and must never outlive us changed. Borrowed
+      // audio is therefore given back first — releasing the sink can wait ten seconds on
+      // the radio, and the user would spend all of it muted — and nested so that neither
+      // of the two failing can skip the other.
       try {
         await audioModeSwitch;
       } finally {
         try {
-          await bluetooth.stop();
-        } finally {
           await duck.stop();
+        } finally {
+          await bluetooth.stop();
         }
       }
       config.stop();

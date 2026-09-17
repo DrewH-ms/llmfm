@@ -102,7 +102,14 @@ export function createDuck(options: {
 
   return {
     async start(): Promise<SystemVolumeStatus> {
-      if (started) return volume.status();
+      // A bridge that died leaves the gate answering as a silent no-op, so a start is a
+      // respawn rather than a report of the corpse. What the old bridge held went with
+      // it: the claim file and its own restore own that, and re-asserting a stale hold
+      // here would stop the gate being re-established on the new one.
+      if (started && volume.status().ready) return volume.status();
+      started = false;
+      heldSession = null;
+      heldEndpoint = false;
       const status = await volume.start();
       if (!status.ready) return status;
       started = true;
@@ -148,8 +155,6 @@ export function createDuck(options: {
       started = false;
       await volume.restore();
       await volume.stop();
-      heldSession = null;
-      heldEndpoint = false;
     },
   };
 }

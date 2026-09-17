@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTrackRotation, listTracks } from './daemon.ts';
+import { createTrackRotation, listTracks, advanceRotation } from './daemon.ts';
 
 const LIBRARY = ['a.mid', 'b.mid', 'c.mid', 'd.mid'];
 
@@ -80,4 +80,63 @@ test('random drops tracks that have left the library', () => {
 
 test('the shipped library is big enough for autoplay to have somewhere to go', () => {
   assert.ok(listTracks().length >= 2);
+});
+
+/** One file deleted, locked or unparseable used to end autoplay for the rest of the run:
+ *  the transport sat paused at the end of the previous track, which is silence that means
+ *  nothing at all. */
+test('rotation walks past a track that will not load', async () => {
+  const rotation = createTrackRotation();
+  const broken = new Set(['b.mid', 'c.mid']);
+  const tried: string[] = [];
+  const started = await advanceRotation({
+    current: 'a.mid',
+    next: (current) => rotation.next({ library: LIBRARY, current, mode: 'sequential' }),
+    play: (file) => {
+      tried.push(file);
+      return Promise.resolve(!broken.has(file));
+    },
+  });
+  assert.equal(started, 'd.mid');
+  assert.deepEqual(tried, ['b.mid', 'c.mid', 'd.mid']);
+});
+
+test('a library where nothing loads stops instead of spinning', async () => {
+  const rotation = createTrackRotation();
+  const tried: string[] = [];
+  const started = await advanceRotation({
+    current: 'a.mid',
+    next: (current) => rotation.next({ library: LIBRARY, current, mode: 'sequential' }),
+    play: (file) => {
+      tried.push(file);
+      return Promise.resolve(false);
+    },
+  });
+  assert.equal(started, null);
+  assert.deepEqual(tried, ['b.mid', 'c.mid', 'd.mid', 'a.mid'], 'the first candidate is the bound');
+});
+
+test('a broken library stops in random order too', async () => {
+  const rotation = createTrackRotation(cyclingRandom([0.1, 0.9, 0.5, 0.3, 0.7]));
+  let attempts = 0;
+  const started = await advanceRotation({
+    current: 'a.mid',
+    next: (current) => rotation.next({ library: LIBRARY, current, mode: 'random' }),
+    play: () => {
+      attempts += 1;
+      assert.ok(attempts <= LIBRARY.length * 2, 'the rotation is spinning');
+      return Promise.resolve(false);
+    },
+  });
+  assert.equal(started, null);
+});
+
+test('rotation with nowhere to go tries nothing', async () => {
+  const rotation = createTrackRotation();
+  const started = await advanceRotation({
+    current: 'a.mid',
+    next: (current) => rotation.next({ library: LIBRARY, current, mode: 'off' }),
+    play: () => assert.fail('autoplay is off'),
+  });
+  assert.equal(started, null);
 });
