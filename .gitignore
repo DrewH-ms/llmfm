@@ -5,6 +5,7 @@ node_modules/
 # is also a git working tree. Ignore what they add; keep what ships.
 llmfm.config.json
 llmfm-volume-claim.json
+llmfm-bluetooth-claim.json
 playlists/*
 !playlists/README.md
 !playlists/bundled/

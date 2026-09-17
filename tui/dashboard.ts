@@ -135,7 +135,9 @@ const BLUETOOTH_CONNECT_FAILED =
   'could not connect — on the phone, connect to this PC, then try again';
 const BLUETOOTH_NONE_PAIRED =
   'no paired phone found — pair it first in Settings › Bluetooth & devices';
-const BLUETOOTH_SETTING_OFF = 'turn Bluetooth audio on under Settings first';
+/** Selecting the action turns the setting on rather than telling the user to, which also
+ *  puts the daemon into duck mode — the only mode that gates the phone. */
+const BLUETOOTH_ENABLING = 'turning Bluetooth audio on and starting the receiver — this takes a moment';
 /** Windows cannot make the phone send audio; the phone has to be told where to send it,
  *  and a user who is not told this concludes the connection is broken. */
 const BLUETOOTH_PHONE_STEP = 'On your phone: pick this PC as the output and press play.';
@@ -192,6 +194,12 @@ const SECTION_HELP: Readonly<Record<SectionId, string>> = {
 };
 
 const MASTER_VOLUME_KEY = 'masterVolume';
+/** In duck mode the sound is the user's own, and we only press the endpoint's mute flag —
+ *  moving their level would be a change we could not honestly restore. The control is
+ *  shown inert rather than silently ignoring the keystroke. */
+const MASTER_VOLUME_INERT = 'n/a while ducking';
+const MASTER_VOLUME_INERT_NOTICE =
+  'master volume does not apply while ducking — use the volume on the device that is playing';
 const MODE_KEY = 'mode';
 const FADE_KEY = 'fadeSeconds';
 /** Master volume is a setting like any other, but the listener reaches for it constantly,
@@ -623,17 +631,22 @@ function masterVolumeLine(options: {
   const raw = settingValue(config, spec.key);
   const max = spec.kind === 'number' ? spec.max : 1;
   const level = typeof raw === 'number' ? raw : max;
+  const inert = config.audio === 'duck';
   return [
     cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
-    { text: fit(spec.title, TITLE_COLUMN_WIDTH), style: selected ? STYLE_BOLD : STYLE_NONE },
-    { text: selected ? CYCLE_LEFT : '  ', style: FG_GREY },
+    {
+      text: fit(spec.title, TITLE_COLUMN_WIDTH),
+      style: inert ? STYLE_DIM : selected ? STYLE_BOLD : STYLE_NONE,
+    },
+    { text: selected && !inert ? CYCLE_LEFT : '  ', style: FG_GREY },
     {
       text: bar(max > 0 ? level / max : 0, VOLUME_BAR_WIDTH),
-      style: level > 0 ? FG_GREEN : FG_GREY,
+      style: inert ? STYLE_DIM : level > 0 ? FG_GREEN : FG_GREY,
     },
-    { text: selected ? CYCLE_RIGHT : '  ', style: FG_GREY },
-    { text: ` ${displayWithSpec(spec, level)}`, style: STYLE_BOLD },
+    { text: selected && !inert ? CYCLE_RIGHT : '  ', style: FG_GREY },
+    { text: ` ${displayWithSpec(spec, level)}`, style: inert ? STYLE_DIM : STYLE_BOLD },
+    { text: inert ? `  ${MASTER_VOLUME_INERT}` : '', style: STYLE_DIM },
   ];
 }
 
@@ -1200,8 +1213,14 @@ function openTracksFolder(): void {
 /** Listing waits on the radio, so the notice goes up before the request rather than after
  *  it: a frame that says nothing for half a minute reads as a dashboard that has hung. */
 async function scanBluetooth(): Promise<void> {
-  notice = BLUETOOTH_SEARCHING;
+  const enabling = snapshot?.state.config.bluetoothReceive === false;
+  notice = enabling ? BLUETOOTH_ENABLING : BLUETOOTH_SEARCHING;
   paint();
+  if (enabling) {
+    await command('/config', { key: 'bluetoothReceive', value: true });
+    notice = BLUETOOTH_SEARCHING;
+    paint();
+  }
   try {
     const response = await fetch(`${DAEMON_URL}/bluetooth/devices`, {
       signal: AbortSignal.timeout(BLUETOOTH_LIST_TIMEOUT_MS),
@@ -1210,8 +1229,7 @@ async function scanBluetooth(): Promise<void> {
   } catch {
     bluetoothDevices = [];
   }
-  if (bluetoothDevices.length > 0) notice = BLUETOOTH_PHONE_STEP;
-  else notice = snapshot?.state.config.bluetoothReceive ? BLUETOOTH_NONE_PAIRED : BLUETOOTH_SETTING_OFF;
+  notice = bluetoothDevices.length > 0 ? BLUETOOTH_PHONE_STEP : BLUETOOTH_NONE_PAIRED;
   restoreCursor();
   paint();
 }
@@ -1271,6 +1289,11 @@ async function choosePlaylist(name: string): Promise<void> {
 
 function cycleSetting(spec: SettingSpec, direction: 1 | -1): void {
   if (!snapshot) return;
+  if (spec.key === MASTER_VOLUME_KEY && snapshot.state.config.audio === 'duck') {
+    notice = MASTER_VOLUME_INERT_NOTICE;
+    paint();
+    return;
+  }
   const value = nextWithSpec(spec, settingValue(snapshot.state.config, spec.key), direction);
   if (value !== null) void command('/config', { key: spec.key, value });
 }

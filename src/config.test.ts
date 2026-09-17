@@ -130,6 +130,42 @@ test('one bad value in a hand-edited file costs only that setting', (t) => {
   assert.deepEqual(store.current().muted, ['Rasa']);
 });
 
+/** Bluetooth receive has no gate of its own: the phone's stream is silenced only by duck
+ *  mode's endpoint mute. Left alone with `audio: 'midi'` it plays on under our own score
+ *  while an agent waits, which is the failure the whole product is defined against. */
+test('turning Bluetooth receive on switches the sound source to ducking', (t) => {
+  useTempHome(t);
+
+  const store = createConfigStore();
+  assert.equal(store.current().audio, 'midi');
+  assert.equal(store.setSetting('bluetoothReceive', true), true);
+  assert.equal(store.current().audio, 'duck');
+  assert.equal(store.current().bluetoothReceive, true);
+
+  const reopened = createConfigStore();
+  assert.equal(reopened.current().audio, 'duck');
+  assert.equal(reopened.current().bluetoothReceive, true);
+});
+
+test('choosing the MIDI score turns Bluetooth receive off', (t) => {
+  useTempHome(t);
+
+  const store = createConfigStore();
+  store.setSetting('bluetoothReceive', true);
+  assert.equal(store.setSetting('audio', 'midi'), true);
+  assert.equal(store.current().audio, 'midi');
+  assert.equal(store.current().bluetoothReceive, false);
+});
+
+test('a hand-edited file holding both Bluetooth and MIDI is repaired on load', (t) => {
+  useTempHome(t);
+
+  writeFileSync(configPath(), JSON.stringify({ audio: 'midi', bluetoothReceive: true }));
+  const store = createConfigStore();
+  assert.equal(store.current().bluetoothReceive, true);
+  assert.equal(store.current().audio, 'duck');
+});
+
 /** The migration reaches outside the install by design, to a path a redirected home does
  *  not move. It must therefore not run at all when the home has been redirected — or a
  *  test pointed at a temp folder carries the user's real config off into it, and takes it

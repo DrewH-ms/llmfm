@@ -143,7 +143,7 @@ export const SETTING_SPECS: readonly SettingSpec[] = [
     kind: 'toggle',
     key: 'bluetoothReceive',
     title: 'Bluetooth audio',
-    help: 'Take audio from a phone paired with this PC, so the gate rides what the phone plays.',
+    help: 'Take audio from a phone paired with this PC. Turning this on switches the sound source to ducking, which is what gates the phone.',
   },
   {
     kind: 'toggle',
