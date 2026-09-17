@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TestContext } from 'node:test';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { configPath, createConfigStore, handleFor, matchesHandle } from './config.ts';
@@ -187,4 +187,37 @@ test('a redirected home never migrates the real config out of ~/.copilot', (t: T
   createConfigStore().current();
 
   assert.ok(existsSync(legacy), 'the legacy config was moved out from under the user');
+});
+
+/** The file holds every tuned setting, and a truncated one parses as nothing, so the
+ *  next start would come up on defaults with no error shown. Replacement by rename is
+ *  what makes a kill mid-write survivable; the identity change is the evidence that the
+ *  bytes never went into the live file. */
+test('a settings write replaces the file rather than truncating it in place', (t) => {
+  useTempHome(t);
+
+  const store = createConfigStore();
+  store.setSetting('fadeSeconds', 1.5);
+  const before = statSync(configPath()).ino;
+  store.setSetting('fadeSeconds', 2.5);
+  const after = statSync(configPath()).ino;
+
+  assert.notEqual(after, before, 'the config was written in place, so a kill can truncate it');
+  assert.equal(existsSync(`${configPath()}.tmp`), false, 'a temp file was left behind');
+  assert.equal(createConfigStore().current().fadeSeconds, 2.5);
+});
+
+/** A crash between write and rename leaves the temp file; the next write must reclaim it
+ *  rather than fail or start a second one. */
+test('a stray temp file from an interrupted write does not block the next one', (t) => {
+  useTempHome(t);
+
+  const store = createConfigStore();
+  store.setSetting('fadeSeconds', 1.5);
+  writeFileSync(`${configPath()}.tmp`, 'truncated{');
+
+  store.setSetting('fadeSeconds', 3.5);
+
+  assert.equal(existsSync(`${configPath()}.tmp`), false);
+  assert.equal(createConfigStore().current().fadeSeconds, 3.5);
 });

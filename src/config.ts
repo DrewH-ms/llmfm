@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import {
   CONFIG_FILE_NAME,
@@ -201,7 +201,17 @@ export function createConfigStore(): ConfigStore {
     const path = configPath();
     mkdirSync(dirname(path), { recursive: true });
     const raw = `${JSON.stringify(next, null, 2)}\n`;
-    writeFileSync(path, raw);
+    // Replaced whole: a kill mid-write leaves JSON that will not parse, and the next start
+    // falls back to defaults, silently losing every setting. The temp sits beside the
+    // target so the rename stays within one volume.
+    const tempPath = `${path}.tmp`;
+    writeFileSync(tempPath, raw);
+    try {
+      renameSync(tempPath, path);
+    } catch (error) {
+      rmSync(tempPath, { force: true });
+      throw error;
+    }
     lastRaw = raw;
     config = next;
     emit();

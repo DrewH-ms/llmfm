@@ -182,3 +182,26 @@ test('an end-of-score listener that loads another score does not strand its note
   }
   assert.deepEqual(unmatched(sent), []);
 });
+
+/** Defence in depth behind the parse boundary: an empty note list used to return from
+ *  play() without starting the tick, so the end was never reached, no listener fired, and
+ *  autoplay rotation was dead for the rest of the process. */
+test('a score with no notes still runs the transport so rotation survives', async () => {
+  const { midi } = recordingMidi();
+  const scheduler = createScheduler({ midi, mixer: openMixer });
+  let ends = 0;
+  scheduler.onEnd(() => {
+    ends += 1;
+  });
+
+  try {
+    scheduler.load(score('empty', [], 0));
+    scheduler.play();
+    assert.ok(scheduler.state().playing, 'the transport never started');
+    await wait(150);
+  } finally {
+    scheduler.stop();
+  }
+
+  assert.ok(ends >= 1, `expected onEnd to fire so the next track can load, got ${ends}`);
+});

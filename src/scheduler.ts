@@ -6,7 +6,8 @@ import type { Score, ScoredNote, TransportState } from './types.ts';
 
 export type Scheduler = {
   load(score: Score): void;
-  /** Resumes from the frozen position. */
+  /** Resumes from the frozen position. A score with nothing in it still runs the
+   *  transport, so it reaches its end and hands rotation on rather than wedging. */
   play(): void;
   /** Freezes position and stops scheduling. Does NOT fade — the mixer owns loudness. */
   pause(): void;
@@ -121,7 +122,7 @@ export function createScheduler(options: { midi: MidiOut; mixer: Mixer }): Sched
     },
 
     play(): void {
-      if (playing || notes.length === 0) return;
+      if (playing) return;
       playing = true;
       anchor = monotonicSeconds() - position;
       seekCursorTo(position);

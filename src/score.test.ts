@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
+import type { TestContext } from 'node:test';
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadScore, remapProgram, isOrchestral } from './score.ts';
@@ -141,4 +144,20 @@ test('every bundled part keeps the program its file chose alongside the one it s
       }
     }
   }
+});
+
+/** Tempo- or lyric-only exports carry track headers and no note events. Loading one as a
+ *  playable score puts the transport on silence that means nothing, so it is refused here
+ *  and the caller keeps the track it already has. */
+test('a MIDI with tracks but no notes is refused rather than loaded silent', (t: TestContext) => {
+  const dir = mkdtempSync(join(tmpdir(), 'llmfm-score-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const { Midi } = createRequire(import.meta.url)('@tonejs/midi') as typeof import('@tonejs/midi');
+  const midi = new Midi();
+  midi.addTrack().name = 'Lyrics';
+  const path = join(dir, 'noteless.mid');
+  writeFileSync(path, Buffer.from(midi.toArray()));
+
+  assert.throws(() => loadScore(path), /no playable notes/);
 });

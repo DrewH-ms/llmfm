@@ -136,6 +136,9 @@ function melodicChannels(tracks: { track: Track; index: number }[]): Map<number,
  * Only 15 melodic channels exist. Parts past that still play, but share the overflow
  * channel and can only be gated together; callers see that as more than one part
  * reporting the same channel, which percussion parts always do.
+ *
+ * Throws on a file with no notes: that is nothing to play rather than a quiet piece, and
+ * binding the transport to it would be silence that means nothing.
  */
 export function loadScore(filePath: string): Score {
   const midi = new Midi(readFileSync(filePath));
@@ -164,5 +167,8 @@ export function loadScore(filePath: string): Score {
   });
 
   const notes = parts.flatMap((part) => part.notes).sort((a, b) => a.time - b.time);
+  if (notes.length === 0) {
+    throw new Error(`Score ${basename(filePath)} carries no playable notes`);
+  }
   return { name: basename(filePath), duration: midi.duration, parts, notes };
 }
