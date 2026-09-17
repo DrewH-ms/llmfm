@@ -19,6 +19,7 @@ import {
   parseSettingSpecs,
 } from '../src/settings.ts';
 import type { SettingSpec } from '../src/settings.ts';
+import { runShutdown } from '../src/shutdown.ts';
 import { SESSION_SOURCES } from '../src/types.ts';
 import type { DaemonState, MidiStatus, SessionView, TransportState } from '../src/types.ts';
 import type { SystemVolumeStatus } from '../src/system-volume.ts';
@@ -1407,7 +1408,8 @@ function onKey(key: string): void {
   if (key === KEY_QUIT || key === KEY_INTERRUPT) {
     quitting = true;
     restoreTerminal();
-    process.exit(0);
+    void runShutdown().finally(() => process.exit(0));
+    return;
   }
   if (!snapshot) return;
   if (KEYS_SELECT_PREVIOUS.some((candidate) => candidate === key)) {
@@ -1528,14 +1530,14 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) {
   process.on(signal, () => {
     quitting = true;
     restoreTerminal();
-    process.exit(0);
+    void runShutdown().finally(() => process.exit(0));
   });
 }
 for (const failure of ['uncaughtException', 'unhandledRejection'] as const) {
   process.on(failure, (error: unknown) => {
     restoreTerminal();
     console.error(error);
-    process.exit(EXIT_FAILURE);
+    void runShutdown().finally(() => process.exit(EXIT_FAILURE));
   });
 }
 

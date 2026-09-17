@@ -11,7 +11,8 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "start": "node bin/llmfm.ts start",
+    "start": "node bin/llmfm.ts",
+    "daemon": "node bin/llmfm.ts start",
     "tui": "node bin/llmfm.ts tui",
     "install-hooks": "node bin/llmfm.ts install",
     "uninstall-hooks": "node bin/llmfm.ts uninstall",

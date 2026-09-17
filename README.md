@@ -17,8 +17,14 @@ CLI behaves exactly as normal.
 ```powershell
 npm install
 node bin/llmfm.ts install   # install the Copilot CLI hooks
-node bin/llmfm.ts start     # run the daemon
+node bin/llmfm.ts            # start the daemon and open the dashboard
 ```
+
+The dashboard is the program: it runs the daemon in the same process, so quitting it with
+`q` stops the music and hands your audio back. Leave the terminal open while you work.
+Daemon output goes to `llmfm.log` rather than the screen, so it cannot land in the middle
+of a frame. If a daemon is already running, this attaches to it instead and leaves it
+playing when you quit.
 
 Then **open a new Copilot CLI session**. Hooks are loaded once at session start, so a
 terminal that was already open will not report to the daemon. Resuming an existing
@@ -36,7 +42,9 @@ Uninstall removes only our own hook file and restores the prior state.
 
 | Command | Purpose |
 | --- | --- |
-| `node bin/llmfm.ts start [track.mid]` | Run the daemon |
+| `node bin/llmfm.ts [track.mid]` | Run the daemon and the dashboard together |
+| `node bin/llmfm.ts start [track.mid]` | Run the daemon alone, no dashboard |
+| `node bin/llmfm.ts tui` | Dashboard alone, against a daemon already running |
 | `node bin/llmfm.ts install` | Install the Copilot CLI hooks |
 | `node bin/llmfm.ts uninstall` | Remove them |
 | `node bin/llmfm.ts status` | Report daemon and hook state |

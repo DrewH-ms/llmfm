@@ -91,6 +91,9 @@ export const HOOK_REQUEST_TIMEOUT_MS = 200;
 /** Where mute rules live. Beside the hook config rather than in the repo, because muting
  *  is a property of this machine's sessions, not of the project. */
 export const CONFIG_FILE_NAME = 'llmfm.config.json';
+/** Where the daemon's output goes when the dashboard shares its terminal — anything
+ *  written to stdout there would land in the middle of the rendered frame. */
+export const LOG_FILE_NAME = 'llmfm.log';
 /** Polled, not watched: the file is edited by hand and by the dashboard, and an atomic
  *  rename blinds fs.watch the same way it does for the open-sessions file. */
 export const CONFIG_POLL_MS = 1000;
@@ -185,6 +188,9 @@ export const WORKING_CLAIM_MAX_MS = 30 * MS_PER_MINUTE;
 export const FOLD_EVIDENCE_MAX_MS = 15 * MS_PER_MINUTE;
 /** How often the daemon checks whether a bridge it believes is running has died. */
 export const BRIDGE_HEALTH_TICK_MS = 1000;
+/** Longest the dashboard waits for a daemon it started to shut down before exiting
+ *  anyway. Exiting late still restores audio; refusing to exit never does. */
+export const SHUTDOWN_GRACE_MS = 5000;
 
 /** Logs event names and short session ids only — never payload contents, which carry
  *  prompt text. Opt-in, for confirming which events the CLI actually fires. */

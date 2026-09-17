@@ -5,7 +5,7 @@
 
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONFIG_FILE_NAME, PLAYLISTS_DIR_NAME, PLAYLIST_BUNDLED } from './constants.ts';
+import { CONFIG_FILE_NAME, LOG_FILE_NAME, PLAYLISTS_DIR_NAME, PLAYLIST_BUNDLED } from './constants.ts';
 
 const PROJECT_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -29,4 +29,8 @@ export function bundledDir(): string {
 
 export function configPath(): string {
   return join(llmfmHome(), CONFIG_FILE_NAME);
+}
+
+export function logPath(): string {
+  return join(llmfmHome(), LOG_FILE_NAME);
 }
