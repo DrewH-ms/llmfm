@@ -36,16 +36,13 @@ export function parseHookEvent(options: { name: string; body: string }): HookEve
   };
 }
 
-/** Whether an event means the agent is now working, awaiting input, or has ended.
- *  Null means the event carries no state change. */
+/** Whether an event means working, awaiting input, or ended. Null means no state change. */
 export function outcomeOf(event: HookEvent): SessionOutcome | null {
   switch (event.name) {
     case 'sessionStart':
     case 'userPromptSubmitted':
     case 'preToolUse':
-    // A tool finishing means work resumed after a permission or elicitation dialog.
-    // The failure case matters just as much: a denied permission or a crashed tool must
-    // still release the part, or the session stays silent until the turn ends.
+    // A failed or denied tool must still release the part, or the session stays silent until the turn ends.
     case 'postToolUse':
     case 'postToolUseFailure':
       return 'working';

@@ -4,9 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-/** LLMFM_HOME is what every path in the install hangs off, so pointing it at a temp tree
- *  keeps the test off the real install — this one creates directories, and a test must
- *  never write into a user's actual music folder. */
+/** LLMFM_HOME redirects every install path; this test creates directories and must never write into a user's music folder. */
 const home = mkdtempSync(join(tmpdir(), 'llmfm-user-tracks-'));
 process.env['LLMFM_HOME'] = home;
 
@@ -47,8 +45,7 @@ test('a folder convention nobody can see is no convention, so both are scaffolde
   assert.deepEqual(listUserPlaylistTracks(PLAYLIST_EXAMPLE), []);
 });
 
-/** The shipped folder is listed by the branch that keeps its ids bare. Coming back a
- *  second time as a plain subfolder would offer every shipped track under two names. */
+/** Coming back a second time as a plain subfolder would offer every shipped track under two names. */
 test('the bundled folder is not enumerated as a user playlist', () => {
   mkdirSync(join(playlistsDir(), PLAYLIST_BUNDLED), { recursive: true });
   assert.ok(!listUserPlaylists().includes(PLAYLIST_BUNDLED));

@@ -1,13 +1,4 @@
-/** Receives audio from a paired phone over Bluetooth A2DP, so LLMFM can hear what the
- *  user is already playing without asking them to move the music to this machine. The
- *  phone stays the transport; Windows renders what it sends into the default render
- *  endpoint, which is the endpoint duck mode already gates.
- *
- *  The sink is up for exactly as long as the bridge process holds the connection, so the
- *  process is the resource and its death is the release. There is no state to restore.
- *  What is worth persisting is the choice: the device the user picked is claimed on disk
- *  and re-opened by the next start. See `bridge/bt-receive-bridge.ps1`.
- */
+/** A2DP receive from a paired phone into the default render endpoint, which duck mode already gates. The bridge process is the resource: its death releases the sink, so only the user's device choice is persisted. See `bridge/bt-receive-bridge.ps1`. */
 
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -15,14 +6,12 @@ import path from 'node:path';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { llmfmHome } from './paths.ts';
 
-/** Generous because the bridge enumerates paired devices before it answers, and that
- *  enumeration waits on the radio rather than on this machine. */
+/** Generous: the bridge enumerates paired devices first, and that waits on the radio. */
 const BRIDGE_START_TIMEOUT_MS = 45000;
 /** A state reply can queue behind a re-open the bridge started on its own. */
 const STATUS_TIMEOUT_MS = 10000;
 const LIST_TIMEOUT_MS = 45000;
-/** Opening an A2DP link waits on the radio and the phone, and the bridge retries a
- *  refused attempt that blocks for five seconds before it answers. */
+/** Opening an A2DP link waits on the radio, and the bridge retries a refusal that blocks five seconds. */
 const CONNECT_TIMEOUT_MS = 30000;
 const CLAIM_FILE_NAME = 'llmfm-bluetooth-claim.json';
 
@@ -37,13 +26,11 @@ export type BluetoothDevice = { id: string; name: string };
 export type BluetoothStatus = {
   ready: boolean;
   state: ConnectionState;
-  /** The device we hold, or null when nothing is connected. */
   device: BluetoothDevice | null;
   error: string | null;
 };
 
-/** The device the user picked, so a restarted daemon re-opens it instead of asking
- *  again. There is nothing here to undo: a dead bridge has already released the sink. */
+/** Persisted so a restarted daemon re-opens the user's device; nothing here to undo, a dead bridge already released the sink. */
 type BluetoothClaim = { device: BluetoothDevice; at: number };
 
 export type BluetoothReceive = {
@@ -53,7 +40,6 @@ export type BluetoothReceive = {
   list(): Promise<BluetoothDevice[]>;
   connect(device: { id: string }): Promise<BluetoothStatus>;
   disconnect(): Promise<BluetoothStatus>;
-  /** Closes any connection and ends the bridge process. */
   stop(): Promise<void>;
 };
 
@@ -69,8 +55,7 @@ function bridgeScript(): string {
   );
 }
 
-/** `S <state> <id> <name>`, where the name is the remainder of the line because a
- *  device name may contain spaces and a device id may not. */
+/** `S <state> <id> <name>`; the name is the line remainder because it may contain spaces. */
 function parseState(line: string): { state: ConnectionState; device: BluetoothDevice | null } | null {
   const parts = line.split(' ');
   const state = CONNECTION_STATES.find((candidate) => candidate === parts[1]);
@@ -88,8 +73,7 @@ function parseDevice(line: string): BluetoothDevice | null {
   return { id, name: parts.slice(3).join(' ') };
 }
 
-/** The file is on disk between runs and may be hand-edited or truncated by a crash, so
- *  anything unexpected means no claim rather than a malformed one. */
+/** The file survives between runs and may be truncated by a crash, so anything unexpected means no claim. */
 function readClaim(): BluetoothClaim | null {
   const file = bluetoothClaimPath();
   if (!existsSync(file)) return null;
@@ -140,8 +124,7 @@ export function createBluetoothReceive(): BluetoothReceive {
     while (waiting.length > 0) waiting.shift()?.(`${ERROR_PREFIX}${error}`);
   };
 
-  /** Collects reply lines until `isLast` accepts one. Resolves empty when the bridge is
-   *  not running, so no caller has to know whether it is. */
+  /** Collects reply lines until `isLast` accepts one; resolves empty when the bridge is not running. */
   const request = (options: {
     command: string;
     timeoutMs: number;
@@ -202,8 +185,7 @@ export function createBluetoothReceive(): BluetoothReceive {
     return state;
   };
 
-  /** The device the user chose on an earlier run. A device that is no longer paired or
-   *  no longer in range is not an error worth keeping: the claim goes with it. */
+  /** A device no longer paired or in range is not an error worth keeping: the claim goes with it. */
   const reopenClaimed = async (): Promise<void> => {
     const claim = readClaim();
     if (!claim) return;
@@ -266,13 +248,11 @@ export function createBluetoothReceive(): BluetoothReceive {
             pending = pending.slice(breakAt + 1);
             if (line.startsWith('OK ')) {
               clearTimeout(timer);
-              // Ready before the claim is honoured, because re-opening goes through the
-              // same commands; start() still only resolves once the link has settled.
+              // Ready before the claim is honoured, because re-opening goes through the same commands.
               state = { ready: true, state: 'None', device: null, error: null };
               void reopenClaimed().then(() => settle(state));
             } else if (waiting.length > 0) {
-              // A command answered before start() resolves is the claimed device being
-              // re-opened, and a device that refuses is not a bridge that failed.
+              // A command answered before start() resolves is the claimed device re-opening, and a refusal is not a failed bridge.
               waiting.shift()?.(line);
             } else if (line.startsWith(ERROR_PREFIX) && !settled) {
               settle({

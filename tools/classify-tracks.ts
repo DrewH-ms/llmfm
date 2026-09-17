@@ -8,18 +8,11 @@ import { buildVoiceTree, classifyPart } from '../src/voices.ts';
 import { measureDynamics, isDynamic, MIN_DISTINCT_VELOCITIES } from './dynamics.ts';
 import type { Voice } from '../src/types.ts';
 
-/**
- * Measures how the voice tree behaves on every track in the library, so "does our
- * classification work?" becomes a number per file rather than an impression.
- *
- * Dev-time only, run by hand:
- *   node tools/classify-tracks.ts [--quiet]
- */
+/** Dev-time only — `node tools/classify-tracks.ts [--quiet]`: reports voice-tree behaviour per library track as numbers rather than impressions. */
 
 const TRACKS_DIR = join(fileURLToPath(import.meta.url), '..', '..', 'playlists', 'bundled');
 const MIDI_FILE_PATTERN = /\.midi?$/i;
-/** Below this a track cannot carry a working session of agents: with one or two voices
- *  there is nothing to assign, and the ensemble reading of the signal collapses. */
+/** Below this there is nothing to assign and the ensemble reading of the signal collapses. */
 const MIN_USABLE_VOICES = 3;
 
 type Measurement = {
@@ -47,8 +40,7 @@ function distinct(voices: Voice[], depth: number): number {
   return new Set(voices.map((voice) => voice.path.slice(0, depth).join('/'))).size;
 }
 
-/** The dynamics gate is the curation script's, imported rather than restated so the
- *  report and the refusal can never disagree about a file. */
+/** The curation script's gate, imported rather than restated so report and refusal cannot disagree. */
 type Dynamics = { count: number; distinct: number; sd: number; low: number; high: number };
 
 function dynamicsOf(notes: { velocity: number }[]): Dynamics {

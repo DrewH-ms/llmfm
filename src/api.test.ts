@@ -8,9 +8,7 @@ import { setTimeout } from 'node:timers/promises';
 import type { DaemonState } from './types.ts';
 import type { BluetoothDevice } from './bluetooth-receive.ts';
 
-/** A port of its own, so a test never answers to — or fights with — a daemon the user has
- *  running. Set before the modules that read it are loaded, which is why they are imported
- *  dynamically here. */
+/** A port of its own, set before the modules that read it load — hence the dynamic imports. */
 const TEST_PORT = '7791';
 process.env['LLMFM_PORT'] = TEST_PORT;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
@@ -110,8 +108,7 @@ test('a device that gave us no connection is a rejected request, not a silent no
   }
 });
 
-/** P9 — a route whose work rejects must answer the client and leave the daemon alive,
- *  because the daemon dying is the daemon dying with the user's audio still muted. */
+/** P9 — a daemon that dies on a rejection dies with the user's audio still muted. */
 test('a rejected bluetooth scan is a 500, not an unhandled rejection', async () => {
   bluetoothFails = true;
   try {
@@ -127,8 +124,7 @@ test('a rejected bluetooth scan is a 500, not an unhandled rejection', async () 
   assert.ok(after.ok);
 });
 
-/** P17 — a second daemon must be told the port is taken, not kill the process with an
- *  EventEmitter error the caller cannot catch. */
+/** P17 — an EventEmitter error the caller cannot catch would kill the process instead. */
 test('a port already bound rejects the start rather than crashing', async () => {
   await assert.rejects(
     () => startApi(HANDLERS),
@@ -140,8 +136,7 @@ test('a port already bound rejects the start rather than crashing', async () => 
   );
 });
 
-/** P19 — a page the user has open can reach loopback. It cannot suppress these headers,
- *  and the daemon's own callers never send them. */
+/** P19 — a page cannot suppress these headers, and the daemon's own callers never send them. */
 test('a browser-shaped request cannot drive the gate', async () => {
   const before = hookEvents;
   const forged = await fetch(`${BASE_URL}/event?name=notification`, {
@@ -166,9 +161,7 @@ test('a browser-shaped request cannot drive the gate', async () => {
   }
 });
 
-/** P19 — the Host check is what closes DNS rebinding, the only variant that makes the
- *  session list, and every session's cwd, readable. `fetch` cannot forge a Host header,
- *  so the raw client is the only way to state the case. */
+/** P19 — the Host check closes DNS rebinding; `fetch` cannot forge Host, hence the raw client. */
 test('a request resolved through a foreign hostname is refused before it reads state', async () => {
   const statusFor = (host: string | null): Promise<number> =>
     new Promise((resolve, reject) => {
@@ -201,8 +194,7 @@ test('a request resolved through a foreign hostname is refused before it reads s
   }
 });
 
-/** P19 — the two callers that must keep working. The hook is run as its own process by
- *  the CLI, so it is checked as one rather than imitated. */
+/** P19 — the CLI runs the hook as its own process, so it is checked as one rather than imitated. */
 test('the real hook script is still admitted', async () => {
   const before = hookEvents;
   const hook = spawn(process.execPath, [join(import.meta.dirname, '..', 'hooks', 'notify.js'), 'notification'], {

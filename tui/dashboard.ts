@@ -60,8 +60,7 @@ const BADGE_TEXT_SOUNDING = ' SOUNDING ';
 const BADGE_TEXT_SILENT = '  silent  ';
 const BADGE_TEXT_MUTED = '  muted   ';
 const TAG_BLOCKED = 'BLOCKED?';
-/** Says the row is sounding on a sub-agent's work, not on its own: the CLI reports this
- *  session as stopped, and without the tag the music would look like it was lying. */
+/** Sounding on a sub-agent's work while the CLI reports this session stopped. */
 const TAG_FOLDED = 'SUB-AGENT';
 const CURSOR_SELECTED = '▸';
 const CURSOR_UNSELECTED = ' ';
@@ -70,8 +69,7 @@ const CYCLE_RIGHT = ' ›';
 const ENTER_MARKER = '›';
 const MARKER_SOUNDING = '█ ';
 const MARKER_SILENT = '· ';
-/** Blank, not a third glyph: the column means "is this part sounding", and a muted row
- *  is answering a question we have deliberately stopped asking. */
+/** Blank, not a third glyph: a muted row answers a question we stopped asking. */
 const MARKER_MUTED = '  ';
 const UNVOICED_TEXT = '(unvoiced)';
 const MORE_ABOVE = 'above';
@@ -83,8 +81,7 @@ const CLOCK_COLUMN_WIDTH = 16;
 const ELLIPSIS = '…';
 const SECONDS_PER_MINUTE = 60;
 const SECOND_DIGITS = 2;
-/** Header, blank, heading, overflow marker, blank, help and footer: everything a frame
- *  spends before the rows it is actually showing. */
+/** Header, blank, heading, overflow marker, blank, help, footer. */
 const CHROME_LINE_COUNT = 10;
 
 const MS_PER_SECOND = 1000;
@@ -130,8 +127,7 @@ const ACTION_HELP: Readonly<Record<ActionId, string>> = {
   [ACTION_BLUETOOTH]:
     'Lists the phones already paired with this PC, so one of them can play into it.',
 };
-/** Enumerating paired devices goes over the radio and is slow by nature, and opening a
- *  link waits on the phone, so neither can be held to the timeout a state read uses. */
+/** Radio enumeration and link opening wait on the phone, so not the state-read timeout. */
 const BLUETOOTH_LIST_TIMEOUT_MS = 60000;
 const BLUETOOTH_CONNECT_TIMEOUT_MS = 40000;
 const BLUETOOTH_SEARCHING = 'looking for paired devices — this takes a moment';
@@ -140,16 +136,13 @@ const BLUETOOTH_CONNECT_FAILED =
   'could not connect — on the phone, connect to this PC, then try again';
 const BLUETOOTH_NONE_PAIRED =
   'no paired phone found — pair it first in Settings › Bluetooth & devices';
-/** Selecting the action turns the setting on rather than telling the user to, which also
- *  puts the daemon into duck mode — the only mode that gates the phone. */
+/** Enabling also forces duck mode — the only mode that gates the phone. */
 const BLUETOOTH_ENABLING = 'turning Bluetooth audio on and starting the receiver — this takes a moment';
-/** Windows cannot make the phone send audio; the phone has to be told where to send it,
- *  and a user who is not told this concludes the connection is broken. */
+/** Windows cannot make the phone send audio; only the phone can choose the sink. */
 const BLUETOOTH_PHONE_STEP = 'On your phone: pick this PC as the output and press play.';
 const BLUETOOTH_STARTING = 'Bluetooth: starting the receiver…';
 const BLUETOOTH_CHOOSE = 'Bluetooth: no phone connected — Music › Connect Bluetooth.';
-/** A refused link reports an HRESULT the user can do nothing with; what they can do is
- *  connect the PC from the phone, which is also what pairing alone does not do. */
+/** A refused link reports an unusable HRESULT; pairing alone does not connect the PC. */
 const BLUETOOTH_NOT_LINKED = 'Bluetooth: connect this PC from the phone, then try again — ';
 const BLUETOOTH_DROPPED = 'dropped the link — connect it again.';
 const BLUETOOTH_NOT_LINKED_SHORT = 'not linked';
@@ -199,16 +192,13 @@ const SECTION_HELP: Readonly<Record<SectionId, string>> = {
 };
 
 const MASTER_VOLUME_KEY = 'masterVolume';
-/** In duck mode the sound is the user's own, and we only press the endpoint's mute flag —
- *  moving their level would be a change we could not honestly restore. The control is
- *  shown inert rather than silently ignoring the keystroke. */
+/** Duck mode only presses the endpoint's mute flag; moving the user's level is unrestorable. */
 const MASTER_VOLUME_INERT = 'n/a while ducking';
 const MASTER_VOLUME_INERT_NOTICE =
   'master volume does not apply while ducking — use the volume on the device that is playing';
 const MODE_KEY = 'mode';
 const FADE_KEY = 'fadeSeconds';
-/** Master volume is a setting like any other, but the listener reaches for it constantly,
- *  so it sits on the root menu as a live slider rather than behind a page. */
+/** Split out of the settings page: it lives on the root menu as a live slider. */
 function masterVolumeSpec(state: DaemonState): SettingSpec | null {
   return state.settingSpecs.find((spec) => spec.key === MASTER_VOLUME_KEY) ?? null;
 }
@@ -227,8 +217,7 @@ type Segment = { text: string; style: string };
 
 type Snapshot = { state: DaemonState; receivedAt: number };
 
-/** A selectable row. `key` is stable across frames — a session's array position is not,
- *  and neither is its presence. */
+/** `key` is stable across frames; a session's array position and presence are not. */
 type Row =
   | { kind: 'section'; key: string; id: SectionId }
   | { kind: 'setting'; key: string; spec: SettingSpec }
@@ -238,8 +227,7 @@ type Row =
   | { kind: 'track'; key: string; track: TrackView }
   | { kind: 'session'; key: string; session: SessionView };
 
-/** One library entry as the menu needs it. The daemon's catalogue carries more, but a row
- *  that showed provenance would not fit beside the title at 80 columns. */
+/** Narrower than the daemon's catalogue: provenance would not fit beside the title at 80 columns. */
 type TrackView = {
   file: string;
   title: string;
@@ -255,7 +243,6 @@ type PlaylistView = {
   count: number;
 };
 
-/** Everything a frame is drawn from. */
 type View = {
   snapshot: Snapshot | null;
   link: LinkState;
@@ -308,8 +295,7 @@ function parseDuck(value: unknown): SystemVolumeStatus {
   };
 }
 
-/** Read on the same rule as the duck status: an unreadable field costs its own fact, not
- *  the snapshot. */
+/** An unreadable field costs its own fact, not the snapshot. */
 function parseBluetooth(value: unknown): BluetoothStatus {
   const absent: BluetoothStatus = { ready: false, state: BLUETOOTH_NONE, device: null, error: null };
   if (!isRecord(value)) return absent;
@@ -335,8 +321,7 @@ function parseSession(value: unknown): SessionView | null {  if (!isRecord(value
   if (blockedSince !== null && typeof blockedSince !== 'number') return null;
   if (cwd !== null && typeof cwd !== 'string') return null;
   if (voiceName !== null && typeof voiceName !== 'string') return null;
-  // Absent rather than rejected: the part list is detail, and a daemon that does not send
-  // it is still telling the truth about everything the row itself shows.
+  // Absent rather than rejected: an older daemon that omits it still tells the truth about the row.
   const voiceParts = Array.isArray(value['voiceParts'])
     ? value['voiceParts'].filter((entry): entry is string => typeof entry === 'string')
     : [];
@@ -354,15 +339,12 @@ function parseSession(value: unknown): SessionView | null {  if (!isRecord(value
     audible,
     handle,
     muted,
-    // Absent rather than rejected for the same reason as the part list: an older daemon
-    // that does not send it is still telling the truth about the rest of the row.
+    // Absent rather than rejected, as with the part list.
     folded: value['folded'] === true,
   };
 }
 
-/** Never fails: a daemon that sends no config, or one field of nonsense, costs the user
- *  the menu's accuracy for that row, not the screen. Values go through the same specs the
- *  daemon validates writes with, so the two sides cannot disagree about what is legal. */
+/** Never fails; values go through the same specs the daemon validates writes with, so the two cannot disagree. */
 function parseConfig(value: unknown, specs: readonly SettingSpec[]): LlmfmConfig {
   const record = isRecord(value) ? value : {};
   const settings: Record<string, unknown> = { ...SETTING_DEFAULTS };
@@ -400,13 +382,11 @@ function parseDaemonState(text: string): DaemonState | null {
     if (!session) return null;
     sessions.push(session);
   }
-  // A daemon too old to publish its specs still has to be driveable, so the compiled list
-  // stands in. That is the pre-existing drift risk and nothing worse than today.
+  // A daemon too old to publish its specs still has to be driveable, so the compiled list stands in.
   const published = parseSettingSpecs(payload['settingSpecs']);
   const settingSpecs = published.length > 0 ? published : SETTING_SPECS;
   const config = parseConfig(payload['config'], settingSpecs);
-  // `mode` and `fadeSeconds` are settings now, so the config is where they are read from
-  // and the top-level copies are the daemon's own echo of them.
+  // `mode` and `fadeSeconds` are settings now; the top-level copies are the daemon's echo.
   return {
     mode: config.mode,
     fadeSeconds: config.fadeSeconds,
@@ -423,8 +403,7 @@ function parseDaemonState(text: string): DaemonState | null {
   };
 }
 
-/** Narrows the daemon's track catalogue. A malformed entry is dropped rather than
- *  rejecting the list: one bad record should cost its own row, not the whole library. */
+/** A malformed entry costs its own row, not the whole library. */
 function parseTracks(text: string): TrackView[] {
   let payload: unknown;
   try {
@@ -440,8 +419,7 @@ function parseTracks(text: string): TrackView[] {
     if (typeof file !== 'string' || file.length === 0) continue;
     tracks.push({
       file,
-      // A file with no provenance falls back to its own name, and inside a playlist the
-      // folder is already the row above, so repeating it in every title reads as noise.
+      // Inside a playlist the folder is already the row above, so a full path reads as noise.
       title: typeof title === 'string' && title.length > 0 ? title : bareName(file),
       composer: typeof composer === 'string' ? composer : null,
       holdMusicOnly: holdMusicOnly === true,
@@ -452,8 +430,7 @@ function parseTracks(text: string): TrackView[] {
   return tracks;
 }
 
-/** Narrows the daemon's playlist list, dropping a malformed entry the way the catalogue
- *  does: a playlist the user cannot see is a smaller loss than a dashboard that died. */
+/** A malformed entry is dropped: a missing playlist is a smaller loss than a dead dashboard. */
 function parsePlaylists(text: string): PlaylistView[] {
   let payload: unknown;
   try {
@@ -473,8 +450,7 @@ function parsePlaylists(text: string): PlaylistView[] {
   return playlists;
 }
 
-/** Narrows the daemon's list of paired devices, dropping a malformed entry the way the
- *  catalogue does. */
+/** A malformed entry is dropped, as in the catalogue. */
 function parseBluetoothDevices(text: string): BluetoothDevice[] {
   let payload: unknown;
   try {
@@ -502,8 +478,7 @@ function bareName(file: string): string {
   return cut >= 0 ? file.slice(cut + 1) : file;
 }
 
-/** Mirrors the daemon's own fallback: an empty playlist plays the bundled music, so a list
- *  that showed nothing would claim a silence the daemon never produces. */
+/** Mirrors the daemon's fallback: an empty playlist plays the bundled music, never silence. */
 function visibleTracks(library: readonly TrackView[], playlist: string): readonly TrackView[] {
   if (playlist === PLAYLIST_ALL) return library;
   const chosen = library.filter((track) => track.playlist === playlist);
@@ -535,8 +510,7 @@ function fit(text: string, width: number): string {
   return clip(text, width).padEnd(width);
 }
 
-/** Styles segments only after the plain text has been measured, so colour codes never
- *  count against the terminal width. */
+/** Styles only after measuring plain text, so colour codes never count against the width. */
 function composeLine(segments: Segment[], width: number): string {
   let used = 0;
   let line = '';
@@ -555,9 +529,7 @@ function bar(fraction: number, width: number): string {
   return `${PROGRESS_FILLED.repeat(filled)}${PROGRESS_EMPTY.repeat(span - filled)}`;
 }
 
-/** How long a session has claimed to be blocked. The claim is sticky — an approved
- *  permission prompt produces no event — so its age is the only evidence the user has
- *  that `BLOCKED?` may already be stale. */
+/** The claim is sticky — an approved prompt emits no event — so age is the only hint it is stale. */
 function blockedTag(blockedSince: number | null): string {
   if (blockedSince === null) return ` ${TAG_BLOCKED}`;
   const seconds = Math.max(Math.floor((Date.now() - blockedSince) / MS_PER_SECOND), 0);
@@ -573,9 +545,7 @@ function cursorSegment(selected: boolean): Segment {
   };
 }
 
-/** Lays the row out tag-first: `BLOCKED?` says why a part is silent, which the audio
- *  cannot, so the voice name yields its width to it. A muted session makes no claim
- *  about its agent, so it carries no tag. */
+/** Tag-first: `BLOCKED?` says what the audio cannot, so the voice name yields width to it. */
 function sessionLine(options: {
   session: SessionView;
   selected: boolean;
@@ -715,9 +685,7 @@ function transportSegments(transport: TransportState, width: number): Segment[] 
   ];
 }
 
-/** Names the instruments a voice gates. A section-sized voice is the whole complaint the
- *  user had: "Strings" alone does not say which desks fall silent with this agent, nor
- *  that everything else is backing and sounds regardless. */
+/** Names the desks a voice gates: "Strings" alone does not say which fall silent. */
 function voiceDetail(session: SessionView, width: number): Segment[] {
   if (session.muted) return [{ text: SESSION_HELP_MUTED, style: FG_GREY }];
   if (!session.voiceName) return [{ text: SESSION_HELP_UNVOICED, style: FG_GREY }];
@@ -753,8 +721,7 @@ function hintsFor(section: SectionId | null): string {
   return section === SECTION_MUSIC ? HINTS_MUSIC : HINTS_SETTINGS;
 }
 
-/** A failure replaces the key hints rather than sharing the line: at 80 columns the
- *  hints already fill it, and the notice would be the part that gets ellipsized. */
+/** A failure replaces the hints rather than sharing the line: at 80 columns it would be ellipsized. */
 function footerLine(options: {
   notice: string | null;
   section: SectionId | null;
@@ -818,7 +785,6 @@ function actionLine(options: { id: ActionId; selected: boolean; width: number })
   ];
 }
 
-/** One paired phone, marked when it is the device currently holding the sink. */
 function bluetoothLine(options: {
   device: BluetoothDevice;
   connected: boolean;
@@ -867,8 +833,7 @@ function trackLine(options: {
   width: number;
 }): Segment[] {
   const { track, playing, selected, width } = options;
-  // The composer earns its place only when there is room for it; the title is what the
-  // user is choosing by.
+  // The composer earns its place only when there is room; the title is what the user chooses by.
   const label = track.composer ? `${track.title} — ${track.composer}` : track.title;
   const note = track.integrity === 'mismatch'
     ? TRACK_INTEGRITY_BAD
@@ -917,9 +882,7 @@ function rowLine(options: {
   return settingLine({ spec: row.spec, config: state.config, selected, width });
 }
 
-/** What is actually carrying the signal. In duck mode that is the volume bridge, and a
- *  bridge that never came up is the whole feature quietly doing nothing. Bluetooth is
- *  shown beside it, because it is what the phone's audio arrives on. */
+/** A volume bridge that never came up is the whole feature quietly doing nothing. */
 function sourceSegments(state: DaemonState): Segment[] {
   if (state.config.audio === 'duck') {
     return [
@@ -941,7 +904,6 @@ function sourceSegments(state: DaemonState): Segment[] {
   ];
 }
 
-/** The phone holding the sink open, or what is standing in the way of one. */
 function bluetoothSegments(state: DaemonState): Segment[] {
   if (!state.config.bluetoothReceive) return [];
   const { ready, device, error } = state.bluetooth;
@@ -955,9 +917,7 @@ function bluetoothSegments(state: DaemonState): Segment[] {
   ];
 }
 
-/** The §6.2 state the user has to act on. An open link is reported as needing the phone
- *  whatever it is doing: nothing here can see whether audio is actually arriving, and a
- *  silent open link is the state that reads as a broken feature. */
+/** An open link always asks for the phone: nothing here can see whether audio is arriving. */
 function bluetoothAdvice(state: DaemonState): Segment[] {
   if (!state.config.bluetoothReceive) return [];
   const { ready, device, error } = state.bluetooth;
@@ -1094,13 +1054,10 @@ let selectedIndex = 0;
 /** Where the cursor was left in each view, so stepping in and back out does not lose it. */
 const cursorMemory = new Map<string, string>();
 let notice: string | null = null;
-/** The daemon's catalogue, fetched when the music section is opened rather than carried on
- *  every state broadcast: it changes only when a file is added, and it is larger than the
- *  rest of the payload put together. */
+/** Fetched per section open, not per broadcast: it is larger than the rest of the payload. */
 let library: TrackView[] = [];
 let playlists: PlaylistView[] = [];
-/** The phones paired with this machine, listed only when the user asks: enumerating them
- *  goes over the radio and takes tens of seconds. */
+/** Listed only on request: enumerating goes over the radio and takes tens of seconds. */
 let bluetoothDevices: BluetoothDevice[] = [];
 let restored = false;
 let quitting = false;
@@ -1168,8 +1125,7 @@ async function fetchState(): Promise<DaemonState | null> {
   return parseDaemonState(await response.text());
 }
 
-/** The daemon broadcasts on session change only, so a control change is read back
- *  explicitly rather than waiting for a push that may be minutes away. */
+/** The daemon broadcasts on session change only, so a control change is read back explicitly. */
 async function command(path: string, body?: unknown): Promise<void> {
   try {
     const response = await fetch(`${DAEMON_URL}${path}`, {
@@ -1188,8 +1144,7 @@ async function command(path: string, body?: unknown): Promise<void> {
   }
 }
 
-/** The catalogue is re-read whenever the music section is opened, which is what makes a
- *  file dropped in the folder appear without restarting the dashboard. */
+/** Re-read on every music-section open, so a dropped-in file appears without a restart. */
 async function refreshLibrary(): Promise<void> {
   try {
     const [tracks, chooser] = await Promise.all([
@@ -1201,13 +1156,11 @@ async function refreshLibrary(): Promise<void> {
     restoreCursor();
     paint();
   } catch {
-    // A failed catalogue read leaves the last one on screen; the link state already says
-    // whether the daemon is reachable, and a stale list is better than an empty one.
+    // A stale list beats an empty one; the link state already says whether the daemon is reachable.
   }
 }
 
-/** Opens the drop-in folder in the system file manager. This is a local shell-out, not
- *  network egress, and a failure is reported rather than left silent. */
+/** A local shell-out, not network egress; a failure is reported rather than left silent. */
 function openTracksFolder(): void {
   const dir = snapshot?.state.playlistsDir;
   if (!dir) {
@@ -1228,8 +1181,7 @@ function openTracksFolder(): void {
   }
 }
 
-/** Listing waits on the radio, so the notice goes up before the request rather than after
- *  it: a frame that says nothing for half a minute reads as a dashboard that has hung. */
+/** The notice goes up before the request: half a minute of nothing reads as a hang. */
 async function scanBluetooth(): Promise<void> {
   const enabling = snapshot?.state.config.bluetoothReceive === false;
   notice = enabling ? BLUETOOTH_ENABLING : BLUETOOTH_SEARCHING;
@@ -1252,8 +1204,7 @@ async function scanBluetooth(): Promise<void> {
   paint();
 }
 
-/** Opening the link waits on the phone, and the state that follows it is the one the user
- *  has to act on, so the phone step stands as the notice rather than a success message. */
+/** The phone step stands as the notice rather than a success message: it is what the user must do next. */
 async function connectBluetooth(device: BluetoothDevice): Promise<void> {
   notice = `${BLUETOOTH_CONNECTING} ${device.name}…`;
   paint();
@@ -1298,8 +1249,7 @@ function runAction(id: ActionId): void {
   void command('/skip');
 }
 
-/** Switching playlist re-reads the catalogue as well as the state: the counts beside each
- *  name are only as fresh as the last read of the folders. */
+/** Re-reads the catalogue too: the per-playlist counts are only as fresh as the last folder read. */
 async function choosePlaylist(name: string): Promise<void> {
   await command('/playlist', { name });
   await refreshLibrary();
@@ -1316,8 +1266,7 @@ function cycleSetting(spec: SettingSpec, direction: 1 | -1): void {
   if (value !== null) void command('/config', { key: spec.key, value });
 }
 
-/** A keyboard shortcut names a setting the daemon may not have. Saying so beats a silent
- *  no-op, and beats the 400 the menu used to earn. */
+/** A shortcut may name a setting this daemon lacks; saying so beats a silent no-op or a 400. */
 function cycleByKey(key: string, direction: 1 | -1): void {
   if (!snapshot) return;
   const spec = snapshot.state.settingSpecs.find((candidate) => candidate.key === key);
@@ -1352,8 +1301,7 @@ function toggleMute(session: SessionView): void {
   void command('/mute', { sessionId: session.sessionId, muted: !session.muted });
 }
 
-/** Left and right mean "less" and "more" wherever a row holds a value. A session row holds
- *  none, so there left keeps the meaning it has in the section list: go back. */
+/** Left/right mean less/more on value rows; a session row holds none, so left means back. */
 function onHorizontal(direction: 1 | -1): void {
   const row = selectedRow();
   if (!row) {
@@ -1468,8 +1416,7 @@ function frameData(frame: string): string {
     .join('');
 }
 
-/** No request timeout: the stream is long-lived by design, and an unreachable daemon
- *  fails the connect immediately. */
+/** No request timeout: the stream is long-lived, and an unreachable daemon fails the connect. */
 async function streamEvents(): Promise<void> {
   const response = await fetch(`${DAEMON_URL}/events`);
   if (!response.ok || !response.body) throw new Error(`stream refused: ${response.status}`);
@@ -1490,8 +1437,7 @@ async function streamEvents(): Promise<void> {
   await reader.cancel();
 }
 
-/** Polls until the daemon answers again, so a restart underneath the dashboard shows as
- *  a wait rather than an exit. SSE is resumed as soon as one reply arrives. */
+/** A daemon restart shows as a wait rather than an exit; SSE resumes on the first reply. */
 async function waitForDaemon(): Promise<void> {
   while (!quitting) {
     try {
@@ -1509,8 +1455,7 @@ async function waitForDaemon(): Promise<void> {
 }
 
 async function run(): Promise<void> {
-  // The root menu shows a track count, so the catalogue is read once before the first
-  // frame rather than only when the music section is opened.
+  // The root menu shows a track count, so the catalogue is read before the first frame.
   void refreshLibrary();
   while (!quitting) {
     try {

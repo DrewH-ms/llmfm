@@ -42,8 +42,7 @@ test('the file may not restore a session the hooks have silenced', (t) => {
   registry.applyHookEvent(hookEvent('agentStop'));
   assert.equal(workingOf(registry), false);
 
-  // A background process keeps the CLI reporting the session as busy long after the
-  // agent handed control back. The file cannot tell the two apart.
+  // A background process keeps the CLI reporting busy long after the agent handed back.
   elapseHookAuthority(t);
   registry.applyFileState([fileEntry(true)]);
 
@@ -80,10 +79,7 @@ test('the file may still silence a session whose agentStop was missed', (t) => {
 test('the file registers a session it cannot vouch for, without starting it', () => {
   const registry = createSessionRegistry();
 
-  // A session the hooks have never reported -- opened before install, or resumed
-  // elsewhere. The file knows it exists, which is worth recording: it is what tells a
-  // real session apart from a sub-agent. What the file cannot do is vouch for the work,
-  // so the session is registered silent rather than sounding on an unverifiable claim.
+  // A session the hooks never reported: worth recording, but the file cannot vouch for the work.
   registry.applyFileState([fileEntry(true)]);
   assert.equal(workingOf(registry), false);
 
@@ -120,8 +116,7 @@ test('the file listing a hook session upgrades it even when nothing else changed
   const registry = createSessionRegistry();
 
   registry.applyHookEvent(hookEvent('userPromptSubmitted'));
-  // Same working state the hook already set, so the entry is otherwise a no-op. The
-  // listing itself is the news: it is what separates a real session from a sub-agent.
+  // Same working state the hook already set, so the listing itself is the only news.
   registry.applyFileState([fileEntry(true)]);
 
   const session = registry.list().find((entry) => entry.sessionId === SESSION_ID);
@@ -137,8 +132,7 @@ test('startedAt is fixed for the lifetime of a session', (t) => {
   const first = registry.list()[0];
   assert.ok(first);
 
-  // A busy sub-agent refreshes updatedAt constantly; ageing off updatedAt would mean it
-  // never aged out at all.
+  // A busy sub-agent refreshes updatedAt constantly, so ageing off it would never age out.
   t.mock.timers.tick(60_000);
   registry.applyHookEvent(hookEvent('postToolUse'));
 
@@ -157,10 +151,7 @@ test('a busy sub-agent does not let the file wake the session that dispatched it
   registry.applyFileState([fileEntry(true)]);
   registry.applyHookEvent(hookEvent('agentStop'));
 
-  // The CLI stays busy while the sub-agent it dispatched runs, and reports the parent
-  // working again. Attributing that work is the orchestrator's job, and only under the
-  // rules it applies there; a registry that took the file's word would sound the parent
-  // even while it sat on a prompt.
+  // The CLI reports the parent busy while its sub-agent runs; attributing that is the orchestrator's job.
   registry.applyHookEvent({ ...hookEvent('preToolUse'), sessionId: SUB_ID });
   elapseHookAuthority(t);
   registry.applyFileState([fileEntry(true)]);
@@ -180,8 +171,7 @@ test('a repeated prompt notification does not restart the block clock', (t) => {
   const first = sessionOf(registry).blockedSince;
   assert.ok(first !== null);
 
-  // The CLI re-announces the same pending prompt. Taking the age from updatedAt here
-  // would report the block as new, hiding precisely the long wait it exists to surface.
+  // Taking the age from updatedAt would report the block as new, hiding the long wait.
   t.mock.timers.tick(30_000);
   registry.applyHookEvent(hookEvent('notification', 'permission_prompt'));
 
@@ -203,8 +193,7 @@ test('a cold start does not bring pre-existing sessions up working', (t) => {
   t.mock.timers.enable({ apis: ['Date'] });
   const registry = createSessionRegistry();
 
-  // The daemon starts with sessions already open. The file is the only signal it has,
-  // and it reports every one of them busy -- including agents sitting on a prompt.
+  // The daemon starts with sessions open and the file reports every one of them busy.
   registry.applyFileState([fileEntry(true)]);
   assert.equal(workingOf(registry), false, 'the file may not assert work on its own');
 
@@ -213,7 +202,6 @@ test('a cold start does not bring pre-existing sessions up working', (t) => {
   registry.applyFileState([fileEntry(true)]);
   assert.equal(workingOf(registry), false);
 
-  // A genuinely busy session still corrects itself on its next hook event.
   registry.applyHookEvent(hookEvent('userPromptSubmitted'));
   assert.equal(workingOf(registry), true);
 });
@@ -226,8 +214,6 @@ test('a file entry is dated by the CLI, not by when the daemon happened to start
   const closedOnSunday = Date.now() - DAYS_OLD_MS;
 
   // The CLI never deletes an entry, so a cold start sees terminals that closed days ago.
-  // Registering them as if they had just appeared hands each one an instrument for the
-  // whole idle-dropout window -- and leaves nothing for the session actually running.
   registry.applyFileState([fileEntry(false, closedOnSunday)]);
 
   assert.equal(sessionOf(registry).updatedAt, closedOnSunday);
@@ -253,9 +239,7 @@ test('a block arriving after the agent stopped tells the listeners', () => {
   registry.applyHookEvent(hookEvent('agentStop'));
   const beforeBlock = changes;
 
-  // `working` is already false, so nothing else about the session changes -- but the
-  // block decides whether a sub-agent may fold the voice back on. Unannounced, the music
-  // keeps the gate it last computed and plays straight over the permission prompt.
+  // `working` is already false, so only the announcement stops the music playing over the prompt.
   registry.applyHookEvent(hookEvent('notification', 'permission_prompt'));
   assert.equal(changes, beforeBlock + 1, 'a new block must reach the mixer');
 
@@ -272,9 +256,7 @@ test('the poller does not re-create a session the hooks ended', (t) => {
   registry.applyHookEvent(hookEvent('sessionEnd'));
   assert.equal(registry.list().length, 0);
 
-  // The CLI leaves ended sessions in its file for days, so every later poll offers this
-  // id back. Taking it would resurrect a closed terminal a quarter-second after the one
-  // authoritative signal that it is over.
+  // The CLI leaves ended sessions in its file for days, so every later poll offers this id back.
   t.mock.timers.tick(HOOK_AUTHORITY_MS + 1);
   registry.applyFileState([fileEntry(false, Date.now())]);
 

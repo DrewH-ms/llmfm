@@ -10,13 +10,7 @@ const index = JSON.parse(readFileSync(join(TRACKS_DIR, 'tracks.json'), 'utf8'));
 const attribution = readFileSync(join(TRACKS_DIR, 'ATTRIBUTION.md'), 'utf8');
 const files = readdirSync(TRACKS_DIR).filter((file) => PLAYABLE_FILE_PATTERN.test(file));
 
-/** A public-domain composition does not put its MIDI sequence in the public domain: the
- *  sequence is a separately copyrightable arrangement, and a recording is a separately
- *  copyrightable performance. Both hold even for music centuries out of copyright, so a
- *  file is only redistributable when the *bytes* carry a licence. These run over the
- *  shipped files rather than over the curation script, so a file dragged into the folder
- *  by hand is caught too — which is how the one unverified track got there in the first
- *  place. */
+/** A MIDI sequence is a separately copyrightable arrangement, so these run over the shipped bytes rather than the curation script. */
 const ALLOWED = new Set([
   'PD',
   'CC0',
@@ -40,9 +34,7 @@ test('every shipped audio file states a licence we are allowed to redistribute',
 });
 
 test('a shipped file is the one its licence record was written for', () => {
-  // A licence record describes specific bytes. Copying another file over a verified name
-  // inherits its licence, its attribution and its provenance while being none of them —
-  // which has happened here once already, with a file we may not redistribute at all.
+  // Copying another file over a verified name inherits its licence and provenance while being neither; it has happened here once.
   for (const file of files) {
     const entry = index.tracks.find((track: { file: string }) => track.file === file);
     assert.ok(entry?.sha256, `${file} records no hash, so its licence proves nothing`);

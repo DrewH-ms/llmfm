@@ -24,8 +24,7 @@ const MS_PER_SECOND = 1000;
 
 export type Orchestrator = {
   bindScore(score: Score): void;
-  /** Hands the gate to a track with no parts, so the whole stream answers to the sessions
-   *  together. */
+  /** Hands the gate to a track with no parts, so the whole stream answers to the sessions together. */
   bindRecorded(): void;
   /** Recomputes part audibility from current session state and drives the transport. */
   refresh(): void;
@@ -34,20 +33,16 @@ export type Orchestrator = {
   setFadeSeconds(seconds: number): void;
   fadeSeconds(): number;
   sessionViews(): SessionView[];
-  /** Clears pending re-checks. Without it a settle or re-split timer outlives shutdown and
-   *  holds the process open waiting to reconsider a mix that no longer exists. */
+  /** Clears pending re-checks; a surviving timer would hold the process open after shutdown. */
   stop(): void;
 };
 
-/** Where the gate lands when there are no parts to spread it across: a finished mixdown,
- *  or audio playing out of an application that is not ours. Neither can be subdivided, so
- *  the ensemble collapses to one boolean for the whole stream. */
+/** Where the gate lands when there are no parts to spread it across: a mixdown, or another app's audio. */
 export type StreamSink = {
   setAudible(options: { audible: boolean; fadeSeconds: number }): void;
 };
 
-/** Maps session state onto part audibility, and owns the rule that the transport runs
- *  whenever any part is audible and pauses only when all of them are silent. */
+/** The transport runs whenever any part is audible and pauses only when all of them are silent. */
 export function createOrchestrator(options: {
   registry: SessionRegistry;
   mixer: Mixer;
@@ -62,23 +57,18 @@ export function createOrchestrator(options: {
   const duck = options.duck ?? null;
 
   let score: Score | null = null;
-  /** Set instead of `score` while a recorded track is loaded. The two are exclusive: a
-   *  mixdown has no parts, so there is no tree, no assignment and no per-part gate. */
+  /** Exclusive with `score`: a mixdown has no parts, so there is no tree, assignment or per-part gate. */
   let recordedTrack = false;
   let tree: VoiceTree | null = null;
-  /** Instrument label per part id, taken from the voice tree's own leaf names so a part
-   *  listed under a voice reads exactly as it would if it were the voice. */
+  /** Instrument label per part id, from the tree's leaf names so a part reads as it would if it were the voice. */
   let partLabels = new Map<string, string>();
-  /** How far the voice tree is currently subdivided. */
   let voiceCount = 0;
   let coarsenTimer: ReturnType<typeof setTimeout> | null = null;
   /** Re-checks the transport once a fade-out has actually reached silence. */
   let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
   const shouldSound = (session: Session): boolean => {
-    // Nothing is emitted when a permission prompt is answered, so a session can sit
-    // blocked-looking while the tool it authorised runs. `resume` guesses the prompt was
-    // answered; the default keeps faith with silence meaning "needed".
+    // Nothing is emitted when a permission prompt is answered, so `resume` guesses it was; the default trusts silence.
     const stale =
       config.current().promptGap === 'resume' &&
       session.blockedMidTurn &&
@@ -89,17 +79,13 @@ export function createOrchestrator(options: {
     return config.current().mode === 'reward' ? working : !working;
   };
 
-  /** A block too young to trust yet. See BLOCK_SETTLE_MS: the prompt may already have been
-   *  answered for the user, in which case silencing now only chops the music. */
+  /** A block too young to trust: the prompt may already have been answered, and silencing now only chops the music. */
   const settling = (session: Session): boolean =>
     session.blockedMidTurn &&
     session.blockedSince !== null &&
     Date.now() - session.blockedSince < BLOCK_SETTLE_MS;
 
-  /** A sub-agent fires hooks but is never listed by the CLI, which is the only thing that
-   *  tells it from a session the user is sitting in front of. Without the open-sessions
-   *  file nothing is ever listed, so the distinction cannot be drawn at all. New sessions
-   *  are spared until the file has had time to list them. */
+  /** A sub-agent fires hooks but is never listed by the CLI; new sessions are spared until the file can list them. */
   const isSubAgent = (session: Session, now: number): boolean =>
     WATCH_OPEN_SESSIONS &&
     session.source === 'hook' &&
@@ -110,12 +96,7 @@ export function createOrchestrator(options: {
   const isHiddenSubAgent = (session: Session, now: number): boolean =>
     config.current().subagents !== 'voice' && isSubAgent(session, now);
 
-  /** Work a sub-agent is doing that this session is waiting on. A parent that dispatches
-   *  and then waits fires `agentStop`, so without this its voice falls silent while the
-   *  work it is waiting on runs — silence that says "you are needed" when nobody is.
-   *  A session blocked mid-turn is never folded: a permission prompt is a positive request
-   *  for the user's attention and outranks work merely inferred from a cwd match. Two
-   *  terminals on one repo cannot be told apart, so the work counts for both. */
+  /** A parent that dispatches and waits fires `agentStop`; folding keeps it audible, but a mid-turn block never folds. */
   const isFolded = (session: Session, now: number): boolean => {
     if (config.current().subagents !== 'fold') return false;
     if (session.blockedMidTurn || !session.listedByCli || session.cwd === null) return false;
@@ -125,19 +106,13 @@ export function createOrchestrator(options: {
         (other) =>
           other.working &&
           other.cwd === session.cwd &&
-          // Folding is inferred from a shared cwd, never read off a hook, so it expires.
-          // A sub-agent killed mid-tool is never retired — it is by construction absent
-          // from the CLI's file — and would otherwise hold its parent audible for ever.
+          // Fold evidence expires: a sub-agent killed mid-tool is never retired and would hold its parent audible.
           now - other.updatedAt < FOLD_EVIDENCE_MAX_MS &&
           isSubAgent(other, now),
       );
   };
 
-  /** A terminal that was closed is never removed from the CLI's session file, so without
-   *  this it keeps its instrument forever. A working session normally keeps its voice
-   *  however long it has been at it, but only up to a ceiling: a terminal killed mid-tool
-   *  leaves `working` standing with nothing that can ever correct it, because the file
-   *  may silence and never assert. */
+  /** A closed terminal is never removed from the CLI's file, and a session killed mid-tool has a `working` nothing can correct. */
   const isExpired = (session: Session, now: number): boolean => {
     if (isFolded(session, now)) return false;
     if (session.working) return now - session.updatedAt >= WORKING_CLAIM_MAX_MS;
@@ -146,9 +121,7 @@ export function createOrchestrator(options: {
     return now - session.updatedAt >= minutes * MS_PER_MINUTE;
   };
 
-  /** Sessions that may hold a voice. A muted session is deliberately excluded here rather
-   *  than gated silent, so it frees its voice for someone else instead of sounding like an
-   *  agent that stopped. */
+  /** A muted session is excluded rather than gated silent, so it frees its voice instead of sounding stopped. */
   const gatingSessions = (): Session[] => {
     const now = Date.now();
     const muteRules = config.current();
@@ -164,11 +137,7 @@ export function createOrchestrator(options: {
     return sessions.filter((session) => session.sessionId === FOCUS_SESSION_ID);
   };
 
-  /** Two repos can hash into the same branch. Resolving that by sliding one sideways into
-   *  a free voice would break the promise that a repo always sounds from the same place —
-   *  and break it for whichever session merely arrived second. Subdividing further instead
-   *  keeps every session inside the branch it hashed to, which is the promise that makes
-   *  the mapping learnable. Deepening stops once the tree can no longer yield new voices. */
+  /** Hash collisions deepen the tree rather than slide a session sideways, so a repo always sounds from its branch. */
   const currentAssignment = (sessions: Session[]): VoiceAssignment => {
     if (!tree || voiceCount === 0) return assignVoices({ sessions, voices: [] });
 
@@ -186,9 +155,7 @@ export function createOrchestrator(options: {
     return assignment;
   };
 
-  /** Splitting is immediate so a new session is heard at once, but coarsening waits for
-   *  the lower count to hold: a closed terminal is often reopened, and rearranging the
-   *  texture twice is more distracting than carrying an unused voice for a few seconds. */
+  /** Splitting is immediate but coarsening waits: a closed terminal is often reopened, and re-texturing twice jars. */
   const settleVoiceCount = (sessionCount: number): void => {
     if (sessionCount > voiceCount) {
       if (coarsenTimer) {
@@ -206,10 +173,7 @@ export function createOrchestrator(options: {
     }, VOICE_RESPLIT_DEBOUNCE_MS);
   };
 
-  /** How the mix answers to the sessions. `per-agent` is the ensemble, where each session
-   *  gates only its own voice. The others gate everything together, which is what plain
-   *  hold music across a fleet means. Inversion is not handled here: `shouldSound` has
-   *  already applied `mode`, so aggregating afterwards yields the reversed variants free. */
+  /** Inversion is not handled here: `shouldSound` already applied `mode`, so aggregating yields the reversed variants. */
   const mixAudible = (sessions: Session[]): boolean => {
     const policy = config.current().gate;
     if (policy === 'always') return true;
@@ -217,9 +181,7 @@ export function createOrchestrator(options: {
     return policy === 'all' ? sessions.every(shouldSound) : sessions.some(shouldSound);
   };
 
-  /** A section-sized voice gates several instruments under one name. Naming them is what
-   *  separates the parts that answer to this session from the backing that answers to
-   *  nobody. */
+  /** Naming a section voice's instruments separates the parts that answer to this session from the backing. */
   const partNamesOf = (voice: Voice): string[] => {
     const names = new Set<string>();
     for (const partId of voice.partIds) {
@@ -229,11 +191,7 @@ export function createOrchestrator(options: {
     return [...names];
   };
 
-  /** How long until the next moment a block changes what should sound, or null when none
-   *  is pending. Two deadlines: a block inside its settle window has to be revisited or a
-   *  prompt the user really is waiting on would never silence anything, and under
-   *  `resume` the 8-second mark is where the music comes back — a moment the CLI emits
-   *  nothing to announce, so nothing but this timer can find it. */
+  /** Next moment a block changes what should sound: the CLI emits nothing at the settle or `resume` marks. */
   const soonestRecheck = (sessions: Session[]): number | null => {
     const resuming = config.current().promptGap === 'resume';
     const now = Date.now();
@@ -247,8 +205,7 @@ export function createOrchestrator(options: {
     return pending.length > 0 ? Math.max(0, Math.min(...pending)) : null;
   };
 
-  /** Where the gate lands when nothing can be subdivided. Ducking wins over a recorded
-   *  track because in that mode the daemon plays nothing of its own for a track to be. */
+  /** Ducking wins over a recorded track because in that mode the daemon plays nothing of its own. */
   const wholeStreamSink = (): StreamSink | null =>
     config.current().audio === 'duck' ? duck : recordedTrack ? recorded : null;
 
@@ -263,9 +220,6 @@ export function createOrchestrator(options: {
     const stream = wholeStreamSink();
     if (stream) {
       const sessions = gatingSessions();
-      // Every session gates the same thing, and `mixAudible` already says it: under
-      // `per-agent` it is "any session that should sound", which is the override a stream
-      // with no parts needs, and under the other policies it is the configured gate.
       stream.setAudible({
         audible: mixAudible(sessions),
         fadeSeconds: config.current().fadeSeconds,
@@ -292,9 +246,7 @@ export function createOrchestrator(options: {
       }
     }
 
-    // Parts no session speaks for follow the ensemble, so they colour the texture without
-    // claiming anything about an agent. With one session that is the whole orchestra,
-    // which is what makes single-session behaviour plain hold music.
+    // Parts no session speaks for follow the ensemble; with one session that is the whole orchestra.
     const ensembleAudible = perAgent ? audibleParts.size > 0 : mixAudible(sessions);
 
     for (const part of score.parts) {
@@ -305,14 +257,12 @@ export function createOrchestrator(options: {
       mixer.setPartAudible({ partId: part.partId, audible, fadeSeconds: fade });
     }
 
-    // `mute` keeps our own transport running through the silence, trading the
-    // resume-in-place effect for not stopping the piece.
+    // `mute` keeps our own transport running through the silence, trading resume-in-place for not stopping the piece.
     const soonest = soonestRecheck(sessions);
 
     if (mixer.anyAudible() || config.current().silenceMode === 'mute') {
       scheduler.play();
-      // Pausing the moment the gate shuts would cut the notes the fade still needs, so the
-      // transport runs on and the decision is retaken once the ramp has reached zero.
+      // Pausing the moment the gate shuts would cut the notes the fade still needs, so the decision is retaken later.
       const wait = !mixer.anyGateOpen() ? fade * MS_PER_SECOND + SETTLE_MARGIN_MS : null;
       scheduleSettle(
         soonest === null ? wait : wait === null ? soonest : Math.min(soonest, wait),
@@ -328,8 +278,7 @@ export function createOrchestrator(options: {
       score = next;
       recordedTrack = false;
       tree = buildVoiceTree(next);
-      // Fully subdividing names every part the tree can gate; what it leaves out is
-      // backing, which never belongs to a voice.
+      // Fully subdividing names every part the tree can gate; what it leaves out is backing.
       partLabels = new Map(
         tree
           .voicesFor(next.parts.length)
@@ -340,9 +289,7 @@ export function createOrchestrator(options: {
       refresh();
     },
     refresh,
-    /** Takes the gate away from the score entirely. Tree, labels and per-part mix are
-     *  dropped rather than left behind: a stale ensemble would otherwise keep answering
-     *  for music that has no parts to answer with. */
+    /** Tree, labels and per-part mix are dropped: a stale ensemble would keep answering for music with no parts. */
     bindRecorded(): void {
       score = null;
       tree = null;
@@ -370,8 +317,7 @@ export function createOrchestrator(options: {
     sessionViews(): SessionView[] {
       const now = Date.now();
       const muteRules = config.current();
-      // Muted sessions are listed even though they hold no voice: hiding one would leave
-      // no way to find it again and unmute it.
+      // Muted sessions are listed though they hold no voice: hiding one would leave no way to unmute it.
       const visible = registry.list().filter((session) => !isHiddenSubAgent(session, now));
       const assignment = currentAssignment(gatingSessions());
       return visible.map((session) => {

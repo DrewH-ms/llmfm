@@ -1,25 +1,11 @@
-/** Plays recorded audio (.mp3/.wav) through a PowerShell MCI bridge, because Node cannot
- *  render audio and the daemon may not add dependencies. MCI lives in winmm.dll, the same
- *  library the MIDI bridge already drives, so recorded playback costs nothing new.
- *
- *  This is the seam where units change. The app speaks seconds and 0..1 levels, as
- *  `TransportState` does; MCI speaks milliseconds and 0..1000. Conversion happens here
- *  and nowhere else.
- *
- *  Nothing on this API throws or hangs. A missing or wedged bridge is a daemon that plays
- *  no recordings, never a daemon that falls over, so every method resolves to a harmless
- *  value — zero, or nothing at all — when the bridge is absent, failed, or slow to answer.
- */
+/** Plays .mp3/.wav via a PowerShell MCI bridge; the only seam where app units (seconds, 0..1) become MCI units (ms, 0..1000), and nothing here throws or hangs. */
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 
 const BRIDGE_SCRIPT = path.join(import.meta.dirname, '..', 'bridge', 'audio-bridge.ps1');
-/** Generous because the bridge's first run pays for an Add-Type compile, and on Windows a
- *  freshly written .ps1 is often scanned before it executes. Waiting costs nothing —
- *  `start()` never rejects and the daemon does not block on it — whereas giving up early
- *  means recorded playback silently does not work for the rest of the session. */
+/** Generous because the first run pays for an Add-Type compile and Windows often scans a freshly written .ps1 before it executes. */
 const BRIDGE_START_TIMEOUT_MS = 30000;
 const COMMAND_TIMEOUT_MS = 5000;
 /** Opening a file touches the disk and may spin up a codec, so it is given longer. */
@@ -44,12 +30,10 @@ export type AudioOut = {
   /** Current position in seconds, or 0 when nothing is open. */
   position(): Promise<number>;
   status(): AudioStatus;
-  /** Closes the media and ends the bridge, leaving nothing playing. */
   stop(): void;
 };
 
-/** Seconds to whole milliseconds. Negative and non-finite inputs collapse to 0: MCI
- *  takes an unsigned position, and a NaN would reach it as the literal text "NaN". */
+/** Seconds to whole milliseconds; non-finite collapses to 0 because a NaN would reach MCI as the literal text "NaN". */
 export function toMilliseconds(seconds: number): number {
   if (!Number.isFinite(seconds) || seconds <= 0) return 0;
   return Math.round(seconds * MS_PER_SECOND);
@@ -60,7 +44,6 @@ export function toSeconds(milliseconds: number): number {
   return milliseconds / MS_PER_SECOND;
 }
 
-/** A 0..1 level as an MCI volume. */
 export function toMciVolume(level: number): number {
   if (Number.isNaN(level)) return 0;
   return Math.round(Math.min(1, Math.max(0, level)) * MCI_VOLUME_MAX);
@@ -71,8 +54,7 @@ export function createAudioOut(): AudioOut {
   let state: AudioStatus = { ready: false, error: null };
   let nextId = 0;
   let stopping = false;
-  /** Replies are matched by echoed id rather than by arrival order, so a slow answer
-   *  can never be read as the reply to the command that followed it. */
+  /** Replies are matched by echoed id, not arrival order, so a slow answer can never be read as the next command's reply. */
   const waiting = new Map<string, (reply: string | null) => void>();
 
   const fail = (error: string): void => {
@@ -81,8 +63,7 @@ export function createAudioOut(): AudioOut {
     waiting.clear();
   };
 
-  /** Resolves to the reply payload, or null on any failure: not ready, refused by MCI,
-   *  or no answer within the timeout. */
+  /** Resolves to the reply payload, or null on any failure: not ready, refused by MCI, or timed out. */
   const request = (verb: string, timeoutMs = COMMAND_TIMEOUT_MS): Promise<string | null> => {
     if (!state.ready || !proc) return Promise.resolve(null);
     const id = `c${nextId++}`;
@@ -191,7 +172,7 @@ export function createAudioOut(): AudioOut {
 
     async open(file: string): Promise<number> {
       const reply = await request(`OPEN ${file}`, OPEN_TIMEOUT_MS);
-      // Payload is "<lengthMs> <device type>"; the type is only of diagnostic interest.
+      // Payload is "<lengthMs> <device type>".
       const length = Number(reply?.split(' ')[0]);
       return Number.isFinite(length) ? toSeconds(length) : 0;
     },

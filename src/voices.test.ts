@@ -5,8 +5,7 @@ import type { Part, Score, ScoredNote } from './types.ts';
 
 const DURATION = 200;
 
-/** Notes filling `spans` of the piece, one per second, so a part's continuity is set by
- *  which stretches it is given rather than by how many notes it holds. */
+/** Notes fill `spans` one per second, so continuity comes from which stretches a part gets, not note count. */
 function partOf(options: {
   partId: string;
   name: string;
@@ -56,9 +55,7 @@ test('sound effects stay unsorted, because a noise cue is not a line to follow',
   assert.equal(classifyPart(part).section, 'Other');
 });
 
-/** The failure this guards is silent: each part is individually too gappy to offer, so
- *  filtering parts before grouping leaves nothing to group and the whole section is lost
- *  to backing — one session then gates a line while the rest of the mix plays on. */
+/** Filtering parts before grouping silently loses a whole section to backing, so one session gates a line while the mix plays on. */
 test('parts too gappy alone are still offered as the section they add up to', () => {
   const score = scoreOf([
     partOf({ partId: 'a', name: '', program: 81, channel: 0, spans: [[0, 70]], midi: 72 }),

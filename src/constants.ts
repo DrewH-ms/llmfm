@@ -2,8 +2,7 @@ export const DAEMON_PORT = Number(process.env.LLMFM_PORT) || 7777;
 export const DAEMON_HOST = '127.0.0.1';
 export const DAEMON_URL = process.env.LLMFM_URL ?? `http://${DAEMON_HOST}:${DAEMON_PORT}`;
 
-/** Events the hook config subscribes to. The name is passed explicitly as argv[2]
- *  because several payloads carry no event-name field. */
+/** The name is passed explicitly as argv[2] because several payloads carry no event-name field. */
 export const HOOK_EVENTS = [
   'sessionStart',
   'userPromptSubmitted',
@@ -39,22 +38,15 @@ export const LOOKAHEAD_SECONDS = 0.2;
 export const SCHEDULER_TICK_MS = 25;
 export const FADE_STEP_HZ = 30;
 export const DEFAULT_FADE_SECONDS = 3;
-/** Range the fade control offers. The floor is a real crossfade rather than zero: an
- *  instant cut lands as a click, and every part changing state at once would click
- *  together. */
+/** Floor is a real crossfade, not zero: an instant cut clicks, and every part changing at once clicks together. */
 export const FADE_MIN_SECONDS = 0.25;
 export const FADE_MAX_SECONDS = 10;
 export const FADE_STEP_SECONDS = 0.25;
-/** Resuming uses a shorter fade so a reply feels immediate. */
+/** Shorter than a normal fade so a reply feels immediate. */
 export const RESUME_FADE_SECONDS = 0.4;
-/** Slack added to a fade before the transport is allowed to pause, so the last ramp step
- *  has certainly been sent rather than being cut off by a timer racing it. */
+/** Slack before a pause so the last ramp step has certainly been sent, not cut off by a racing timer. */
 export const SETTLE_MARGIN_MS = 120;
-/** How long a mid-turn block must hold before it is allowed to silence a part.
- *  `permission_prompt` fires whether or not the prompt actually stops the agent: where a
- *  tool is pre-approved the notification lands and work continues within the same second,
- *  which chopped the music into 1-2s dropouts. A block that matters lasts until a human
- *  acts, so waiting costs nothing real and discards every prompt answered for them. */
+/** `permission_prompt` also fires for pre-approved tools, which chopped the music into 1-2s dropouts; a block that matters lasts until a human acts. */
 export const BLOCK_SETTLE_MS = 1500;
 export const MIN_NOTE_DURATION_SECONDS = 0.05;
 
@@ -65,75 +57,50 @@ export const OPEN_SESSIONS_POLL_MS = 250;
 /** A file reading may not override a hook reading newer than this. */
 export const HOOK_AUTHORITY_MS = 5000;
 
-/** Pins audio to one session. Scope is otherwise machine-wide, which is correct in use
- *  but makes single-session behaviour impossible to demonstrate or test in isolation. */
+/** Pins audio to one session, so single-session behaviour can be demonstrated in isolation. */
 export const FOCUS_SESSION_ID = process.env.LLMFM_SESSION ?? null;
 /** The open-sessions file is corroboration; turning it off isolates hook behaviour. */
 export const WATCH_OPEN_SESSIONS = process.env.LLMFM_WATCH_FILE !== '0';
 
-/** What a sub-agent's work means. A sub-agent fires hooks but is never listed as an open
- *  session, so it is never a session the user is sitting in front of:
- *  - `ignore` leaves it out entirely. Its parent then falls silent the moment it hands
- *    work off, which says "this agent needs you" while the work is still running.
- *  - `fold` credits its work to the CLI-listed session sharing its cwd, so a parent that
- *    dispatched and is waiting keeps sounding.
- *  - `voice` gives each sub-agent an instrument of its own, which dilutes the signal: a
- *    fleet of them keeps the orchestra playing over the session that is waiting on you. */
+/** Sub-agents fire hooks but are never listed as open sessions: `ignore` silences a parent the moment it delegates, `voice` lets a fleet drown out the session that is waiting on you. */
 export const SUBAGENT_MODES = ['ignore', 'fold', 'voice'] as const;
 export type SubagentMode = (typeof SUBAGENT_MODES)[number];
 export const DEFAULT_SUBAGENTS: SubagentMode = 'fold';
-/** How long a hook session may go unlisted before it is taken for a sub-agent. The file
- *  lags a new session by a poll or two, and a real session must never be misread. */
+/** The sessions file lags a new session by a poll or two, and a real session must never be misread as a sub-agent. */
 export const SUBAGENT_GRACE_MS = 6000;
 
 export const HOOK_REQUEST_TIMEOUT_MS = 200;
 
-/** Where mute rules live. Beside the hook config rather than in the repo, because muting
- *  is a property of this machine's sessions, not of the project. */
+/** Beside the hook config rather than in the repo: muting is a property of this machine's sessions, not the project. */
 export const CONFIG_FILE_NAME = 'llmfm.config.json';
-/** Where the daemon's output goes when the dashboard shares its terminal — anything
- *  written to stdout there would land in the middle of the rendered frame. */
+/** The dashboard may share the terminal, so stdout would land mid-frame. */
 export const LOG_FILE_NAME = 'llmfm.log';
-/** Polled, not watched: the file is edited by hand and by the dashboard, and an atomic
- *  rename blinds fs.watch the same way it does for the open-sessions file. */
+/** Polled, not watched: an atomic rename blinds fs.watch. */
 export const CONFIG_POLL_MS = 1000;
 /** Enough of a session id to be unambiguous in practice while staying typeable. */
 export const HANDLE_ID_LENGTH = 8;
 
-/** What to do between approving a permission prompt and the tool finishing. The CLI fires
- *  nothing when a prompt is answered, so this gap is genuinely unobservable:
- *  - `silent` keeps the part muted, never playing while you are truly needed, at the cost
- *    of a false alarm for the length of the command.
- *  - `resume` trades that away: long commands sound right, but stepping away mid-prompt
- *    means the music returns and the alert is lost. */
+/** The CLI fires nothing when a prompt is answered, so this gap is unobservable: `silent` risks a false alarm for the length of the command, `resume` risks losing the alert. */
 export const PROMPT_GAP_MODES = ['silent', 'resume'] as const;
 export type PromptGapMode = (typeof PROMPT_GAP_MODES)[number];
 export const DEFAULT_PROMPT_GAP: PromptGapMode = 'resume';
 
-/** Which sessions' work the music answers to. `per-agent` is the ensemble: each session
- *  gates its own voice. The rest gate the whole mix together, which is what a user who
- *  wants plain hold music across a fleet is asking for. `mode` inverts any of them. */
+/** `per-agent` gates each session's own voice; the rest gate the whole mix, and `mode` inverts any of them. */
 export const GATE_POLICIES = ['per-agent', 'any', 'all', 'always'] as const;
 export type GatePolicy = (typeof GATE_POLICIES)[number];
 export const DEFAULT_GATE_POLICY: GatePolicy = 'any';
 
-/** What "silent" means. `pause` stops the transport and resumes in place. `mute` keeps it
- *  running inaudibly, which costs the resume-mid-phrase effect but is the only option once
- *  something other than us owns the audio, since we cannot pause another app's stream. */
+/** `mute` costs the resume-mid-phrase effect but is the only option once another app owns the audio, since we cannot pause its stream. */
 export const SILENCE_MODES = ['pause', 'mute'] as const;
 export type SilenceMode = (typeof SILENCE_MODES)[number];
 export const DEFAULT_SILENCE_MODE: SilenceMode = 'mute';
 
-/** Where the signal comes from. `midi` plays LLMFM's own score; `duck` mutes and unmutes
- *  audio we do not own — the phone's session where there is one, the output endpoint
- *  otherwise. The two are exclusive: a score played over someone else's music says
- *  nothing. */
+/** `midi` plays our own score, `duck` gates audio we do not own; exclusive, since a score over someone else's music says nothing. */
 export const AUDIO_MODES = ['midi', 'duck'] as const;
 export type AudioMode = (typeof AUDIO_MODES)[number];
 export const DEFAULT_AUDIO: AudioMode = 'duck';
 
-/** The A2DP link states the Bluetooth bridge reports. `None` is nothing connected, and
- *  is distinct from the `Closed` a connection reports once it has been opened and lost. */
+/** `None` is nothing connected, distinct from the `Closed` a connection reports once opened and lost. */
 export const BLUETOOTH_STATES = ['None', 'Closed', 'Opened'] as const;
 export type BluetoothState = (typeof BLUETOOTH_STATES)[number];
 export const BLUETOOTH_NONE: BluetoothState = 'None';
@@ -143,31 +110,18 @@ export const BLUETOOTH_OPENED: BluetoothState = 'Opened';
 export const MASTER_VOLUME_MAX = 100;
 export const DEFAULT_MASTER_VOLUME = 100;
 export const MASTER_VOLUME_STEP = 5;
-/** Bends the master control so its travel feels even to the ear. A GM/DLS synth reads
- *  CC7 as attenuation of 40·log10(value/127) dB, and loudness roughly doubles per 10 dB,
- *  so a linearly scaled CC7 already falls away faster than the number suggests. Raising
- *  the fraction to this power flattens it back to about "half the number, half as loud",
- *  and leaves 100 exactly where it is today. */
+/** Synths read CC7 as 40·log10(v/127) dB, so a linear control falls away too fast; this exponent restores "half the number, half as loud" and leaves 100 unchanged. */
 export const MASTER_VOLUME_CURVE_EXPONENT = 0.75;
 
-/** The track loaded when none is chosen. Named rather than taken as the first file in the
- *  directory, so a track added under an earlier-sorting name cannot silently replace it.
- *  Coriolan is chosen on two measurements rather than taste — 75 distinct note velocities,
- *  so a fade has a living texture to move against, and every one of its twelve parts
- *  carries a name the lexicon recognises, so the dashboard can say which instrument fell
- *  silent instead of numbering it. */
+/** Named rather than first-file-in-directory so a new track cannot silently replace it; Coriolan has 75 distinct velocities and twelve parts the lexicon can name. */
 export const DEFAULT_TRACK = 'mutopia-beethoven-coriolan-overture.mid';
 
-/** What happens when the score runs out. A track ending is the one moment the user can be
- *  sure the silence is not about them, so it is also the one silence worth spending on
- *  variety rather than meaning. */
+/** A track ending is the one silence the user knows is not about them, so it can be spent on variety. */
 export const AUTOPLAY_MODES = ['off', 'sequential', 'random'] as const;
 export type AutoplayMode = (typeof AUTOPLAY_MODES)[number];
 export const DEFAULT_AUTOPLAY: AutoplayMode = 'random';
 
-/** Minutes a session may sit untouched before it gives up its voice; 0 disables it.
- *  The open-sessions file is never cleaned up by the CLI, so without this a closed
- *  terminal holds an instrument indefinitely. */
+/** 0 disables it; the CLI never cleans up its sessions file, so a closed terminal would hold an instrument indefinitely. */
 export const DEFAULT_IDLE_DROPOUT_MINUTES = 20;
 export const IDLE_DROPOUT_MAX_MINUTES = 120;
 export const IDLE_DROPOUT_STEP_MINUTES = 5;
@@ -175,32 +129,22 @@ export const MS_PER_MINUTE = 60_000;
 /** How long `resume` waits before assuming a prompt was answered. */
 export const PROMPT_GAP_RESUME_MS = 8000;
 
-/** How long one `working: true` reading may stand with no fresh evidence. A terminal
- *  killed mid-tool leaves that reading in the CLI's file for ever, and the file may
- *  silence but never assert, so nothing else can ever correct it. Generous on purpose:
- *  one long tool call is legitimate, and silencing a live agent is the opposite lie. */
+/** Generous on purpose: a terminal killed mid-tool leaves `working: true` uncorrectable for ever, but one long tool call is legitimate and silencing a live agent is the opposite lie. */
 export const WORKING_CLAIM_MAX_MS = 30 * MS_PER_MINUTE;
-/** How long a cwd match may keep folding a parent audible. Folding is an inference, not
- *  a reading, so it expires: a sub-agent that dies mid-tool is never retired by the
- *  registry and would otherwise hold its parent's voice open for ever. Set well above a
- *  long build or test run, since a sub-agent only refreshes between tool calls and
- *  silencing a parent whose work is still running is the inverse lie. */
+/** Folding is an inference, so it expires; well above a long build, since silencing a parent whose sub-agent is mid-run is the inverse lie. */
 export const FOLD_EVIDENCE_MAX_MS = 15 * MS_PER_MINUTE;
 /** How often the daemon checks whether a bridge it believes is running has died. */
 export const BRIDGE_HEALTH_TICK_MS = 1000;
-/** Longest the dashboard waits for a daemon it started to shut down before exiting
- *  anyway. Exiting late still restores audio; refusing to exit never does. */
+/** Exiting late still restores audio; refusing to exit never does. */
 export const SHUTDOWN_GRACE_MS = 5000;
 
-/** Logs event names and short session ids only — never payload contents, which carry
- *  prompt text. Opt-in, for confirming which events the CLI actually fires. */
+/** Logs event names and short session ids only — never payload contents, which carry prompt text. */
 export const LOG_EVENTS = process.env.LLMFM_LOG === '1';
 
 export const SIMULATION_STEP_MS = 4000;
 export const SIMULATION_LABELS = ['api-service', 'web-client', 'infra', 'docs'] as const;
 
-/** The coarsest grouping a listener can still name by ear, and so the top level of the
- *  voice tree. */
+/** The coarsest grouping a listener can still name by ear, and so the top level of the voice tree. */
 export const SECTIONS = [
   'Strings',
   'Woodwinds',
@@ -215,21 +159,7 @@ export const SECTIONS = [
 ] as const;
 export type SectionName = (typeof SECTIONS)[number];
 
-/** Inclusive GM program ranges mapped onto sections, first match winning; anything
- *  unmatched is 'Other', and channel 9 is percussion whatever its program says.
- *
- *  These deliberately cut across the GM family boundaries. Timpani (47) sits at the end
- *  of the string range, the harp (46) beside it reads as keyboard, and the tuned
- *  percussion block (8-15) reads as percussion — grouping by what a listener hears
- *  matters more here than grouping by the spec.
- *
- *  The electronic half of the GM set is covered too, coarsely and on purpose. A score
- *  that names nothing the parser recognises is classified entirely from these ranges, and
- *  leaving them out put every pitched part in one 'Other' lump: it then competed with the
- *  drum kit as a single node, and lost, so the only session on an electronic track was
- *  given percussion while every synth part played on as backing. Splitting bass from lead
- *  and pad is enough to keep the first voice melodic. Sound effects (120-127) stay
- *  unmatched deliberately — they are noise cues, not a line anyone can follow. */
+/** Inclusive GM ranges, first match winning; they cut across GM families on purpose, grouping by what a listener hears (timpani as percussion, harp as keyboard) and splitting the synth block so an electronic score is not one 'Other' lump that loses to the drum kit. Effects (120-127) stay unmatched: noise cues are not a line anyone can follow. */
 export const SECTION_PROGRAM_RANGES = [
   { section: 'Percussion', from: 8, to: 15 },
   { section: 'Percussion', from: 47, to: 47 },
@@ -251,12 +181,9 @@ export const SECTION_PROGRAM_RANGES = [
 
 export const FALLBACK_SECTION: SectionName = 'Other';
 
-/** What the daemon will offer as a track. Shared so the shipped folder and the user's
- *  drop-in folder cannot come to disagree about what counts as playable. */
+/** Shared so the shipped folder and the user's drop-in folder cannot disagree about what is playable. */
 export const MIDI_FILE_PATTERN = /\.midi?$/i;
-/** Recorded audio is a finished mixdown, so it has no parts to gate and can only ever be
- *  turned up or down as a whole. Everything that treats a track as an ensemble has to ask
- *  this first. */
+/** Recorded audio is a finished mixdown: no parts to gate, only a whole to turn up or down. */
 export const RECORDED_FILE_PATTERN = /\.(mp3|wav)$/i;
 export const PLAYABLE_FILE_PATTERN = /\.(midi?|mp3|wav)$/i;
 
@@ -264,8 +191,7 @@ export function isRecordedTrack(file: string): boolean {
   return RECORDED_FILE_PATTERN.test(file);
 }
 
-/** The music that ships with LLMFM. Always offered, and the fallback whenever a chosen
- *  playlist turns out to have nothing in it. */
+/** Always offered, and the fallback whenever a chosen playlist turns out to be empty. */
 export const PLAYLIST_BUNDLED = 'bundled';
 /** Everything the daemon can see at once, bundled and user folders alike. */
 export const PLAYLIST_ALL = 'all';
@@ -275,16 +201,12 @@ export const PLAYLIST_README = 'README.md';
 export const PLAYLISTS_DIR_NAME = 'playlists';
 /** Scaffolded empty so the README has something to point at. */
 export const PLAYLIST_EXAMPLE = 'playlist1';
-/** Ids of tracks inside a playlist are `folder/file`, always with a forward slash so the
- *  id a client sends back is the same on every platform. */
+/** Always a forward slash, so the id a client sends back is the same on every platform. */
 export const PLAYLIST_SEPARATOR = '/';
 
-/** Fraction of the piece a node must be sounding in to be offered as a voice. Below it
- *  the rests are long enough that a silent part reads as a blocked agent rather than as
- *  the music, which inverts the signal. */
+/** Below this the rests are long enough that a silent part reads as a blocked agent, inverting the signal. */
 export const MIN_VOICE_CONTINUITY = 0.6;
 /** Resolution at which continuity is measured: roughly a bar at orchestral tempo. */
 export const CONTINUITY_WINDOW_SECONDS = 4;
-/** How long a changed session count must hold before the tree re-splits, so opening a
- *  terminal does not immediately rearrange the texture. */
+/** Long enough that opening a terminal does not immediately rearrange the texture. */
 export const VOICE_RESPLIT_DEBOUNCE_MS = 3000;

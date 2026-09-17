@@ -13,23 +13,18 @@ type FakeVolume = SystemVolume & {
   /** Every level the duck asked for. It must never ask for one. */
   levelWrites: number[];
   muteWrites: boolean[];
-  /** The streams on the endpoint, and which of them are muted. */
   live: AudioSession[];
   sessionMutes: string[];
   restores: number;
   fail: boolean;
   /** Whether the bridge process is alive. Clearing it is the bridge dying under us. */
   ready: boolean;
-  /** How many bridges have been spawned. */
   starts: number;
-  /** How long the bridge takes to answer a `set`, so a command can be genuinely in
-   *  flight when teardown arrives. */
+  /** How long the bridge takes to answer a `set`, so teardown can arrive mid-flight. */
   delayMs: number;
 };
 
-/** Mirrors `bridge/volume-bridge.ps1`: the state at the first change is the baseline, a
- *  state that has drifted from what we last set belongs to the user again, and a restore
- *  only puts back what is still ours. */
+/** Mirrors `bridge/volume-bridge.ps1`: drift from what we last set means the user owns it again. */
 function fakeVolume(startLevel: number): FakeVolume {
   let baseline: VolumeLevel = { level: startLevel, muted: false };
   let held: VolumeLevel | null = null;
@@ -110,8 +105,7 @@ function fakeVolume(startLevel: number): FakeVolume {
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** The bridge is asked asynchronously, so waiting on the change rather than on a duration
- *  keeps the assertion about behaviour instead of about how busy the runner was. */
+/** Waiting on the change rather than on a duration keeps the assertion off runner timing. */
 async function until(predicate: () => boolean, what: string): Promise<void> {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
@@ -138,9 +132,7 @@ test('a closed gate mutes the endpoint, and an open one gives it back', async ()
   await duck.stop();
 });
 
-/** Muting is the whole signal, and it was chosen over a level of zero deliberately: the
- *  tray icon shows a muted speaker, where silence at full level reads as broken hardware.
- *  A ramp down to zero must not creep back in. */
+/** Mute rather than zero: the tray shows a muted speaker, where silence at full level reads as broken hardware. */
 test('the level is never written, at zero or at anything else', async () => {
   const volume = fakeVolume(55);
   const duck = createDuck({ volume, sessionName: () => null });
@@ -171,8 +163,7 @@ test('stopping leaves the endpoint unmuted', async () => {
   assert.equal(volume.current.level, 42);
 });
 
-/** The failure that matters: a mute the bridge is still working on must not land after the
- *  restore that was supposed to undo it, or the machine is left silent. */
+/** A mute landing after the restore meant to undo it leaves the machine silent. */
 test('a mute still in flight cannot outlive the stop that follows it', async () => {
   const volume = fakeVolume(80);
   const duck = createDuck({ volume, sessionName: () => null });
@@ -322,9 +313,7 @@ test('a flag the user cleared themselves is not set again behind them', async ()
 });
 
 
-/** A bridge that died leaves every gate request resolving as a silent no-op: agents can
- *  block while the user's audio plays on, and a mute can stick with nothing left to clear
- *  it. Starting again has to bring a bridge back rather than report the corpse. */
+/** A dead bridge makes every gate a silent no-op, so starting again must replace it. */
 test('a duck whose bridge died is respawned, and its gate re-established', async () => {
   const volume = fakeVolume(70);
   const duck = createDuck({ volume, sessionName: () => null });
@@ -355,8 +344,7 @@ test('a live bridge is not respawned by a second start', async () => {
   await duck.stop();
 });
 
-/** The point of naming a session: a call, a notification or anything else on the machine
- *  keeps playing while the stream we were asked to gate goes quiet. */
+/** A call, a notification or anything else on the machine keeps playing through the gate. */
 test('a named session is gated on its own and the endpoint is left alone', async () => {
   const volume = fakeVolume(65);
   volume.live = [
@@ -380,8 +368,7 @@ test('a named session is gated on its own and the endpoint is left alone', async
   assert.equal(volume.current.muted, false);
 });
 
-/** The audio service shows several sessions under one name and only some are live, so a
- *  gate that stopped at the first match would leave the stream playing. */
+/** One name can cover several live sessions, so stopping at the first would leave audio playing. */
 test('every live session sharing the name is gated', async () => {
   const volume = fakeVolume(65);
   const name = 'Microphone (The Static A2DP SNK)';
@@ -400,8 +387,7 @@ test('every live session sharing the name is gated', async () => {
   assert.deepEqual(volume.sessionMutes, []);
 });
 
-/** Matching nothing means the audio is not where we think it is. Muting the endpoint in
- *  its place would silence the whole machine and still not gate the stream. */
+/** Muting the endpoint instead would silence the whole machine and still not gate the stream. */
 test('a name that matches nothing does not fall back to muting the endpoint', async () => {
   const volume = fakeVolume(65);
   volume.live = [{ processId: 1234, name: 'wmplayer' }];
@@ -417,8 +403,7 @@ test('a name that matches nothing does not fall back to muting the endpoint', as
   await duck.stop();
 });
 
-/** The phone is released before the duck on the way down, so the gate has to remember
- *  what it muted rather than ask again. */
+/** The phone is released before the duck on the way down, so the gate must remember what it muted. */
 test('a session is released even once nothing can name it any more', async () => {
   const volume = fakeVolume(65);
   volume.live = [{ processId: 5348, name: 'Microphone (The Static A2DP SNK)' }];

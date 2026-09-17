@@ -1,8 +1,4 @@
-/** Drives the real Core Audio endpoint. The risk this module carries is entirely in the
- *  COM interop and in the restore paths, neither of which a stubbed test would touch.
- *
- *  Every case moves the level a few points from wherever it already sits and puts it
- *  back: someone may be listening to something on this machine. */
+/** Hits the real endpoint, so every case nudges the level a few points and puts it back. */
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,12 +19,10 @@ const READBACK_TOLERANCE = 1.5;
 const RESTORE_TOLERANCE = 1.0;
 /** Leaves no doubt that nothing restored the level before the next start did. */
 const AFTER_KILL_SETTLE_MS = 2000;
-/** The mixer names a session after its process when it sets no display name of its own,
- *  so a player started by this suite appears under the host it was started from. */
+/** A player with no display name of its own is listed under the host that started it. */
 const PLAYER_SESSION_NAME = 'powershell';
 const SESSION_SETTLE_TIMEOUT_MS = 20000;
-/** Long enough for the module to see the child exit, short enough to fail a test rather
- *  than hang it. */
+/** Long enough to see the child exit, short enough to fail a test rather than hang it. */
 const BRIDGE_DEATH_TIMEOUT_MS = 5000;
 
 let home: string;
@@ -51,8 +45,7 @@ before(async () => {
 });
 
 after(async () => {
-  // One case deliberately ends with a level the module must not take back, so the suite
-  // returns the machine itself — through the same claim a hard-killed daemon leaves.
+  // One case ends on a level the module must not take back, so the suite returns it via a claim.
   const volume = createSystemVolume();
   const status = await volume.start();
   const current = status.ready ? await volume.read() : null;
@@ -69,8 +62,7 @@ after(async () => {
   rmSync(home, { recursive: true, force: true });
 });
 
-/** A level a few points from `from`, kept well inside the range so no test can leave a
- *  machine silent or deafening even if a restore fails. */
+/** Kept well inside the range, so no failed restore can leave a machine silent or deafening. */
 function nudged(from: number): number {
   return from > 20 ? from - NUDGE_POINTS : from + NUDGE_POINTS;
 }
@@ -129,9 +121,7 @@ test('leaves a level the user moved themselves alone', async () => {
   }
 });
 
-/** The crash case the product actually has to survive: a hard-killed daemon takes the
- *  bridge down with it on Windows, so nothing can restore the level at the time. What
- *  must hold is that the claim it left behind brings the level back on the next start. */
+/** A hard kill takes the bridge down too, so only the claim it left can restore the level. */
 test('recovers a level left behind by a hard-killed daemon', async () => {
   const script = path.join(home, 'duck-and-die.ts');
   writeFileSync(
@@ -176,8 +166,7 @@ test('recovers a level left behind by a hard-killed daemon', async () => {
   }
 });
 
-/** A second of silence: a real render session has to exist for matching to mean anything,
- *  and the suite runs on a machine somebody is listening to. */
+/** Silent, because a real render session must exist and someone may be listening. */
 function writeSilentWav(file: string): void {
   const rate = 8000;
   const data = Buffer.alloc(rate * 2);
@@ -215,9 +204,7 @@ async function countMatching(volume: SystemVolume, name: string): Promise<number
   return sessions.filter((session) => session.name.toLowerCase().includes(name)).length;
 }
 
-/** The gate the product actually wants: the stream we can name goes quiet and nothing else
- *  on the endpoint does. Two players, because the audio service shows one name across
- *  several sessions and a gate that stopped at the first would leave audio playing. */
+/** Two players, because one name covers several sessions and a gate stopping at the first leaves audio playing. */
 test('gates every live session matching a name, and nothing when none does', async () => {
   const wav = path.join(home, 'silence.wav');
   writeSilentWav(wav);
@@ -265,11 +252,9 @@ test('gates every live session matching a name, and nothing when none does', asy
   }
 });
 
-/** Stands in for the bridge dying on its own — a COM fault, or the user ending the
- *  PowerShell process — while the daemon carries on and later stops tidily. */
+/** Stands in for the bridge dying on its own while the daemon carries on and later stops tidily. */
 function killBridges(): void {
-  // The query runs in a `powershell.exe` of our own whose command line also carries the
-  // script name, so it has to be told apart from the bridges it is looking for.
+  // Our own query process carries the script name too, so it must be told apart from the bridges.
   const found = execFileSync(
     'powershell.exe',
     [
@@ -290,8 +275,7 @@ function killBridges(): void {
   }
 }
 
-/** Nothing restored the level, so the claim is the only thing left that still can. A stop
- *  that deletes it is the one path by which a mute becomes permanent. */
+/** Nothing restored the level, so a stop that deletes the claim is how a mute becomes permanent. */
 test('keeps the claim when the bridge died before the daemon stopped', async () => {
   const volume = createSystemVolume();
   assert.equal((await volume.start()).ready, true);
@@ -323,8 +307,7 @@ test('keeps the claim when the bridge died before the daemon stopped', async () 
   }
 });
 
-/** A per-session mute belongs to the audio service, so a hard-killed daemon leaves it
- *  behind where a hard-killed endpoint mute would at least have a level to compare. */
+/** A session mute belongs to the audio service, so there is no level left to compare against. */
 test('clears a session mute left behind by a killed daemon', async () => {
   const volume = createSystemVolume();
   const status = await volume.start();
@@ -356,9 +339,7 @@ test('clears a session mute left behind by a killed daemon', async () => {
   }
 });
 
-/** `duck.stop()` releases the session and then restores the endpoint. When the release
- *  could not be confirmed, the endpoint restore that follows is not entitled to drop the
- *  session's claim: `R` moves a level and can never unmute a session. */
+/** `R` moves a level and can never unmute a session, so it must not drop the session's claim. */
 test('an endpoint restore does not release a session claim it cannot have lifted', async () => {
   const wav = path.join(home, 'silence.wav');
   writeSilentWav(wav);

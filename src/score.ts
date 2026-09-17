@@ -20,8 +20,7 @@ function partName(track: Track, index: number): string {
   return track.instrument.percussion ? PERCUSSION_PART_NAME : `Track ${index + 1}`;
 }
 
-/** Stable across runs of the same file: track order within a MIDI file is fixed, and the
- *  name and program distinguish parts a listener would confuse (Violin I vs Violin II). */
+/** Stable across runs: track order is fixed in the file, and name+program separate Violin I from Violin II. */
 function partId(name: string, program: number, index: number): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return `t${String(index).padStart(2, '0')}-${slug}-p${program}`;
@@ -43,25 +42,12 @@ function scoreNote(
   };
 }
 
-/** GM programs the engraving tools get wrong in ways that misrepresent the score through
- *  a General MIDI synth, rather than ways that are a matter of taste.
- *
- *  Section strings are the common case: LilyPond emits the solo patches (40 Violin,
- *  41 Viola, 42 Cello, 43 Contrabass) for parts that a whole desk plays, and one solo
- *  patch carrying a section reads as thin and reedy. Horns are the clearer error — they
- *  are written to 69, which is English Horn, a woodwind, not the brass instrument the
- *  part names.
- *
- *  Driven by the part name, never by the program alone: a genuine solo violin in a
- *  concerto belongs on 40, and substituting by program would silently rewrite it. */
+/** Fixes programs that misrepresent the score: LilyPond writes solo string patches for whole desks, and horns to 69. */
 const STRING_SECTION_PROGRAM = 48;
 const FRENCH_HORN_PROGRAM = 60;
 const SECTION_STRINGS = new Set(['Violin', 'Viola', 'Cello', 'Contrabass']);
 
-/** A section says so by naming more than one player. Ordinals are not enough on their
- *  own — "Violino I" is how a concerto names its soloist as well as how a symphony names
- *  its first desk — so plurality is the evidence, and a name that says "solo" overrides
- *  it outright. */
+/** Plurality, not the ordinal, marks a section: "Violino I" also names a concerto soloist. */
 const PLURAL_TOKENS = new Set([
   'violins', 'violini', 'violinen', 'violons', 'geigen', 'fiddles', 'vlns', 'vns', 'vni',
   'violas', 'viole', 'vle', 'bratschen', 'altos', 'vlas',
@@ -71,21 +57,12 @@ const PLURAL_TOKENS = new Set([
 ]);
 const SOLO_TOKENS = new Set(['solo', 'soli', 'solist', 'soloist']);
 
-/** Whether the score as a whole is an orchestra, which is what decides if a singular
- *  string name is a desk or a soloist. The discriminator is a wind complement: an
- *  orchestra doubles winds against a body of strings, while a quartet, a string
- *  serenade and a baroque concerto have at most a soloist or two above the strings.
- *  Counting whole sections rather than listing scorings keeps it to one rule, and both
- *  thresholds must be met — three winds with one violin is a wind serenade, and four
- *  strings with no winds is chamber music. */
+/** Both thresholds must be met: three winds with one violin is a wind serenade, four strings with no winds is chamber music. */
 const MIN_ORCHESTRAL_WINDS = 3;
 const MIN_ORCHESTRAL_STRINGS = 3;
 const ORCHESTRAL_SECTIONS = new Set(['Woodwinds', 'Brass', 'Percussion']);
 
-/** LilyPond glues a desk number straight onto the instrument (`violino1`), which leaves
- *  no word boundary for the name parser to find. Splitting letter from digit here keeps
- *  that spelling out of `part-names.ts`, where it would widen a shared parser for one
- *  engraver's habit. */
+/** LilyPond glues the desk number onto the instrument (`violino1`), leaving no word boundary for the parser. */
 const readable = (name: string): string => name.replace(/([a-z])(\d)/gi, '$1 $2');
 
 export function isOrchestral(names: readonly string[]): boolean {
@@ -100,10 +77,7 @@ export function isOrchestral(names: readonly string[]): boolean {
   return winds >= MIN_ORCHESTRAL_WINDS && strings >= MIN_ORCHESTRAL_STRINGS;
 }
 
-/** Returns the program to sound the part with, which is the original unless the name is
- *  evidence that the file's own choice misrepresents it. `orchestral` comes from the
- *  score around the part: inside an orchestra a lone `violino1` is the first desk, and
- *  outside one it may well be the only violin playing. */
+/** Keeps the scored program unless the name shows it misrepresents the part; inside an orchestra a lone `violino1` is a desk. */
 export function remapProgram(name: string, program: number, orchestral = false): number {
   const tokens = normalizePartName(readable(name)).split(' ');
   if (tokens.some((token) => SOLO_TOKENS.has(token))) return program;
@@ -118,8 +92,7 @@ export function remapProgram(name: string, program: number, orchestral = false):
   return program;
 }
 
-/** Busiest first, so the parts that carry the piece are the ones that get a channel of
- *  their own. Ties break on track order to keep the allocation reproducible. */
+/** Busiest first, so the parts that carry the piece get their own channel; ties break on track order for reproducibility. */
 function melodicChannels(tracks: { track: Track; index: number }[]): Map<number, number> {
   const byPresence = [...tracks].sort(
     (a, b) => b.track.notes.length - a.track.notes.length || a.index - b.index,
@@ -129,17 +102,7 @@ function melodicChannels(tracks: { track: Track; index: number }[]): Map<number,
   );
 }
 
-/**
- * Reads a MIDI file into the scheduler's input form, binding every part to its own MIDI
- * channel so a part can be faded independently of the rest of the orchestra.
- *
- * Only 15 melodic channels exist. Parts past that still play, but share the overflow
- * channel and can only be gated together; callers see that as more than one part
- * reporting the same channel, which percussion parts always do.
- *
- * Throws on a file with no notes: that is nothing to play rather than a quiet piece, and
- * binding the transport to it would be silence that means nothing.
- */
+/** Binds each part to its own channel so it can be faded alone; parts past the 15 melodic channels share the overflow and gate together. */
 export function loadScore(filePath: string): Score {
   const midi = new Midi(readFileSync(filePath));
   const voiced = midi.tracks

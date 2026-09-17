@@ -14,8 +14,7 @@ import {
 } from './settings.ts';
 
 test('every setting has a default, and every default is valid', () => {
-  // The two lists are maintained separately, and a setting present in one but not the
-  // other fails silently: the menu shows a blank, or the config file grows a dead key.
+  // The two lists are maintained separately, and a key in one but not the other fails silently.
   for (const spec of SETTING_SPECS) {
     const value = SETTING_DEFAULTS[spec.key as keyof typeof SETTING_DEFAULTS];
     assert.notEqual(value, undefined, `${spec.key} has no default`);
@@ -58,8 +57,7 @@ test('a number is clamped to its range and snapped to its step', () => {
 });
 
 test('cycling a number stops at the ends instead of wrapping', () => {
-  // Wrapping volume would take a keypress at 100 straight to silence, which reads as a
-  // crash rather than a setting.
+  // Wrapping would take a keypress at 100 straight to silence, which reads as a crash.
   assert.equal(nextSetting('masterVolume', 100, 1), 100);
   assert.equal(nextSetting('masterVolume', 0, -1), 0);
 });
@@ -72,7 +70,6 @@ test('a toggle takes only booleans and flips from anything', () => {
 });
 
 test('every choice renders a label rather than its raw value', () => {
-  // The raw values are for the wire; a menu reading `per-agent` explains nothing.
   for (const spec of SETTING_SPECS) {
     if (spec.kind !== 'choice') continue;
     for (const choice of spec.choices) {
@@ -98,13 +95,11 @@ test('the gate labels follow what sound means, since alert inverts them', () => 
 });
 
 test('a number carrying a unit prints it, so the value names a quantity', () => {
-  // "Fade 2" says nothing on its own, and the menu has no other place to put the unit.
   assert.equal(displaySetting('fadeSeconds', 2), '2s');
   assert.equal(displaySetting('fadeSeconds', 0.25), '0.25s');
 });
 
 test('fade is a setting, with a floor that is still a crossfade', () => {
-  // It reached the menu because a user reported it broken and had no way to see its value.
   const spec = SETTING_SPECS.find((entry) => entry.key === 'fadeSeconds');
   assert.ok(spec && spec.kind === 'number');
   assert.ok(spec.min > 0, 'an instant cut clicks, so zero is not offered');
@@ -123,8 +118,7 @@ test('mode and autoplay are ordinary settings, validated like the rest', () => {
 });
 
 test('no two settings share a key, a title, or a value label', () => {
-  // A user asked how `After you approve` differed from `mode`, having read both as the
-  // same control. Two rows that read alike are the bug, whatever the keys say.
+  // A user once read `After you approve` and `mode` as the same control; rows that read alike are the bug.
   const keys = SETTING_SPECS.map((spec) => spec.key);
   const titles = SETTING_SPECS.map((spec) => spec.title.toLowerCase());
   assert.equal(new Set(keys).size, keys.length);

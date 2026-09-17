@@ -11,13 +11,11 @@ import type { MidiOut } from './midi-out.ts';
 import type { Score } from './types.ts';
 
 export type Mixer = {
-  /** Binds channels and sends the program change for each part. */
   bindScore(score: Score): void;
   /** Fades a part toward audible or silent. Safe to call repeatedly with the same target. */
   setPartAudible(options: { partId: string; audible: boolean; fadeSeconds: number }): void;
   isPartAudible(partId: string): boolean;
-  /** Whether anything is still making sound, fade-outs in progress included. This, not the
-   *  gate, is the transport's run condition: pausing on the gate cuts the fade short. */
+  /** Whether anything is still sounding, fade-outs included. This, not the gate, is the transport's run condition. */
   anyAudible(): boolean;
   /** Whether any part is gated on, ignoring where its fade has got to. */
   anyGateOpen(): boolean;
@@ -38,9 +36,7 @@ type PartMix = {
 
 const MS_PER_SECOND = 1000;
 
-/** The CC7 value for a part sitting at `level` (0–1) under `masterVolume` (0–100). This is
- *  the single point where a level becomes a MIDI value, so it also enforces the range: a
- *  gated-off part stays silent at any master volume, and master 100 is unscaled. */
+/** The single point where a level becomes a MIDI value, so it also clamps: gated-off stays silent, master 100 is unscaled. */
 export function channelVolume(options: { level: number; masterVolume: number }): number {
   const level = Number.isFinite(options.level) ? Math.min(Math.max(options.level, 0), 1) : 0;
   const volume = Number.isFinite(options.masterVolume) ? options.masterVolume : MASTER_VOLUME_MAX;
@@ -112,8 +108,7 @@ export function createMixer(midi: MidiOut): Mixer {
     isPartAudible(partId: string): boolean {
       const mix = parts.get(partId);
       if (!mix) return false;
-      // Mid fade-out a part is still sounding, and must keep taking notes or there is
-      // nothing left for the fade to act on and the gate closes as an abrupt cut.
+      // Mid fade-out a part must keep taking notes, or the fade has nothing left to act on and cuts abruptly.
       return mix.audible || mix.level > 0;
     },
 

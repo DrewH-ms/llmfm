@@ -18,9 +18,7 @@ export function installedHookPath(): string {
   return join(copilotHooksDir(), HOOK_CONFIG_NAME);
 }
 
-/** Generated from `HOOK_EVENTS` rather than kept as a template beside it: a hand-edited
- *  config silently drifts from the events the daemon actually understands, and the symptom
- *  is a part that never un-mutes rather than anything that looks like a missing hook. */
+/** Generated from `HOOK_EVENTS`: a hand-edited config drifts silently, and the symptom is a part that never un-mutes. */
 export function installHooks(): string {
   const scriptPath = join(PROJECT_ROOT, 'hooks', 'notify.js');
   const hooks = Object.fromEntries(

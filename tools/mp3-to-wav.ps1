@@ -1,6 +1,4 @@
-# Dev-time only. Transcodes an audio file to PCM WAV using Windows Media Foundation,
-# so a WAV test asset can be produced without adding a dependency. Windows PowerShell 5.1
-# only: PowerShell 7 does not project WinRT types.
+# Dev-time only. Transcodes to PCM WAV via Windows Media Foundation, no dependency needed. Windows PowerShell 5.1 only: PowerShell 7 does not project WinRT types.
 param(
   [Parameter(Mandatory = $true)][string]$Source,
   [Parameter(Mandatory = $true)][string]$Destination

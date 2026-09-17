@@ -9,9 +9,7 @@ import { measureDynamics, isDynamic, MIN_DISTINCT_VELOCITIES } from '../tools/dy
 const TRACKS_DIR = join(dirname(dirname(fileURLToPath(import.meta.url))), 'playlists', 'bundled');
 const bundled = readdirSync(TRACKS_DIR).filter((file) => /\.midi?$/i.test(file));
 
-/** The library was once mostly flat engravings, which sound like the music breaking when
- *  a part fades rather than like a voice leaving. Curation refuses them now; this is what
- *  stops one arriving by another route. */
+/** Flat engravings sound like the music breaking when a part fades; curation refuses them, and this catches one arriving another way. */
 test('every bundled track carries real dynamics', () => {
   assert.ok(bundled.length > 0, 'no tracks to check');
   for (const file of bundled) {

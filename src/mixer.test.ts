@@ -5,7 +5,6 @@ import type { MidiOut } from './midi-out.ts';
 import { MASTER_VOLUME_MAX, MAX_MIDI_VALUE } from './constants.ts';
 
 test('master 100 leaves a part exactly where it was', () => {
-  // Any rounding drift here would be a silent, permanent change to the default mix.
   for (const level of [0, 0.25, 1 / 3, 0.5, 0.99, 1]) {
     assert.equal(
       channelVolume({ level, masterVolume: MASTER_VOLUME_MAX }),
@@ -36,9 +35,7 @@ test('the result is always a MIDI value, whatever it is given', () => {
 });
 
 test('a part still fading out keeps the transport running', async () => {
-  // Bug: both checks read the gate rather than the level, so the transport paused and
-  // note-offed everything the instant a part was gated off. The fade then ramped CC7 over
-  // channels that had already gone quiet, and every stop was heard as an abrupt cut.
+  // Bug: both checks read the gate rather than the level, so the transport note-offed everything the instant a part was gated off.
   const sent: number[] = [];
   const midi: MidiOut = {
     start: async () => ({ ok: true, device: 'test' }) as never,
@@ -78,8 +75,7 @@ test('master volume is monotonic and scales a mid-fade level too', () => {
 });
 
 test('half master is a perceptual half, not a numeric one', () => {
-  // A straight linear scale would give 64. The synth reads CC7 as attenuation, so the
-  // curve has to sit above the linear line for the control to feel even across its range.
+  // The synth reads CC7 as attenuation, so a linear scale would give 64 and feel uneven.
   const half = channelVolume({ level: 1, masterVolume: MASTER_VOLUME_MAX / 2 });
   assert.ok(half > MAX_MIDI_VALUE / 2, `expected above 64, got ${half}`);
   assert.ok(half < MAX_MIDI_VALUE * 0.75, `expected below 95, got ${half}`);

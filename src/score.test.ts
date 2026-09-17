@@ -50,8 +50,7 @@ test('an orchestra is told apart from an ensemble by its wind complement', () =>
   assert.equal(isOrchestral([]), false);
 });
 
-/** The gap the plurality rule left: in a full orchestra the singular names are desks, and
- *  they are most of the strings. */
+/** The gap the plurality rule left: in a full orchestra the singular names are desks. */
 test('a singular string name is a desk inside an orchestra', () => {
   for (const name of ['violino1', 'violino2', 'violoncello', 'contrabasso']) {
     assert.equal(remapProgram(name, SOLO_VIOLIN, true), STRING_ENSEMBLE, name);
@@ -146,9 +145,7 @@ test('every bundled part keeps the program its file chose alongside the one it s
   }
 });
 
-/** Tempo- or lyric-only exports carry track headers and no note events. Loading one as a
- *  playable score puts the transport on silence that means nothing, so it is refused here
- *  and the caller keeps the track it already has. */
+/** Tempo- or lyric-only exports carry track headers and no notes; loading one would park the transport on meaningless silence. */
 test('a MIDI with tracks but no notes is refused rather than loaded silent', (t: TestContext) => {
   const dir = mkdtempSync(join(tmpdir(), 'llmfm-score-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

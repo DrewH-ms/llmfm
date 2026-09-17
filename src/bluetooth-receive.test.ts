@@ -1,8 +1,4 @@
-/** The bridge protocol is the risk here: a line format, a claim file, and a start that
- *  must never reject. None of that needs a radio, so the cases below drive a fake bridge
- *  — a real PowerShell process speaking the real protocol — and the machine is left
- *  untouched. The one case that talks to the shipped bridge only lists devices.
- */
+/** These cases drive a fake bridge — a real PowerShell process speaking the real protocol — so no radio is touched; the one shipped-bridge case only lists devices. */
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -172,10 +168,7 @@ test('reports a bridge that cannot start instead of rejecting', async () => {
   }
 });
 
-/** The bridge process is the sink: when it dies the phone's stream disappears, which is
- *  silence that says nothing about any agent. The daemon latches "the sink is held" from
- *  the start result, so this module reporting its own death is the only thing a health
- *  check has to go on. */
+/** The bridge process is the sink, and the daemon latches "the sink is held" from the start result, so this module reporting its own death is all a health check has. */
 test('a bridge that dies reports itself as not ready rather than still holding the sink', async () => {
   rmSync(bluetoothClaimPath(), { force: true });
   const bluetooth = createBluetoothReceive();
@@ -194,8 +187,7 @@ test('a bridge that dies reports itself as not ready rather than still holding t
   }
 });
 
-/** The shipped bridge against real WinRT. It only enumerates: connecting would leave a
- *  machine speaking to someone's phone after the suite ends. */
+/** Enumerates only: connecting would leave the machine speaking to someone's phone after the suite ends. */
 test('the shipped bridge enumerates without a phone present', async () => {
   delete process.env['LLMFM_BT_BRIDGE'];
   const bluetooth = createBluetoothReceive();

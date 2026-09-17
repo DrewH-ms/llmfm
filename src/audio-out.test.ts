@@ -10,8 +10,7 @@ import { createAudioOut, toMciVolume, toMilliseconds, toSeconds } from './audio-
 /** Present on stock Windows, and short enough that an end-to-end test stays quick. */
 const SAMPLE_WAV = 'C:\\Windows\\Media\\Alarm01.wav';
 const MODULE_PATH = path.join(import.meta.dirname, 'audio-out.ts');
-/** The bridge polls its owner every 200 ms; anything near this is already a track left
- *  playing with nothing to stop it. */
+/** The bridge polls its owner every 200 ms; anything near this is a track left playing with nothing to stop it. */
 const ORPHAN_EXIT_TIMEOUT_MS = 5000;
 
 test('a position in seconds survives the round trip through MCI milliseconds', () => {
@@ -21,8 +20,7 @@ test('a position in seconds survives the round trip through MCI milliseconds', (
 });
 
 test('a time MCI cannot be given collapses to the start rather than reaching it as text', () => {
-  // MCI takes an unsigned millisecond count on a command line; a negative or a NaN
-  // would arrive as the literal characters and be refused, losing the whole command.
+  // MCI takes an unsigned millisecond count on a command line; a negative or NaN would arrive as literal text and lose the whole command.
   for (const seconds of [-1, -0.5, Number.NaN, Number.NEGATIVE_INFINITY]) {
     assert.equal(toMilliseconds(seconds), 0);
   }
@@ -64,8 +62,7 @@ test('volume is monotonic across the range and never leaves it', () => {
 });
 
 test('every call is harmless when the bridge was never started', async () => {
-  // A daemon with no audio bridge still has to run: this must not throw and must not
-  // hang on a reply that is never coming.
+  // A daemon with no audio bridge still has to run: no throw, and no wait on a reply that is never coming.
   const audio = createAudioOut();
   assert.equal(audio.status().ready, false);
 
@@ -136,8 +133,7 @@ test('a real wav opens, plays, advances, pauses and closes', async (t) => {
 });
 
 function bridgePid(ownerPid: number): number | null {
-  // The query runs in a `powershell.exe` of our own whose command line also carries the
-  // script name, so it has to be told apart from the bridge it is looking for.
+  // The query runs in a powershell.exe of our own whose command line also carries the script name.
   const found = execFileSync(
     'powershell.exe',
     [
@@ -162,9 +158,7 @@ function alive(pid: number): boolean {
   return answer.trim() === 'y';
 }
 
-/** A hard-killed daemon cannot close the device, and a dead parent does not reliably
- *  close the pipe the bridge is blocked on. Anything left of that is a track still
- *  playing after LLMFM is gone, with no way to stop it but Task Manager. */
+/** A hard-killed daemon cannot close the device, and a dead parent does not reliably close the pipe the bridge blocks on. */
 test('the bridge stops playing when the process that started it is killed', async (t) => {
   if (!existsSync(SAMPLE_WAV)) {
     t.skip(`${SAMPLE_WAV} is not present on this machine`);

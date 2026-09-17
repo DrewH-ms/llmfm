@@ -10,7 +10,6 @@ export type SessionRegistry = {
   applyHookEvent(event: HookEvent): void;
   /** Corroboration from open-sessions-state.json; must not override a fresh hook reading. */
   applyFileState(entries: OpenSessionEntry[]): void;
-  /** Drives simulation mode without pretending to be a real session source. */
   applySimulated(options: { sessionId: string; working: boolean; label: string }): void;
   removeSimulated(): void;
   list(): Session[];
@@ -25,10 +24,8 @@ function labelOf(options: { cwd: string | null; sessionId: string }): string {
 
 export function createSessionRegistry(): SessionRegistry {
   const sessions = new Map<string, Session>();
-  /** Sessions the open-sessions file has ever listed. Internal bookkeeping, not published. */
   const seenInFile = new Set<string>();
-  /** Ids a `sessionEnd` retired. The CLI leaves an ended session in its file for days, so
-   *  without this the next poll re-creates what the hook just closed. */
+  /** Ids a `sessionEnd` retired; the CLI leaves ended sessions in its file for days, so the next poll would re-add them. */
   const endedByHook = new Set<string>();
   const listeners = new Set<() => void>();
 
@@ -65,8 +62,7 @@ export function createSessionRegistry(): SessionRegistry {
         label: labelOf({ cwd, sessionId: event.sessionId }),
         source: 'hook',
         blockedMidTurn,
-        // Held across a repeated prompt: one prompt can fire `notification` twice, and
-        // restarting the clock there would hide exactly the long block it exists to show.
+        // Held across a repeat `notification` for one prompt: restarting the clock would hide the long block.
         blockedSince: blockedMidTurn ? (previous?.blockedSince ?? now) : null,
         listedByCli: seenInFile.has(event.sessionId),
         startedAt: previous?.startedAt ?? now,
@@ -93,29 +89,20 @@ export function createSessionRegistry(): SessionRegistry {
 
       for (const entry of entries) {
         present.add(entry.sessionId);
-        // `sessionEnd` is the one authoritative word that a session is over, and the file
-        // outlives it by days. Honouring the file here would undo the hook within a poll.
+        // `sessionEnd` is authoritative and the file outlives it by days; honouring the file would undo the hook.
         if (endedByHook.has(entry.sessionId)) continue;
         seenInFile.add(entry.sessionId);
         const previous = sessions.get(entry.sessionId);
         if (previous?.source === 'simulation') continue;
-        // Being listed at all is the fact that separates a session the user is sitting in
-        // front of from a sub-agent, so it is recorded even when nothing else changed.
+        // Being listed at all is what separates a real session from a sub-agent, so record it even if nothing else changed.
         if (previous && !previous.listedByCli) {
           sessions.set(entry.sessionId, { ...previous, listedByCli: true });
           changed = true;
         }
         // The file's flag only flips at turn boundaries, so a recent hook reading outranks it.
         if (previous?.source === 'hook' && now - previous.updatedAt < HOOK_AUTHORITY_MS) continue;
-        // Its authority is one-way. The file's `working: true` carries no information,
-        // because the flag tracks *the CLI* being busy — it stays true while a background
-        // shell runs and while an agent sits on a prompt. Only its `false`, and its word
-        // on existence, mean anything. So a `true` registers the session but never asserts
-        // work: asserting work is a hook's job alone. Otherwise a cold start, where the
-        // file is the only signal, brings every already-open session up busy and holds the
-        // music on indefinitely, since an idle agent fires no hook to correct it.
-        // A known session is only ever silenced here, never started; an unknown one is
-        // registered in the silent state, so existence is recorded without a claim.
+        // One-way authority: the file's `working: true` only means the CLI is busy, so it may silence a known session
+        // or register an unknown one silent, but never assert work — else a cold start holds the music on forever.
         if (previous && (entry.working || !previous.working)) continue;
 
         const cwd = previous?.cwd ?? null;
@@ -128,8 +115,7 @@ export function createSessionRegistry(): SessionRegistry {
           blockedMidTurn: false,
           blockedSince: null,
           listedByCli: true,
-          // The CLI's own timestamp, not ours: dating an entry from daemon start would
-          // give a terminal closed days ago a full idle-dropout window of voice.
+          // The CLI's own timestamp: dating from daemon start gives a terminal closed days ago a full idle window.
           startedAt: previous?.startedAt ?? entry.refreshedAt ?? now,
           updatedAt: previous?.updatedAt ?? entry.refreshedAt ?? now,
         });
@@ -139,11 +125,9 @@ export function createSessionRegistry(): SessionRegistry {
       for (const [sessionId, session] of sessions) {
         if (present.has(sessionId) || session.source === 'simulation') continue;
         if (session.blockedMidTurn) continue;
-        // The file may only evict what it once claimed: a session it never listed is one
-        // it does not track, and only `sessionEnd` can retire that.
+        // The file may only evict what it once claimed; anything else is retired by `sessionEnd` alone.
         if (!seenInFile.has(sessionId)) continue;
-        // A hook session dropped by the file outlived its authority window: its
-        // sessionEnd was missed, so the file's word on existence now stands.
+        // A hook session dropped by the file outlived its authority window: its `sessionEnd` was missed.
         if (session.source === 'file' || now - session.updatedAt >= HOOK_AUTHORITY_MS) {
           sessions.delete(sessionId);
           seenInFile.delete(sessionId);
@@ -151,8 +135,7 @@ export function createSessionRegistry(): SessionRegistry {
         }
       }
 
-      // Once the CLI has dropped the entry there is nothing left to suppress, and the
-      // tombstone would otherwise outlive the daemon's interest in the id.
+      // Once the CLI has dropped the entry there is nothing left to suppress.
       for (const sessionId of endedByHook) {
         if (!present.has(sessionId)) endedByHook.delete(sessionId);
       }

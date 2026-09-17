@@ -43,9 +43,7 @@ function fakeAudio(): AudioOut & { calls: string[]; volume: number } {
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Fades run on timers, and a loaded machine delivers those late. Waiting on the change
- *  rather than on a duration keeps the assertion about behaviour instead of about how
- *  busy the test runner happened to be. */
+/** Fades run on timers a loaded machine delivers late, so wait on the change rather than a duration. */
 async function until(predicate: () => boolean, what: string): Promise<void> {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
@@ -55,8 +53,7 @@ async function until(predicate: () => boolean, what: string): Promise<void> {
   assert.fail(what);
 }
 
-/** The bug this guards was silent and total: the ramp climbed on a device that had never
- *  been told to play, so a recorded track arrived a whole fade late, or not at all. */
+/** The ramp used to climb on a device never told to play, so a track arrived a whole fade late or not at all. */
 test('a fade-in starts the stream at once rather than when the ramp finishes', async () => {
   const audio = fakeAudio();
   const player = createRecordedPlayer(audio);
@@ -82,8 +79,7 @@ test('a fade-out holds the stream open until the level has actually reached zero
   assert.equal(audio.volume, 0);
 });
 
-/** MCI refuses `resume` on a device that has never played, so getting this backwards
- *  leaves the first gate-open silent. */
+/** MCI refuses `resume` on a device that has never played, so getting this backwards leaves the first gate-open silent. */
 test('the first start plays and a return from silence resumes', async () => {
   const audio = fakeAudio();
   const player = createRecordedPlayer(audio);
@@ -125,8 +121,7 @@ test('the master volume scales the gate rather than replacing it', async () => {
   assert.equal(audio.volume, 0);
 });
 
-/** `mute` exists for streams whose transport we cannot pause. Recorded audio honours it
- *  the same way the score does: silent, but still running underneath. */
+/** `mute` exists for streams whose transport we cannot pause; recorded audio honours it like the score does. */
 test('holding the transport keeps the stream running through its own silence', async () => {
   const audio = fakeAudio();
   const player = createRecordedPlayer(audio);

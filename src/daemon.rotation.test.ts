@@ -82,9 +82,7 @@ test('the shipped library is big enough for autoplay to have somewhere to go', (
   assert.ok(listTracks().length >= 2);
 });
 
-/** One file deleted, locked or unparseable used to end autoplay for the rest of the run:
- *  the transport sat paused at the end of the previous track, which is silence that means
- *  nothing at all. */
+/** One file deleted, locked or unparseable used to end autoplay for the rest of the run. */
 test('rotation walks past a track that will not load', async () => {
   const rotation = createTrackRotation();
   const broken = new Set(['b.mid', 'c.mid']);

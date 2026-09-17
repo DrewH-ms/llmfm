@@ -1,29 +1,20 @@
-/** The transport for a track that has no parts. Where the scheduler gates a score channel
- *  by channel, this gates one finished stream, because that is all a mixdown allows: the
- *  fade, the pause and the position all apply to the whole file or to nothing.
- *
- *  It deliberately mirrors `Scheduler` where it can, so the daemon can publish a
- *  `TransportState` without caring which kind of track is loaded. */
+/** Transport for a mixdown: gates one finished stream, and mirrors `Scheduler` so the daemon can publish `TransportState` either way. */
 
 import type { AudioOut } from './audio-out.ts';
 import type { TransportState } from './types.ts';
 import { MASTER_VOLUME_MAX } from './constants.ts';
 
-/** How often the position is read back while playing. MCI quantises `status position`
- *  coarsely, so asking faster buys nothing but bridge traffic. */
+/** MCI quantises `status position` coarsely, so polling faster buys nothing but bridge traffic. */
 const POSITION_POLL_MS = 500;
-/** Steps in a fade. Enough that a ramp is heard as a ramp rather than a staircase,
- *  without flooding the bridge with a command per frame. */
+/** Enough steps to hear a ramp rather than a staircase, without a bridge command per frame. */
 const FADE_STEPS = 20;
-/** Treated as the end of the file. MCI reports a position a little short of the stated
- *  length at the end of playback, so an exact comparison would never fire. */
+/** MCI reports a position a little short of the stated length at the end, so an exact comparison never fires. */
 const END_MARGIN_SECONDS = 0.35;
 
 export type RecordedPlayer = {
-  /** Opens a file and holds it ready. Resolves false if it could not be opened. */
+  /** Resolves false if the file could not be opened. */
   load(path: string): Promise<boolean>;
-  /** The gate. Ramps to full or to silence over `fadeSeconds`, pausing once silent
-   *  unless the caller wants the stream left running underneath. */
+  /** Ramps to full or to silence over `fadeSeconds`, pausing once silent unless the stream is held. */
   setAudible(options: { audible: boolean; fadeSeconds: number }): void;
   setMasterVolume(volume: number): void;
   /** Leave the stream running through its own silence instead of pausing it. */
@@ -69,8 +60,7 @@ export function createRecordedPlayer(audio: AudioOut): RecordedPlayer {
     if (!loaded) return;
     position = await audio.position();
     if (!reachedEnd()) return;
-    // Reported once. The listener decides what follows, and a second report for the same
-    // ending would rotate the library twice.
+    // Reported once: a second report for the same ending would rotate the library twice.
     stopPolling();
     playing = false;
     for (const listener of [...endListeners]) listener();
@@ -85,18 +75,14 @@ export function createRecordedPlayer(audio: AudioOut): RecordedPlayer {
   const ensurePlaying = (): void => {
     if (playing) return;
     playing = true;
-    // MCI refuses `resume` on a device that has never played, so the first start and a
-    // return from pause are not the same command.
+    // MCI refuses `resume` on a device that has never played.
     if (started) void audio.resume();
     else void audio.play();
     started = true;
     startPolling();
   };
 
-  /** Pausing the moment the gate shuts would cut the fade off mid-ramp, so the stream is
-   *  only stopped once the level has actually reached zero. A fade-in is the mirror of
-   *  that: the stream has to be running before the ramp, or the level would climb on a
-   *  device that is not playing and the track would arrive late by the whole fade. */
+  /** Pause only once the level reaches zero, or the fade is cut off mid-ramp; a fade-in needs the stream running first. */
   const settle = (): void => {
     if (level > 0 || target > 0) {
       ensurePlaying();
@@ -129,9 +115,7 @@ export function createRecordedPlayer(audio: AudioOut): RecordedPlayer {
       const seconds = await audio.open(path);
       loaded = seconds > 0;
       duration = seconds;
-      // Opened silent on purpose: the gate has not been consulted yet, and a file that
-      // announced itself at full volume before the first refresh would speak for a
-      // session that may well be blocked.
+      // Opened silent: the gate has not been consulted yet, so full volume would speak for a session that may be blocked.
       applyLevel();
       return loaded;
     },

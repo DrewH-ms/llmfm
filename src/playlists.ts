@@ -1,10 +1,4 @@
-/** Playlists are folders, because a folder is a thing a user can make in Explorer without
- *  learning anything. There is no index file to keep in step with the disk: what is in the
- *  folder is what is in the playlist.
- *
- *  `bundled` is a folder like any other. Its tracks keep bare ids rather than
- *  `bundled/name`, because the licence records in `tracks.json` are keyed by filename and
- *  a stored config may already name a track that way. */
+/** Playlists are folders with no index file; `bundled` tracks keep bare ids because tracks.json licence records are keyed by filename. */
 
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,9 +26,7 @@ export function listTracks(): string[] {
   }
 }
 
-/** Shipped files first, so a user's copy of a name we ship can never shadow the file its
- *  licence record was written for. Re-read each time: the whole point of the user folder
- *  is that dropping a file in makes it playable without a restart. */
+/** Shipped files first, so a user's copy cannot shadow the file its licence record was written for; re-read so drops need no restart. */
 export function playableTracks(): string[] {
   const shipped = listTracks();
   const loose = listUserTracks().filter((file) => !shipped.includes(file));
@@ -44,10 +36,7 @@ export function playableTracks(): string[] {
   return [...shipped, ...loose, ...inPlaylists];
 }
 
-/** Null for a name we do not offer, which is how an untrusted request stops being a path
- *  and starts being a file we already know about. Every branch answers by looking the
- *  candidate up in a list built from the disk, so no part of the request is ever joined
- *  onto a directory before it has been recognised. */
+/** Every branch looks the candidate up in a disk-built list, so an untrusted name is never joined onto a directory. */
 export function resolveTrack(file: string): string | null {
   if (listTracks().includes(file)) return join(bundledDir(), file);
   if (listUserTracks().includes(file)) return join(playlistsDir(), file);
@@ -60,7 +49,6 @@ export function resolveTrack(file: string): string | null {
   return join(playlistsDir(), playlist, name);
 }
 
-/** Which playlist a track id belongs to, for grouping a list a user is reading. */
 export function playlistOf(file: string): string {
   const cut = file.indexOf(PLAYLIST_SEPARATOR);
   if (cut > 0) return file.slice(0, cut);
@@ -91,9 +79,7 @@ export function isPlaylist(name: string): boolean {
   return listPlaylists().some((playlist) => playlist.name === name);
 }
 
-/** What the daemon actually plays from. An empty or deleted playlist falls back to the
- *  bundled music instead of leaving nothing to play: in LLMFM a silence means an agent
- *  needs you, so no setting may be able to produce one that means nothing at all. */
+/** Falls back to bundled music rather than nothing: in LLMFM a silence means an agent needs you. */
 export function libraryFor(playlist: string): string[] {
   const chosen = tracksIn(playlist);
   if (chosen.length > 0) return chosen;

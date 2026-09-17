@@ -61,9 +61,7 @@ const PITCH_CLASSES = 12;
 /** Mean-pitch gap at which two voices no longer mask one another. */
 const REGISTER_SPREAD_SEMITONES = 12;
 
-/** How the three signals trade off when ranking a node as a candidate voice. Continuity
- *  leads because a voice that rests reads as a stopped agent; independence follows
- *  because muting a doubled line barely changes what is heard. */
+/** Continuity leads because a resting voice reads as a stopped agent; independence follows because muting a doubled line changes little. */
 const CONTINUITY_WEIGHT = 0.5;
 const INDEPENDENCE_WEIGHT = 0.3;
 const REGISTER_WEIGHT = 0.2;
@@ -80,18 +78,14 @@ type VoiceNode = {
   notes: ScoredNote[];
 };
 
-/** Quantised onsets to the pitch classes struck on them: the shape two nodes are compared
- *  on to decide whether one is merely doubling the other. */
+/** Quantised onsets to the pitch classes struck on them: how two nodes are compared for doubling. */
 type OnsetShape = Map<number, Set<number>>;
 
-/** Where a part's section came from. Reported so the curation tooling can measure how
- *  often a real file's GM programs are load-bearing, and how often they are absent. */
+/** Reported so curation tooling can measure how often a real file's GM programs are load-bearing. */
 export const SECTION_SOURCES = ['percussion', 'name', 'program', 'fallback'] as const;
 export type SectionSource = (typeof SECTION_SOURCES)[number];
 
-/** Track names outrank GM programs here: an engraver that emits MIDI as a by-product
- *  leaves every track on program 0, which would file a whole string quartet under
- *  Keyboard, whereas a name that resolves to an instrument is never that wrong. */
+/** Track names outrank GM programs: engravers leave every track on program 0, filing a string quartet under Keyboard. */
 export function classifyPart(part: Part): { section: SectionName; source: SectionSource } {
   if (part.percussion || part.channel === PERCUSSION_CHANNEL) {
     return { section: PERCUSSION_SECTION, source: 'percussion' };
@@ -151,9 +145,7 @@ function meanPitchOf(notes: ScoredNote[]): number {
   return total / notes.length;
 }
 
-/** A name that carries nothing is worse than no name: told to listen for "one:" or "RH",
- *  a listener has nothing to find. The GM patch is then the better label, even where it
- *  was too coarse to have settled the section. */
+/** A placeholder name like "one:" or "RH" gives a listener nothing to find, so the GM patch is the better label. */
 function partLabel(part: Part): string {
   const parsed = parsePartName(part.name);
   if (parsed.placeholder) return GM_PROGRAM_NAMES[part.program] ?? parsed.label;
@@ -189,10 +181,7 @@ function partNode(part: Part): VoiceNode {
   };
 }
 
-/** Two desks of the same instrument reach us indistinguishable whenever the score named
- *  neither, and half-named whenever it named only some. Either way the whole group is
- *  renumbered by track order, because a listener counting desks needs the numbering to be
- *  complete before it means anything. */
+/** Partly-named desks are renumbered as a whole group: a listener counting desks needs the numbering complete. */
 function numberedParts(parts: Part[]): VoiceNode[] {
   const nodes = parts.map(partNode);
   const distinct = new Set(nodes.map((node) => node.name));
@@ -219,9 +208,7 @@ function groupNode(options: {
   };
 }
 
-/** A lone child says nothing its parent does not, so the chain collapses to the coarsest
- *  node. A chain ending in a single part takes that part's name, which is what a listener
- *  can actually pick out. */
+/** A lone child says nothing its parent does not, so the chain collapses to the coarsest node. */
 function collapsed(node: VoiceNode): VoiceNode {
   const children = node.children.map(collapsed);
   const only = children.length === 1 ? children[0] : undefined;
@@ -276,17 +263,7 @@ function toVoice(node: VoiceNode): Voice {
   return { voiceId: node.voiceId, name: node.name, partIds: node.partIds, path: node.path };
 }
 
-/**
- * Groups a score into section → instrument → part and ranks every grouping on how well it
- * would carry a session: how much of the piece it sounds in, how little it doubles another
- * line, and how far its register sits from the voices already offered.
- *
- * `MIN_VOICE_CONTINUITY` is tested against whole nodes rather than bare parts, because
- * aggregation is what answers written rests: four leads that each drop out for stretches
- * still sound as a section almost throughout. Testing parts first would discard them
- * before the section that redeems them could be built, leaving intermittent music with a
- * single thin voice and most of the mix playing on regardless of who is working.
- */
+/** `MIN_VOICE_CONTINUITY` is tested against whole nodes: testing bare parts would discard the ones a section redeems. */
 export function buildVoiceTree(score: Score): VoiceTree {
   const roots = sectionNodes(score.parts).map((node) => withPaths(collapsed(node), []));
   const everyNode = roots.flatMap(descendants);
@@ -337,8 +314,7 @@ export function buildVoiceTree(score: Score): VoiceTree {
     return Math.min(1, nearest / REGISTER_SPREAD_SEMITONES);
   };
 
-  /** Ranks siblings in the order they should be offered, each pick judged against the
-   *  voices already sounding so the set spreads across the register. */
+  /** Each pick is judged against the voices already sounding so the set spreads across the register. */
   const offerOrder = (candidates: VoiceNode[], alongside: VoiceNode[]): VoiceNode[] => {
     const remaining = [...candidates].sort(
       (a, b) => rankOf(b) - rankOf(a) || a.voiceId.localeCompare(b.voiceId),

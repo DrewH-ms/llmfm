@@ -1,17 +1,4 @@
-# MIDI bridge: reads packed short messages on stdin, sends them to a Windows
-# MIDI output device via winmm.
-#
-# Chrome's Web MIDI backend does not enumerate the Microsoft GS Wavetable Synth
-# (notably on ARM64), even though winmm does. This bridge gives the daemon direct
-# access to it. We only send MIDI messages to the OS synth -- gm.dls is never read,
-# copied, or redistributed, which is what its Roland license requires.
-#
-# Protocol (one command per line):
-#   S <int>   send packed short message (status | data1<<8 | data2<<16)
-#   Q         quit
-#
-# Arguments:
-#   -ParentPid <int>    process to outlive; the synth is reset and closed when it exits
+# MIDI out via winmm, because Chrome's Web MIDI backend does not enumerate the Microsoft GS Wavetable Synth (notably on ARM64); only messages are sent, gm.dls is never read or redistributed, as its Roland license requires.
 
 param([int] $ParentPid = 0)
 
@@ -75,8 +62,7 @@ if (-not $name) {
 [Console]::Out.WriteLine("OK $name")
 [Console]::Out.Flush()
 
-# Held open for the life of the process: HasExited on a handle we opened cannot be
-# fooled by the pid being reused.
+# Held open for the life of the process: HasExited on a handle we opened cannot be fooled by pid reuse.
 $owner = $null
 if ($ParentPid -ne 0) {
     try { $owner = [System.Diagnostics.Process]::GetProcessById($ParentPid) } catch { $owner = $null }
@@ -87,8 +73,7 @@ $stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput())
 
 try {
     :read while ($true) {
-        # A blocking read would never notice the owner dying, and a killed owner does
-        # not reliably close the pipe, so the read has to be waitable.
+        # A killed owner does not reliably close the pipe, so a blocking read would never notice it dying.
         $read = $stdin.ReadLineAsync()
         while (-not $read.Wait($OWNER_POLL_MS)) {
             if ($null -ne $owner -and $owner.HasExited) { break read }

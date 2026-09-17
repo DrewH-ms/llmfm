@@ -1,10 +1,4 @@
-// Forwards a raw Copilot CLI hook payload to the LLMFM daemon.
-//
-// Stays plain JavaScript and imports nothing from the project: type stripping and module
-// resolution cost startup time the CLI's hook timeout does not have to spare.
-//
-// Always exits 0, never writes to stdout or stderr, and treats a daemon that is not
-// listening as a normal outcome.
+// Forwards a Copilot CLI hook payload to the daemon. Stays plain JS, always exits 0 and never blocks: it runs inside the CLI's hook timeout.
 
 import http from 'node:http';
 import fs from 'node:fs';

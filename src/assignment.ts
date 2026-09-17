@@ -7,8 +7,7 @@ const BYTE_MASK = 0xff;
 const BYTE_VALUES = 256;
 const WORD_BITS = 32;
 
-/** A node of the section → instrument → part tree, rebuilt from the voices' `path`s.
- *  Only leaves carry a voice once the tree has been cut for a session count. */
+/** A node of the section → instrument → part tree, rebuilt from the voices' `path`s. */
 type TreeNode = {
   voice: Voice | null;
   children: Map<string, TreeNode>;
@@ -36,9 +35,7 @@ function hashWord(word: number): number {
   return hash;
 }
 
-/** Yields the hash one byte at a time, extending it once exhausted, so that each level of
- *  the descent is decided by a fresh slice and earlier levels keep their answer however
- *  deep the tree goes. */
+/** Extends the hash once exhausted so each level gets a fresh slice and earlier levels keep their answer. */
 function createSliceReader(key: string): () => number {
   let word = hashString(key);
   let shift = 0;
@@ -63,8 +60,7 @@ function chooseIndex(count: number, nextSlice: () => number): number {
   return value % count;
 }
 
-/** Windows paths reach us in whatever casing and separator style the CLI reported, and a
- *  repo must sound the same however it was opened. */
+/** Windows paths arrive in whatever casing and separator style the CLI reported; a repo must sound the same. */
 function normalizeCwd(cwd: string): string {
   const unified = cwd.toLowerCase().replace(/[\\/]+/g, '/');
   return unified.endsWith('/') ? unified.slice(0, -1) : unified;
@@ -110,9 +106,7 @@ function commonPrefixLength(left: string[], right: string[]): number {
   return length;
 }
 
-/** The nearest free voice to `preferred`: the one sharing the longest branch with it, and
- *  among equals the next one round the voice list, so a displaced session stays in the
- *  neighbourhood it hashed to instead of jumping the orchestra. */
+/** Nearest free voice to `preferred` — longest shared branch, then next round the list — so a displaced session stays near. */
 function probe(options: {
   voices: Voice[];
   preferredIndex: number;

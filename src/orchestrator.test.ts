@@ -27,8 +27,7 @@ const part = (partId: string, name: string, program: number, channel: number) =>
   notes: [{ time: 0, duration: 1, midi: 60, velocity: 0.8, channel }],
 });
 
-/** Four families, so the voice tree has something to subdivide and sessions land on
- *  different branches rather than sharing one voice. */
+/** Four families, so sessions land on different branches rather than sharing one voice. */
 const score = (): Score =>
   ({
     name: 'test',
@@ -77,8 +76,7 @@ const fakeConfig = (over: Partial<LlmfmConfig> = {}): ConfigStore => {
   };
 };
 
-/** Gate state only. The real fade is the mixer's business and is tested there; here what
- *  matters is which parts the orchestrator asks for. */
+/** Gate state only; the real fade is the mixer's business and is tested there. */
 const fakeMixer = (): Mixer & { gates: Map<string, boolean> } => {
   const gates = new Map<string, boolean>();
   return {
@@ -125,8 +123,7 @@ const harness = (sessions: Session[], config: ConfigStore) => {
 };
 
 test('alert mode inverts what sounding means', () => {
-  // The whole product rests on silence carrying the signal, so the inversion has to reach
-  // the parts themselves rather than only being stored in config.
+  // The inversion has to reach the parts themselves, not merely be stored in config.
   const working = [session({ sessionId: 'a', working: true })];
 
   const reward = harness(working, fakeConfig({ mode: 'reward', gate: 'any' }));
@@ -143,8 +140,7 @@ test('alert mode inverts what sounding means', () => {
 });
 
 test('a block younger than the settle window does not silence anything', () => {
-  // Bug: `permission_prompt` fires even when the tool is pre-approved and never blocks,
-  // which chopped 1-2s holes in the music during sessions that never waited on anyone.
+  // Bug: `permission_prompt` fires for pre-approved tools too, chopping holes in the music.
   const justBlocked = [
     session({
       sessionId: 'a',
@@ -169,8 +165,7 @@ test('a block younger than the settle window does not silence anything', () => {
 });
 
 test('a muted session frees its voice instead of sounding like a stopped agent', () => {
-  // Muting is a display choice. Gating the voice silent would make it indistinguishable
-  // from an agent waiting on the user, which is the one confusion we cannot afford.
+  // A muted voice gated silent would be indistinguishable from an agent waiting on the user.
   const sessions = [
     session({ sessionId: 'a', label: 'quiet', working: true }),
     session({ sessionId: 'b', label: 'loud', working: true }),
@@ -186,8 +181,6 @@ test('a muted session frees its voice instead of sounding like a stopped agent',
 });
 
 test('one blocked agent silences only its own voice', () => {
-  // The ensemble promise: a part going quiet names the agent that needs you, so a second
-  // working session must be unaffected.
   const sessions = [
     session({ sessionId: 'a', working: false }),
     session({ sessionId: 'b', working: true }),
@@ -225,9 +218,7 @@ test('silence mode mute keeps the transport running through the quiet', () => {
   assert.equal(scheduler.calls.at(-1), 'play', 'mute must not pause the transport');
 });
 
-/** Duck mode rides audio on a device that is not ours, where the output level is the only
- *  lever there is. `silenceMode` describes a transport of our own that duck mode does not
- *  have, so it must not reach the duck in either position. */
+/** Duck mode rides someone else's audio and has no transport of ours, so `silenceMode` must not reach it. */
 test('duck mode answers to the gate alone, whatever "on silence" says', () => {
   for (const silenceMode of ['pause', 'mute'] as const) {
     for (const working of [true, false]) {
@@ -255,9 +246,7 @@ test('duck mode answers to the gate alone, whatever "on silence" says', () => {
 });
 
 
-/** A recorded mixdown and someone else's stream are the same shape of problem — one
- *  stream nobody can subdivide — and the daemon can be switched between them mid-track.
- *  Only ever one of them is the gate. */
+/** The daemon can switch between the two mid-track, and only ever one of them holds the gate. */
 test('ducking takes the gate from a recorded track, and gives it back', () => {
   const config = fakeConfig({ audio: 'midi', gate: 'any' });
   const recordedGates: boolean[] = [];
@@ -294,8 +283,7 @@ test('ducking takes the gate from a recorded track, and gives it back', () => {
 
 const REPO = '/repos/app';
 
-/** A session the CLI never listed, old enough that the file's lag no longer explains it.
- *  This is all a sub-agent ever looks like from the outside. */
+/** Unlisted and past the grace window — all a sub-agent ever looks like from the outside. */
 const subAgent = (over: Partial<Session> = {}): Session =>
   session({
     sessionId: 'sub',
@@ -306,8 +294,7 @@ const subAgent = (over: Partial<Session> = {}): Session =>
     ...over,
   });
 
-/** The session the user is sitting in front of, between turns because it dispatched the
- *  work and is waiting on it. */
+/** Between turns because it dispatched the work and is waiting on it. */
 const parent = (over: Partial<Session> = {}): Session =>
   session({ sessionId: 'parent', cwd: REPO, working: false, ...over });
 
@@ -315,8 +302,7 @@ const viewOf = (orchestrator: ReturnType<typeof harness>['orchestrator'], sessio
   orchestrator.sessionViews().find((view) => view.sessionId === sessionId);
 
 test('a parent waiting on a sub-agent keeps sounding, and says why', () => {
-  // The defect this exists to prevent: the parent fires agentStop the moment it hands off,
-  // so its voice faded while the work ran on and the silence claimed the user was needed.
+  // Bug: the parent fires agentStop the moment it hands off, so its voice faded mid-work.
   const { orchestrator } = harness([parent(), subAgent()], fakeConfig({ gate: 'per-agent' }));
 
   const view = viewOf(orchestrator, 'parent');
@@ -327,8 +313,7 @@ test('a parent waiting on a sub-agent keeps sounding, and says why', () => {
 });
 
 test('a blocked parent stays silent however busy its sub-agents are', () => {
-  // The hard rule. A permission prompt is a positive request for the user, and inferred
-  // activity that talked over it would mask exactly the moment the product exists for.
+  // A prompt is a positive request for the user; inferred activity must never mask it.
   const blocked = parent({
     blockedMidTurn: true,
     blockedSince: Date.now() - BLOCK_SETTLE_MS - 1,
@@ -363,8 +348,7 @@ test('ignore leaves the parent silent, voice gives the sub-agent its own part', 
 });
 
 test('a sub-agent on another repo does not hold a parent on', () => {
-  // cwd is the whole parent link, so a sub-agent that does not share one belongs to
-  // someone else's session and must not speak for this one.
+  // cwd is the whole parent link, so a sub-agent elsewhere belongs to another session.
   const { orchestrator } = harness(
     [parent(), subAgent({ cwd: '/repos/other' })],
     fakeConfig({ gate: 'per-agent' }),
@@ -374,9 +358,7 @@ test('a sub-agent on another repo does not hold a parent on', () => {
 
 
 test('a working claim nothing can refresh eventually gives up its voice', () => {
-  // Close the terminal mid-tool and no sessionEnd ever arrives; the CLI leaves
-  // `working: true` in its file for ever, and the file may silence but never assert, so
-  // nothing else can correct it. Without a ceiling the voice sounds until a restart.
+  // Close the terminal mid-tool and the CLI leaves `working: true` in its file for ever.
   const killed = session({
     sessionId: 'a',
     working: true,
@@ -400,8 +382,7 @@ test('a long tool call is not mistaken for a dead terminal', () => {
 });
 
 test('folding expires, so a dead sub-agent stops holding its parent on', () => {
-  // A sub-agent is never listed by the CLI, so the registry can never retire it. Folding
-  // is an inference from a shared cwd rather than a reading, so the inference expires.
+  // The registry can never retire an unlisted sub-agent, so the inference has to expire.
   const dead = subAgent({ updatedAt: Date.now() - FOLD_EVIDENCE_MAX_MS - 1 });
   const { orchestrator } = harness([parent(), dead], fakeConfig({ gate: 'per-agent' }));
 
@@ -433,8 +414,7 @@ test('resume brings the music back on its own clock', (t) => {
   t.mock.timers.tick(BLOCK_SETTLE_MS + SETTLE_MARGIN_MS + 1);
   assert.equal(gates.at(-1), false, 'a settled block silences');
 
-  // Approving a prompt fires no hook at all, so this instant is unobservable: if nothing
-  // is scheduled for it, the shipped default never resumes anything on its own.
+  // Approving a prompt fires no hook, so only a scheduled wake can resume the music here.
   t.mock.timers.tick(PROMPT_GAP_RESUME_MS + SETTLE_MARGIN_MS + 1);
   assert.equal(gates.at(-1), true, 'resume must wake itself at the prompt-gap mark');
 });

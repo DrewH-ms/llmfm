@@ -39,12 +39,7 @@ async function daemonIsRunning(): Promise<boolean> {
   }
 }
 
-/** The daemon can be holding the user's audio muted, and a mute that outlives the
- *  process is invisible and recoverable only through Task Manager. Every way this
- *  process can end therefore goes through one teardown, and it runs once: a second
- *  signal, or an exception thrown while shutting down, must not restart it. On
- *  Windows the console close is `SIGHUP` and Ctrl+Break is `SIGBREAK`, neither of
- *  which takes the POSIX `SIGTERM` path, and the close window is short. */
+/** One teardown on every exit path, run once: on Windows console close is `SIGHUP` and Ctrl+Break `SIGBREAK`, not `SIGTERM`. */
 function exitThrough(stop: () => Promise<void>): void {
   let shutdown: Promise<void> | null = null;
   const requestShutdown = (code: number, reason?: unknown): void => {
@@ -65,10 +60,7 @@ function fail(error: unknown): never {
   return process.exit(1);
 }
 
-/** One terminal, both halves: the daemon in this process and the dashboard on top of it.
- *  The daemon's output is diverted to a file first, because a stray line of stdout lands
- *  in the middle of a rendered frame. An already-running daemon is attached to rather
- *  than fought over, and in that case quitting the dashboard leaves it playing. */
+/** Daemon plus dashboard in one terminal; daemon output goes to a file because stray stdout corrupts a frame. */
 async function runBoth(track: string | undefined): Promise<void> {
   if (!(await daemonIsRunning())) {
     const file = logPath();
@@ -88,9 +80,7 @@ async function runBoth(track: string | undefined): Promise<void> {
       return process.exit(1);
     });
     onShutdown(() => daemon.stop());
-    /** Guards the gap before the dashboard loads and installs its own handlers. Both
-     *  route through `runShutdown`, which runs the teardown once however often it is
-     *  asked. */
+    /** Guards the gap before the dashboard installs its own handlers; `runShutdown` runs the teardown once. */
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) {
       process.once(signal, () => void runShutdown().finally(() => process.exit(0)));
     }
@@ -121,8 +111,7 @@ switch (command) {
   case 'tracks':
     for (const track of listTracks()) console.log(track);
     break;
-  // Imported for its side effects: the dashboard takes over the terminal on load, and it
-  // is loaded lazily so the other commands never pay for it or touch raw mode.
+  // Loaded lazily so the other commands never pay for the dashboard or touch raw mode.
   case 'tui':
     await import('../tui/dashboard.ts');
     break;

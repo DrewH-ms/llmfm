@@ -1,29 +1,20 @@
 import type { SectionName } from './constants.ts';
 
-/** What a MIDI track name yields once the sequencer's spelling is discounted.
- *
- *  A track name is the only evidence that separates lines a listener can name apart —
- *  Violin I from Violin II — and it is the evidence most often mangled. GM program
- *  numbers survive worse: engraving tools that emit MIDI as a by-product leave every
- *  track on program 0, so a name that resolves to an instrument outranks the program. */
+/** A resolved track name outranks the GM program: engraving tools often leave every track on program 0. */
 export type PartName = {
   raw: string;
-  /** Canonical English instrument, or null when the name names no instrument. */
   instrument: string | null;
   section: SectionName | null;
   /** Desk number within the instrument: Violin II is 2. */
   ordinal: number | null;
-  /** What the listener is told to listen for. */
   label: string;
-  /** The name carries no information at all: empty, or a sequencer's filler. */
   placeholder: boolean;
 };
 
 type InstrumentEntry = {
   canonical: string;
   section: SectionName;
-  /** Whole-word spellings, already normalized. Ordered entries are searched in the order
-   *  declared, so a compound name must precede the shorter name it contains. */
+  /** Whole-word spellings, already normalized; a compound name must precede the shorter name it contains. */
   aliases: string[];
 };
 
@@ -43,8 +34,7 @@ const ORDINAL_WORDS = new Map<string, number>([
   ['premier', 1], ['premiere', 1], ['deuxieme', 2], ['troisieme', 3], ['quatrieme', 4],
 ]);
 
-/** Names an engraver writes when the score gave it nothing, including the staff and
- *  context identifiers LilyPond leaks into the MIDI track name. */
+/** Filler names engravers emit, including the staff and context identifiers LilyPond leaks into track names. */
 const PLACEHOLDER_PATTERN = new RegExp(
   `^(?:track|trk|trak|staff|stave|stff|part|voice|vox|channel|chan|ch|midi|instrument|instr|inst|` +
     `untitled|unnamed|unknown|none|no name|new|default|music|score|global|main|melody|` +
@@ -58,8 +48,7 @@ const PLACEHOLDER_PATTERN = new RegExp(
 const TRANSPOSITION_PATTERN =
   /\b(in|en)\s+(a|b|c|d|e|f|g|h|do|re|ut|mi|fa|sol|la|si|as|es|is|ces|ges|bb|eb|ab|db|gb)\b(\s+(b|flat|sharp|bemol|bemolle|diesis|dur|moll|major|minor|maggiore|minore))?/g;
 
-/** Read top to bottom: compound names first, so "cor anglais" is not taken for a horn and
- *  "basso continuo" is not taken for a double bass. */
+/** Read top to bottom: compound names first, so "cor anglais" is not taken for a horn. */
 const INSTRUMENTS: InstrumentEntry[] = [
   {
     canonical: 'English Horn',
@@ -281,10 +270,7 @@ const GLUED_ORDINALS = [...ORDINAL_WORDS.keys()]
 
 const parsed = new Map<string, PartName>();
 
-/** Folds away the ways the same name is spelled: case, diacritics, punctuation, and the
- *  spacing sequencers insert around abbreviation dots. Word boundaries are restored where
- *  an engraver ran them together, as LilyPond does turning a context name into a track
- *  name: `SoloViolinI` and `violintwo` both name a desk a listener can pick out. */
+/** Folds case, diacritics and punctuation, and restores word boundaries engravers ran together (`SoloViolinI`). */
 export function normalizePartName(raw: string): string {
   const spaced = raw
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -322,8 +308,7 @@ function ordinalIn(text: string): number | null {
   return null;
 }
 
-/** The one place a desk number is spelled, so a name derived from a GM program reads the
- *  same as one derived from the track name. */
+/** The one place a desk number is spelled, so program-derived and name-derived labels match. */
 export function labelWithOrdinal(instrument: string, ordinal: number): string {
   return `${instrument} ${ROMAN_NUMERALS[ordinal - 1] ?? String(ordinal)}`;
 }
@@ -332,13 +317,7 @@ function labelFor(instrument: string, ordinal: number | null): string {
   return ordinal === null ? instrument : labelWithOrdinal(instrument, ordinal);
 }
 
-/**
- * Reads one MIDI track name as an instrument identity.
- *
- * Returns a null instrument rather than a guess when the name resolves to nothing, so a
- * caller can fall back to the GM program without having to distrust a confident-looking
- * answer.
- */
+/** Returns a null instrument rather than a guess, so callers can fall back to the GM program. */
 export function parsePartName(raw: string): PartName {
   const cached = parsed.get(raw);
   if (cached) return cached;

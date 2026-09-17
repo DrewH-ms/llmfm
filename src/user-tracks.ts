@@ -8,10 +8,7 @@ import {
   PLAYLIST_BUNDLED,
 } from './constants.ts';
 
-/** Created eagerly at startup: a folder the user is pointed at has to already exist, or
- *  the instruction to drop files into it is a dead end. The README and the empty example
- *  playlist are written for the same reason — a folder convention nobody can see is not a
- *  convention. Neither is overwritten, so notes a user adds to either one survive. */
+/** Created eagerly at startup: the folder users are pointed at must already exist. Neither README nor example is overwritten. */
 export function ensurePlaylistsDir(): string {
   const dir = playlistsDir();
   mkdirSync(join(dir, PLAYLIST_EXAMPLE), { recursive: true });
@@ -20,8 +17,7 @@ export function ensurePlaylistsDir(): string {
   return dir;
 }
 
-/** Files dropped straight into `playlists/` rather than into a playlist. Supported so a
- *  user who ignores the folder convention still gets their music played. */
+/** Loose files in `playlists/` play too, so a user who ignores the folder convention still gets their music. */
 export function listUserTracks(): string[] {
   const dir = playlistsDir();
   if (!existsSync(dir)) return [];
@@ -31,13 +27,7 @@ export function listUserTracks(): string[] {
     .sort((a, b) => a.localeCompare(b));
 }
 
-/** Every direct subfolder is a playlist, including an empty one. Listing an empty folder
- *  is deliberate: the example playlist ships empty, and hiding it until it had contents
- *  would make the README describe something the user cannot find. Only one level deep —
- *  a playlist is a folder of files, not a tree to navigate.
- *
- *  `bundled` is excluded here and listed separately, because its tracks keep bare ids so
- *  the licence records keyed by filename still find them. */
+/** One level deep, empty folders included; `bundled` is excluded because its tracks keep bare ids for the licence records. */
 export function listUserPlaylists(): string[] {
   const dir = playlistsDir();
   if (!existsSync(dir)) return [];

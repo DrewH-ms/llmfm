@@ -1,6 +1,4 @@
-/** Sends MIDI to the Windows system synth through a PowerShell winmm bridge, because
- *  Node has no MIDI output and Web MIDI does not enumerate the GS Wavetable Synth.
- *  Messages go to the installed synth only; no soundfont data is ever read or shipped. */
+/** PowerShell winmm bridge: Node has no MIDI output and Web MIDI does not enumerate the GS Wavetable Synth. */
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -136,8 +134,7 @@ export function noteOff(midi: MidiOut, options: { channel: number; note: number 
   midi.send((MIDI_NOTE_OFF | (options.channel & CHANNEL_MASK)) | (options.note << DATA1_SHIFT));
 }
 
-/** A channel held at zero volume keeps sounding whatever was on when the level fell, so
- *  silence is only real once both all-notes-off and all-sound-off have been sent. */
+/** A channel held at zero volume keeps sounding, so silence needs both all-notes-off and all-sound-off. */
 export function silenceChannel(midi: MidiOut, channel: number): void {
   controlChange(midi, { channel, controller: CC_ALL_NOTES_OFF, value: 0 });
   controlChange(midi, { channel, controller: CC_ALL_SOUND_OFF, value: 0 });

@@ -1,18 +1,4 @@
-/** Controls the Windows system output volume, so LLMFM can ride whatever the user is
- *  already playing — Spotify, a browser, a phone bridged in as system audio — and duck
- *  or mute it when an agent needs them. We can only change the level of someone else's
- *  stream, never pause it.
- *
- *  The level belongs to the user, so it is borrowed rather than owned:
- *  - The level at the moment of the first change is the baseline, and the bridge restores
- *    it whenever it is given the chance to run: a clean stop, a lost stdin, or the
- *    process that owns it exiting. See `bridge/volume-bridge.ps1`.
- *  - A hard kill of the daemon takes the bridge down with it and no restore can run, so
- *    the baseline is also written to a claim file and put back by the next start.
- *  - A level the user moved themselves is never restored over, and becomes the new
- *    baseline instead. Fighting a user for their own volume slider is worse than
- *    leaving the music loud.
- */
+/** The user's volume is borrowed: the bridge restores the baseline when it can, the claim file covers a hard kill, and a level the user moved becomes the new baseline. */
 
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -34,8 +20,7 @@ const ERROR_PREFIX = 'ERR ';
 const ACTED_PREFIX = 'A ';
 const SESSION_PREFIX = 'P ';
 const SESSION_LIST_END_PREFIX = 'N ';
-/** No gate of ours is in place: the starting state, and what every path that gives the
- *  endpoint back returns to. */
+/** No gate of ours is in place: the state every path that gives the endpoint back returns to. */
 const UNGATED = { gated: false, gatedSessions: 0 };
 
 /** Level is 0–100, matching the Windows volume slider. */
@@ -50,8 +35,7 @@ export type SystemVolumeStatus = {
   deviceId: string | null;
   /** True while a mute we applied is in place — the silence downstream hears is ours. */
   gated: boolean;
-  /** How many audio sessions that mute reached. Zero while the endpoint carries the gate,
-   *  and also what a gate that matched nothing leaves behind. */
+  /** How many audio sessions that mute reached. Zero while the endpoint carries the gate. */
   gatedSessions: number;
   error: string | null;
 };
@@ -59,15 +43,13 @@ export type SystemVolumeStatus = {
 /** What we would put back: the level as it was before we first touched it. */
 type VolumeReading = { current: VolumeLevel; baseline: VolumeLevel };
 
-/** Written before the first change and removed once the level is back, so a level left
- *  behind by a killed bridge can be recovered on the next start. */
+/** Written before the first change and removed once the level is back, so a level left by a killed bridge is recoverable on the next start. */
 type VolumeClaim = {
   deviceId: string;
   baseline: VolumeLevel;
   /** What we left the level at. The next start restores only if it is still there. */
   held: VolumeLevel;
-  /** The session we muted instead of the endpoint, which outlives us because the session
-   *  belongs to the audio service rather than to this process. */
+  /** The session we muted instead of the endpoint; it outlives us because it belongs to the audio service. */
   sessionName: string | null;
   at: number;
 };
@@ -79,8 +61,7 @@ export type SystemVolume = {
   read(): Promise<VolumeLevel | null>;
   /** Captures the baseline on the first call. Omitted fields keep their current value. */
   set(target: { level?: number; muted?: boolean }): Promise<VolumeLevel | null>;
-  /** Gates every live session whose mixer name contains `name`, case-insensitively, and
-   *  reports how many were acted on. Null when the bridge could not answer. */
+  /** Gates every live session whose mixer name contains `name`, case-insensitively, and reports how many were acted on. */
   setSessionMute(options: { name: string; muted: boolean }): Promise<number | null>;
   /** The live playback streams on the endpoint. */
   sessions(): Promise<AudioSession[]>;
@@ -109,8 +90,7 @@ function sameLevel(a: VolumeLevel, b: VolumeLevel): boolean {
   return Math.abs(a.level - b.level) <= MANUAL_CHANGE_TOLERANCE && a.muted === b.muted;
 }
 
-/** The file is on disk between runs and may be hand-edited or truncated by a crash, so
- *  anything unexpected means no claim rather than a malformed one. */
+/** The file may be hand-edited or truncated by a crash, so anything unexpected means no claim. */
 function readClaim(): VolumeClaim | null {
   const file = claimPath();
   if (!existsSync(file)) return null;
@@ -148,8 +128,7 @@ function writeClaim(claim: VolumeClaim): void {
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, `${JSON.stringify(claim, null, 2)}\n`);
   } catch {
-    // A claim we cannot persist only costs us the recovery path after a kill; the
-    // bridge's own restore still covers every other way the daemon can die.
+    // A claim we cannot persist only costs the post-kill recovery path; the bridge's own restore covers every other death.
   }
 }
 
@@ -161,12 +140,10 @@ function clearClaim(): void {
   }
 }
 
-/** Which gate a restore confirmably reopened. An endpoint restore cannot lift a session
- *  mute and a session unmute cannot move the endpoint, so each releases only its own. */
+/** Which gate a restore confirmably reopened: an endpoint restore cannot lift a session mute, nor the reverse. */
 type RestoredGate = { kind: 'endpoint' } | { kind: 'session'; name: string };
 
-/** The claim is the last thing that can still unmute the user after a kill, so it is
- *  released only by a restore that undid the gate it records. */
+/** The claim is the last thing that can still unmute the user after a kill, so only a restore that undid the gate it records releases it. */
 function releaseClaim(restored: RestoredGate): void {
   const claim = readClaim();
   if (!claim) return;
@@ -187,8 +164,7 @@ export function createSystemVolume(): SystemVolume {
     while (waiting.length > 0) waiting.shift()?.(`${ERROR_PREFIX}${error}`);
   };
 
-  /** Collects reply lines until `isLast` accepts one. Resolves empty when the bridge is
-   *  not running, so no caller has to know whether it is. */
+  /** Collects reply lines until `isLast` accepts one. Resolves empty when the bridge is not running. */
   const exchange = (options: {
     command: string;
     isLast: (line: string) => boolean;
@@ -231,7 +207,6 @@ export function createSystemVolume(): SystemVolume {
     });
   };
 
-  /** Records the reply the bridge could not give as the reason the caller got nothing. */
   const refuse = (line: string): null => {
     state = {
       ...state,
@@ -248,8 +223,7 @@ export function createSystemVolume(): SystemVolume {
     const baseline = parseLevel(parts[3], parts[4]);
     if (parts[0] !== 'V' || !current || !baseline) return refuse(line);
     last = { current, baseline };
-    // The bridge follows the default endpoint, so which device the claim is about can
-    // change under a running daemon.
+    // The bridge follows the default endpoint, so the claim's device can change under a running daemon.
     if (parts[5]) state = { ...state, deviceId: parts[5] };
     return last;
   };
@@ -263,15 +237,12 @@ export function createSystemVolume(): SystemVolume {
     return Number.isFinite(acted) ? acted : refuse(line);
   };
 
-  /** A level left behind when the daemon and its bridge were killed together. Restored
-   *  only when it is still exactly where we left it — if the user has since moved it,
-   *  that is their choice and the claim is stale. */
+  /** Restores a killed-together level only if it is still exactly where we left it; if the user has moved it, the claim is stale. */
   const recover = async (): Promise<void> => {
     const claim = readClaim();
     if (!claim) return;
     if (claim.sessionName) {
-      // A session mute survives the process that set it and belongs to no device level,
-      // so it is cleared whatever the endpoint has done since.
+      // A session mute belongs to no device level, so it is cleared whatever the endpoint has done since.
       const acted = await gateSessions({ name: claim.sessionName, muted: false });
       if (acted === null) return;
     } else if (claim.deviceId === state.deviceId && last && sameLevel(last.current, claim.held)) {
@@ -326,8 +297,7 @@ export function createSystemVolume(): SystemVolume {
               const deviceId = parts[3];
               if (current && deviceId) {
                 last = { current, baseline: current };
-                // Ready before the claim is honoured, because recovery goes through the
-                // same commands; start() still only resolves once the level is settled.
+                // Ready before the claim is honoured, because recovery goes through the same commands.
                 state = { ready: true, deviceId, ...UNGATED, error: null };
                 void recover().then(() => settle(state));
               } else {
@@ -381,8 +351,7 @@ export function createSystemVolume(): SystemVolume {
     async setSessionMute(options: { name: string; muted: boolean }): Promise<number | null> {
       const acted = await gateSessions(options);
       if (acted === null) return null;
-      // A gate that reached nothing is not a gate, so it is published as open rather than
-      // as silence somebody would go looking for.
+      // A gate that reached nothing is published as open, not as silence somebody would go looking for.
       const held = options.muted && acted > 0;
       state = { ...state, gated: held, gatedSessions: held ? acted : 0 };
       if (!options.muted) {
@@ -390,8 +359,7 @@ export function createSystemVolume(): SystemVolume {
         return acted;
       }
       const reading = acted > 0 ? await request('G') : null;
-      // The endpoint is untouched by a session gate, so the claim owes back the level
-      // exactly as it stands and exists only to clear the mute after a hard kill.
+      // A session gate leaves the endpoint untouched, so this claim exists only to clear the mute after a hard kill.
       if (reading && state.deviceId) {
         writeClaim({
           deviceId: state.deviceId,
@@ -426,8 +394,7 @@ export function createSystemVolume(): SystemVolume {
 
     async restore(): Promise<VolumeLevel | null> {
       const reading = await request('R');
-      // A restore the bridge could not confirm is the moment the claim matters most, so
-      // the durable record outlives it and the next start puts the level back.
+      // An unconfirmed restore is when the claim matters most, so it outlives it and the next start puts the level back.
       if (reading) {
         state = { ...state, ...UNGATED };
         releaseClaim({ kind: 'endpoint' });

@@ -5,28 +5,21 @@ import type { GateMode } from './constants.ts';
 import type { DaemonState } from './types.ts';
 import type { BluetoothDevice } from './bluetooth-receive.ts';
 
-/** One shipped file as the UI sees it. Search and filtering happen client side, so this
- *  carries the provenance and the shape of the piece rather than a curated subset. */
+/** One shipped file as the UI sees it; filtering is client side, so this carries everything. */
 export type TrackInfo = {
   file: string;
   /** `mid`, `mp3` or `wav`. Only `mid` can be split into parts and gated per session. */
   format: string;
   title: string | null;
   composer: string | null;
-  /** What tracks.json records for this name. It describes the bytes that were curated,
-   *  not necessarily the bytes now on disk — see `integrity`. */
+  /** From tracks.json: describes the bytes that were curated, not the bytes now on disk. */
   licenceId: string | null;
-  /** Whether the file still hashes to what the licence record was written against.
-   *  A record can outlive its file: overwrite a curated name with other bytes and the
-   *  entry keeps asserting a licence for music it no longer describes. `unrecorded`
-   *  means no digest was curated for it, which is the normal case for a user's own file. */
+  /** A licence record can outlive its file, so this rehashes; `unrecorded` is a user's own file. */
   integrity: 'verified' | 'mismatch' | 'unrecorded';
-  /** Independent lines the classifier found, which is how many sessions can be told
-   *  apart by ear. */
+  /** Independent lines found, which is how many sessions can be told apart by ear. */
   voiceCount: number;
   /** Too few voices to carry an ensemble; still playable, but only as hold music. */
   holdMusicOnly: boolean;
-  /** The playlist this track belongs to, for grouping the list a user reads. */
   playlist: string;
 };
 
@@ -43,20 +36,17 @@ export type ApiHandlers = {
   onSetFade(seconds: number): void;
   onSimulate(options: { running: boolean }): void;
   onSetMute(options: { sessionId: string; muted: boolean }): void;
-  /** False when the key is unknown or the value fails its spec, which the route turns
-   *  into a 400 rather than silently accepting a setting that was never applied. */
+  /** False when the key is unknown or the value fails its spec; the route answers 400. */
   onSetSetting(options: { key: string; value: unknown }): boolean;
-  /** The phones paired with this machine. Enumeration waits on the radio and can take
-   *  tens of seconds, so a caller must show that something is happening. */
+  /** Enumeration waits on the radio and can take tens of seconds, so callers must show progress. */
   listBluetooth(): Promise<BluetoothDevice[]>;
-  /** False when the device did not give us a connection, which the route turns into a
-   *  400 rather than reporting a sink that is not open. */
+  /** False when the device gave us no connection; the route answers 400. */
   onConnectBluetooth(options: { id: string }): Promise<boolean>;
   tracks(): TrackInfo[];
   playlists(): PlaylistInfo[];
-  /** False when the name is not a playlist that exists, which the route turns into a 400. */
+  /** False when the name is not a playlist that exists; the route answers 400. */
   onSetPlaylist(name: string): boolean;
-  /** False when the file is not one we ship, which the route turns into a 400. */
+  /** False when the file is not one we ship; the route answers 400. */
   onSetTrack(file: string): boolean | Promise<boolean>;
   /** False when there is nowhere to go — a library of one, or no track playing. */
   onSkipTrack(): boolean | Promise<boolean>;
@@ -64,7 +54,6 @@ export type ApiHandlers = {
 };
 
 export type Api = {
-  /** Pushes the current state to every connected dashboard. */
   broadcast(): void;
   stop(): Promise<void>;
 };
@@ -75,13 +64,10 @@ const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
 const HTTP_INTERNAL_ERROR = 500;
 
-/** The names this daemon answers to. A request carrying anything else was resolved through
- *  a hostname that is not ours, which is how a remote page gets to read `/state`. */
+/** Hosts we answer to; any other `Host` was resolved through a name that is not ours (DNS rebinding). */
 const LOCAL_HOSTS = [`${DAEMON_HOST}:${DAEMON_PORT}`, `localhost:${DAEMON_PORT}`];
 
-/** The API is unauthenticated on loopback, so provenance is the only thing separating the
- *  hook and the dashboard from a page the user happens to have open. Node clients send
- *  neither header; a browser cannot suppress them. */
+/** Loopback API is unauthenticated, so reject browser-shaped requests: Node clients send neither header, a browser cannot suppress them. */
 function fromBrowser(req: IncomingMessage): boolean {
   const site = req.headers['sec-fetch-site'];
   if (req.headers['origin']) return true;
@@ -89,9 +75,7 @@ function fromBrowser(req: IncomingMessage): boolean {
   return !LOCAL_HOSTS.includes(req.headers['host'] ?? '');
 }
 
-/** A rejected route would otherwise be an unhandled rejection, and Node 24 ends the
- *  process for one — taking any unmute the daemon still owes the user with it. The
- *  response is ended here too, so a failed request does not hang to its socket timeout. */
+/** Node 24 kills the process on an unhandled rejection, taking any unmute the daemon still owes the user. */
 function settle(res: ServerResponse, action: () => Promise<void>): void {
   Promise.resolve()
     .then(action)
@@ -104,8 +88,7 @@ function settle(res: ServerResponse, action: () => Promise<void>): void {
     });
 }
 
-/** Every client is a separate process, so a request body is as untrusted as a hook's:
- *  anything that is not a JSON object contributes no fields at all. */
+/** Bodies are untrusted: anything that is not a JSON object contributes no fields at all. */
 function fields(body: string): Record<string, unknown> {
   try {
     const payload: unknown = JSON.parse(body);
@@ -188,8 +171,6 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
         readBody(req).then((body) => {
           const payload = fields(body);
           const key = stringField(payload, 'key');
-          // The setting specs own validation, so an unknown key and a value the spec
-          // rejects are the same failure here and neither reaches the config file.
           if (!key || !handlers.onSetSetting({ key, value: payload['value'] })) {
             res.writeHead(HTTP_BAD_REQUEST).end();
             return;
@@ -204,8 +185,7 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
     if (req.method === 'POST' && url.pathname === '/track') {
       settle(res, () =>
         readBody(req).then(async (body) => {
-          // The daemon owns the list of files we ship, so an arbitrary path never becomes
-          // a read: the name either matches one of them or the request is rejected.
+          // An arbitrary path never becomes a read: the name must match a file we ship.
           const file = stringField(fields(body), 'file');
           if (!file || !(await handlers.onSetTrack(file))) {
             res.writeHead(HTTP_BAD_REQUEST).end();
@@ -314,8 +294,7 @@ export function startApi(handlers: ApiHandlers): Promise<Api> {
     server.once('error', failToBind);
 
     server.listen(DAEMON_PORT, DAEMON_HOST, () => {
-      // Past this point an `error` is a runtime fault, not a failed bind, and must not
-      // reach the process as an uncaught EventEmitter error.
+      // Past this point an `error` is a runtime fault, not a failed bind, and must not kill the process.
       server.off('error', failToBind);
       server.on('error', (error: Error) => console.error(`API server error: ${error.message}`));
       resolve({

@@ -6,13 +6,7 @@ import { inflateRawSync } from 'node:zlib';
 import { loadScore } from '../src/score.ts';
 import { measureDynamics, isDynamic, MIN_DISTINCT_VELOCITIES } from './dynamics.ts';
 
-/**
- * Downloads the curated track library from the Mutopia Project, records each file's
- * licence from the publisher's own metadata, and keeps only files that parse as MIDI.
- *
- * Dev-time only, run by hand: the daemon never reaches the network.
- *   node tools/curate-tracks.ts [--refresh]
- */
+/** Dev-time only, run by hand — `node tools/curate-tracks.ts [--refresh]`: downloads Mutopia tracks and records each licence; the daemon never reaches the network. */
 
 const MUTOPIA_FTP = 'https://www.mutopiaproject.org/ftp/';
 const MUTOPIA_ATTRIBUTION = 'The Mutopia Project (mutopiaproject.org)';
@@ -20,12 +14,10 @@ const PROJECT_ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const TRACKS_DIR = join(PROJECT_ROOT, 'playlists', 'bundled');
 const TRACKS_INDEX = join(TRACKS_DIR, 'tracks.json');
 const ATTRIBUTION_FILE = join(TRACKS_DIR, 'ATTRIBUTION.md');
-/** Marks a file as curated rather than carried over, and keeps it out of the way of the
- *  daemon's default-track pick, which is the first file in the directory. */
+/** Keeps curated files out of the daemon's default-track pick, which is the first file in the directory. */
 const CURATED_PREFIX = 'mutopia-';
 
-/** Licences Mutopia states, and what redistribution each one costs us. Anything outside
- *  this table is refused rather than guessed at. */
+/** Licences Mutopia states; anything outside this table is refused rather than guessed at. */
 const LICENCES = [
   { stated: 'public domain', id: 'PD', attribution: false },
   { stated: 'creative commons attribution 2.0', id: 'CC BY 2.0', attribution: true },
@@ -50,11 +42,7 @@ const COMPOSER_NAMES = new Map<string, string>([
   ['Mendelssohn-BartholdyF', 'Felix Mendelssohn Bartholdy'],
 ]);
 
-/** Screened rather than sampled. An earlier batch was taken for scoring variety alone and
- *  most of it was dynamically flat, which is fatal here: the signal is one part fading
- *  against the others, and a score with one velocity throughout has nothing to fade
- *  against. Every entry below was measured to carry real dynamics before being listed,
- *  and the gate in this script re-checks it on every run. */
+/** Every entry was measured to carry real dynamics: the signal is one part fading against the others. */
 const CURATED = [
   { file: 'dvorak-symphony7.mid', piece: 'DvorakA/O70/DvorakSYMPH7' },
   { file: 'dvorak-symphony9-new-world.mid', piece: 'DvorakA/O95/Sym9' },
@@ -153,8 +141,7 @@ function licenceOf(stated: string): (typeof LICENCES)[number] {
   return known;
 }
 
-/** Multi-movement pieces publish their MIDI as an archive; the longest movement is the
- *  one worth playing, and is a good proxy for the fullest scoring. */
+/** The longest movement is the one worth playing, and is a good proxy for the fullest scoring. */
 function largestMidi(archive: Buffer): Buffer {
   const midis = zipEntries(archive).filter((entry) => /\.midi?$/i.test(entry.name));
   const largest = midis.sort((a, b) => b.data.length - a.data.length)[0];
@@ -162,9 +149,7 @@ function largestMidi(archive: Buffer): Buffer {
   return largest.data;
 }
 
-/** Refuses before the file is kept rather than after it is bundled: a flat score cannot
- *  carry the signal, so shipping one and discovering it by ear is the failure mode this
- *  exists to prevent. Returns the reason, or null when the file may be kept. */
+/** Runs before the file is kept: a flat score cannot carry the signal. Returns the reason, or null to keep. */
 function screen(path: string): string | null {
   let score;
   try {

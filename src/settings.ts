@@ -24,15 +24,7 @@ import {
   SUBAGENT_MODES,
 } from './constants.ts';
 
-/** A setting the dashboard can render and cycle without knowing what it means. Adding a
- *  setting here is the whole change: the menu, the wire format, and validation all read
- *  from this list.
- *
- *  That only holds within one process. The dashboard is a separate program with its own
- *  compiled copy, so a daemon left running from before a setting existed answers 400 to a
- *  menu that still offers it. The daemon therefore publishes this list on `/state` and the
- *  menu is built from what it sends, which is why the functions below take a spec rather
- *  than look one up by key. */
+/** A setting the dashboard renders and cycles blind; the daemon publishes this list on `/state` because a dashboard compiled separately would otherwise offer settings an older daemon 400s. */
 export type SettingSpec =
   | {
       kind: 'choice';
@@ -184,8 +176,7 @@ function clampToStep(spec: Extract<SettingSpec, { kind: 'number' }>, value: numb
   return Math.min(Math.max(stepped, spec.min), spec.max);
 }
 
-/** Validates an incoming value against the spec. Returns null for anything the spec does
- *  not allow, so the HTTP surface never has to know the shape of an individual setting. */
+/** Rejects anything the spec disallows, so the HTTP surface knows no individual setting's shape. */
 export function coerceSetting(key: string, value: unknown): string | number | boolean | null {
   const spec = specFor(key);
   return spec ? coerceWithSpec(spec, value) : null;
@@ -203,8 +194,7 @@ export function coerceWithSpec(
   return clampToStep(spec, value);
 }
 
-/** The next value when the user cycles a setting, so the dashboard holds no per-setting
- *  logic. Numbers move by a step; choices and toggles wrap. */
+/** Next value when the user cycles a setting, so the dashboard holds no per-setting logic. */
 export function nextSetting(
   key: string,
   current: unknown,
@@ -246,9 +236,7 @@ export function displayWithSpec(spec: SettingSpec, value: unknown): string {
   return spec.labels?.[String(value)] ?? String(value);
 }
 
-/** Under alert, sound means an agent needs you, so the gate counts the same sessions the
- *  other way round: "any agent is working" would name the opposite of what it does. The
- *  swap is display-only — the wire values are unchanged. */
+/** Under alert the gate counts sessions the other way round, so these labels swap; wire values are unchanged. */
 const GATE_ALERT_LABELS: Readonly<Record<string, string>> = {
   any: 'any agent needs you',
   all: 'all agents need you',
@@ -297,8 +285,7 @@ function parseSpec(value: unknown): SettingSpec | null {
   if (!Number.isFinite(min) || !Number.isFinite(max) || !(step > 0) || max < min) return null;
   const unit = typeof value['unit'] === 'string' ? value['unit'] : undefined;
   const zeroLabel = typeof value['zeroLabel'] === 'string' ? value['zeroLabel'] : undefined;
-  // Spread rather than assign: an explicit `unit: undefined` is a different object from one
-  // without the key, and the round-trip test compares these against the compiled list.
+  // Spread, not assign: an explicit `unit: undefined` is a different object, and the round-trip test compares these.
   return {
     kind,
     key,
@@ -312,9 +299,7 @@ function parseSpec(value: unknown): SettingSpec | null {
   };
 }
 
-/** The daemon's own setting list, narrowed. Returns an empty array for anything
- *  unusable, which callers read as "this daemon does not publish specs" and answer by
- *  falling back to their compiled copy. */
+/** Returns empty for anything unusable, which callers read as "this daemon publishes no specs" and fall back to their compiled copy. */
 export function parseSettingSpecs(value: unknown): SettingSpec[] {
   if (!Array.isArray(value)) return [];
   const specs: SettingSpec[] = [];

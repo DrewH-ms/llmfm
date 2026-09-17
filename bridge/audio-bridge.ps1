@@ -1,29 +1,4 @@
-# Recorded audio bridge: plays .mp3/.wav through MCI (winmm), the same DLL the MIDI
-# bridge uses, so recorded tracks cost the daemon no new dependency.
-#
-# Unlike the MIDI bridge this one has to answer -- duration and position are only
-# knowable from the device -- so every command carries a caller-supplied id that is
-# echoed in the reply. Correlation is then explicit rather than positional, and a
-# reply can never be read as the answer to a different question.
-#
-# Protocol (one command per line, one reply line each):
-#   <id> OPEN <abs path>   open the file, reply payload "<lengthMs> <type>"
-#   <id> PLAY
-#   <id> PAUSE
-#   <id> RESUME
-#   <id> STOP
-#   <id> SEEK <ms>
-#   <id> VOLUME <0-1000>
-#   <id> POSITION          reply payload "<ms>"
-#   <id> CLOSE
-#   <id> QUIT
-# Replies:
-#   OK ready               once, at startup (or ERR <why>)
-#   <id> OK [payload]
-#   <id> ERR <message>
-#
-# Arguments:
-#   -ParentPid <int>    process to outlive; the device is closed when it exits
+# Plays .mp3/.wav through MCI (winmm). Every command carries a caller-supplied id echoed in the reply, so correlation is explicit rather than positional.
 
 param([int] $ParentPid = 0)
 
@@ -67,8 +42,7 @@ function Write-Line([string] $line) {
 
 $script:alias = $null
 $script:aliasSeq = 0
-# Remembered so a level set before or between files survives the next open; MCI
-# volume is a property of the open device, not of the session.
+# MCI volume is a property of the open device, not of the session, so it is reapplied on every open.
 $script:volume = 1000
 
 function Send-Mci([string] $command) {
@@ -94,8 +68,7 @@ function Open-File([string] $path) {
     Close-Current
     $script:aliasSeq++
     $name = 'llmfm' + $script:aliasSeq
-    # mpegvideo handles both .mp3 and .wav, but some wave files are only accepted by
-    # the dedicated waveaudio device, so that is the fallback rather than the default.
+    # mpegvideo handles .mp3 and most .wav; some wave files need the dedicated waveaudio device, so it is the fallback.
     $type = 'mpegvideo'
     $opened = [LlmfmAudio]::Send('open "' + $path + '" type mpegvideo alias ' + $name)
     if ($null -eq $opened) {
@@ -136,8 +109,7 @@ function Invoke-Command-Line([string] $verb, [string] $argument) {
 
 Write-Line 'OK ready'
 
-# Held open for the life of the process: HasExited on a handle we opened cannot be
-# fooled by the pid being reused.
+# Held open for the life of the process: HasExited on a handle we opened cannot be fooled by pid reuse.
 $owner = $null
 if ($ParentPid -ne 0) {
     try { $owner = [System.Diagnostics.Process]::GetProcessById($ParentPid) } catch { $owner = $null }
@@ -148,8 +120,7 @@ $stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput())
 
 try {
     :read while ($true) {
-        # A blocking read would never notice the owner dying, and a killed owner does
-        # not reliably close the pipe, so the read has to be waitable.
+        # A killed owner does not reliably close the pipe, so a blocking read would never notice it dying.
         $read = $stdin.ReadLineAsync()
         while (-not $read.Wait($OWNER_POLL_MS)) {
             if ($null -ne $owner -and $owner.HasExited) { break read }

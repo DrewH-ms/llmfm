@@ -4,10 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-/** LLMFM_HOME is what every path in the install hangs off. Set anything else and this test
- *  writes playlists into the user's real install — which it did, once. Pointing it at a
- *  temp tree also means the bundled folder here is one this test made, so what it asserts
- *  does not change every time a track is added to the shipped library. */
+/** LLMFM_HOME redirects every install path; anything else and this writes playlists into the user's real install, as it once did. */
 const home = mkdtempSync(join(tmpdir(), 'llmfm-playlists-'));
 process.env['LLMFM_HOME'] = home;
 
@@ -41,8 +38,7 @@ test('a folder is a playlist, and only playable files count', () => {
   assert.deepEqual(tracksIn('roadtrip'), ['roadtrip/one.mid', 'roadtrip/two.wav']);
 });
 
-/** Bundled is a folder like any other, so it must be listed once, by the branch that
- *  knows its tracks keep bare ids — not a second time as a plain subfolder. */
+/** Bundled must be listed by the branch that knows its tracks keep bare ids, not again as a plain subfolder. */
 test('bundled is listed once, as itself', () => {
   const names = listPlaylists().map((entry) => entry.name);
   assert.equal(names.filter((name) => name === 'bundled').length, 1);
@@ -56,9 +52,7 @@ test('an empty playlist is still offered, so the README can point at one', () =>
   assert.ok(isPlaylist('empty-one'));
 });
 
-/** The product's one premise is that a silence means an agent needs you. A playlist that
- *  played nothing would be a silence that means nothing, which is worse than ignoring the
- *  setting — so an empty choice falls back rather than going quiet. */
+/** A playlist that played nothing would be a silence that means nothing, which is worse than ignoring the setting. */
 test('an empty playlist falls back to the bundled music instead of silence', () => {
   assert.equal(tracksIn('empty-one').length, 0);
   assert.deepEqual(libraryFor('empty-one'), listTracks());
@@ -76,8 +70,7 @@ test('a track inside a playlist resolves, and loose files still do', () => {
   assert.equal(resolveTrack('shipped.mid'), join(bundledDir(), 'shipped.mid'));
 });
 
-/** resolveTrack is the boundary between a name a client sent and a file we read. It has to
- *  answer by recognising the name, never by joining it onto a directory and hoping. */
+/** resolveTrack must answer by recognising a name, never by joining it onto a directory and hoping. */
 test('a request that is a path rather than a name resolves to nothing', () => {
   for (const attempt of [
     '../tracks.json',

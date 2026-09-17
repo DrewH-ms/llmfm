@@ -1,52 +1,4 @@
-# System volume bridge: reads commands on stdin and drives the default audio
-# render endpoint through the Core Audio IAudioEndpointVolume COM interface, and
-# individual playback sessions on it through IAudioSessionControl2.
-#
-# This is how LLMFM rides music the user already chose: it cannot pause someone
-# else's stream, only change the level it plays at.
-#
-# The endpoint gate silences the whole device. When the caller knows which
-# application is playing what we mean to gate, it names that session instead and
-# only that stream goes quiet.
-#
-# The endpoint's level at startup is the baseline, and this process restores it
-# from its own `finally` block, along with any session it still holds muted,
-# including when the process that started it exits without saying so. Losing
-# stdin is not enough on its own: a dead parent does not reliably close the pipe,
-# and a blocking read then waits forever, so the owner is watched by handle
-# instead.
-#
-# This cannot cover being killed itself, and on Windows a hard kill of the owner
-# takes this process with it. The caller persists the baseline for that case.
-#
-# A level the user moved themselves is never overwritten: if the endpoint has
-# drifted from what we last set, the user has taken it back, and their value
-# becomes the new baseline rather than something to restore over.
-#
-# Arguments:
-#   -ParentPid <int>    process to outlive; the level is restored when it exits
-#
-# Protocol (one command per line, one response line each):
-#   G                   report the current level
-#   S <scalar> <0|1>    set level (0..1) and mute
-#   B <scalar> <0|1>    adopt an externally recorded baseline and restore to it,
-#                       which is how a level left behind by a killed daemon is
-#                       recovered on the next start
-#   R                   restore the baseline and release the claim
-#   M <match>           mute every live session whose display name contains
-#                       <match>, matched case-insensitively
-#   U <match>           unmute the same
-#   E                   list the live sessions on the endpoint
-#   Q                   quit
-# Responses:
-#   OK <scalar> <0|1> <deviceId>            once, at startup
-#   V <scalar> <0|1> <baseline> <0|1> <deviceId>
-#                                           current level and mute, then the
-#                                           level and mute we would restore to,
-#                                           then the endpoint they belong to
-#   A <count>                               sessions the gate was applied to
-#   P <processId> <name>                    one per live session, then N <count>
-#   ERR <message>
+# Drives the default render endpoint (IAudioEndpointVolume) and its individual sessions (IAudioSessionControl2); a hard kill of this process cannot restore, so the caller persists the baseline.
 
 param([int] $ParentPid = 0)
 
@@ -294,8 +246,7 @@ public class LlmfmSystemVolume {
 }
 '@
 
-# Half a percentage point: below any manual step the volume keys or slider take,
-# above the rounding of a scalar that survived a round trip through text.
+# Half a percentage point: below any manual step of the keys or slider, above the rounding of a scalar round-tripped through text.
 $DRIFT_EPSILON = 0.005
 $culture = [System.Globalization.CultureInfo]::InvariantCulture
 
@@ -304,8 +255,7 @@ $script:baselineMute = $false
 $script:heldLevel = 0.0
 $script:heldMute = $false
 $script:holding = $false
-# Every match we have muted and not yet unmuted. A session mute belongs to the audio
-# service rather than to this process, so it is the one thing here that outlives us.
+# Session mutes belong to the audio service, so they are the one thing here that outlives us.
 $script:mutedMatches = New-Object System.Collections.Generic.List[string]
 
 function Write-Line([string] $line) {
@@ -319,8 +269,7 @@ function Format-Level([float] $level, [bool] $mute) {
     return ($level.ToString('F6', $culture) + ' ' + $flag)
 }
 
-# True when the endpoint still sits where we last put it. When it does not, the
-# user has moved it and owns the level again.
+# False once the endpoint has drifted from what we last set: the user has taken the level back.
 function Test-Ours([float] $level, [bool] $mute) {
     if (-not $script:holding) { return $false }
     return ([math]::Abs($level - $script:heldLevel) -le $DRIFT_EPSILON) -and ($mute -eq $script:heldMute)
@@ -332,9 +281,7 @@ function Format-State() {
     return ('V ' + (Format-Level $level $mute) + ' ' + (Format-Level ([float] $script:baselineLevel) ([bool] $script:baselineMute)) + ' ' + [LlmfmSystemVolume]::DeviceId)
 }
 
-# An endpoint can be unplugged out from under us, and every call on it then fails. The
-# caller learns that from the reading it asked for; a restore that cannot reach its device
-# must not take down the exit path that called it.
+# An unplugged endpoint fails every call on it, and a restore that cannot reach its device must not take down the exit path that called it.
 function Restore-Baseline() {
     if (-not $script:holding) { return }
     try {
@@ -349,8 +296,7 @@ function Restore-Baseline() {
     $script:holding = $false
 }
 
-# Best effort per match: an application that has gone away, or an endpoint that has, must
-# not leave the rest of the user's audio muted behind it.
+# Best effort per match: an application or endpoint that has gone away must not leave the rest of the user's audio muted.
 function Clear-SessionMutes() {
     foreach ($match in @($script:mutedMatches)) {
         try {
@@ -361,11 +307,7 @@ function Clear-SessionMutes() {
     $script:mutedMatches.Clear()
 }
 
-# The gate has to land on the device the user is actually listening to. A headset plugged
-# in mid-session moves the default, and a mute left behind on the endpoint we bound at
-# startup would be silence nobody hears and a flag nobody clears. At most one endpoint is
-# ever held, and the one we give up is put back before we let go of it. Releasing it also
-# clears the hold, so the caller adopts the new device's state as the baseline.
+# A headset plugged in mid-session moves the default, and a mute left on the old endpoint is silence nobody hears and a flag nobody clears.
 function Sync-Endpoint() {
     $current = [LlmfmSystemVolume]::DefaultId()
     if (-not $current -or $current -eq [LlmfmSystemVolume]::DeviceId) { return }
@@ -388,8 +330,7 @@ $script:baselineLevel = [LlmfmSystemVolume]::GetLevel()
 $script:baselineMute = [LlmfmSystemVolume]::GetMute()
 Write-Line ("OK " + (Format-Level $script:baselineLevel $script:baselineMute) + " " + $deviceId)
 
-# Held open for the life of the process: HasExited on a handle we opened cannot
-# be fooled by the pid being reused.
+# Held open for the life of the process: HasExited on a handle we opened cannot be fooled by pid reuse.
 $owner = $null
 if ($ParentPid -ne 0) {
     try { $owner = [System.Diagnostics.Process]::GetProcessById($ParentPid) } catch { $owner = $null }
@@ -400,8 +341,7 @@ $stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput())
 
 try {
     :read while ($true) {
-        # A blocking read would never notice the owner dying, and a killed owner
-        # does not reliably close the pipe, so the read has to be waitable.
+        # A killed owner does not reliably close the pipe, so a blocking read would never notice it dying.
         $read = $stdin.ReadLineAsync()
         while (-not $read.Wait($OWNER_POLL_MS)) {
             if ($null -ne $owner -and $owner.HasExited) { break read }

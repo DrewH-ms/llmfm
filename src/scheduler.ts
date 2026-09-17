@@ -6,13 +6,11 @@ import type { Score, ScoredNote, TransportState } from './types.ts';
 
 export type Scheduler = {
   load(score: Score): void;
-  /** Resumes from the frozen position. A score with nothing in it still runs the
-   *  transport, so it reaches its end and hands rotation on rather than wedging. */
+  /** Resumes from the frozen position. An empty score still runs, so it reaches its end and hands rotation on. */
   play(): void;
   /** Freezes position and stops scheduling. Does NOT fade — the mixer owns loudness. */
   pause(): void;
-  /** Fires each time the playhead reaches the end of the score, after the transport has
-   *  wrapped to the top. A listener that loads another score replaces the loop. */
+  /** Fires when the playhead reaches the end, after the transport has wrapped to the top. */
   onEnd(listener: () => void): () => void;
   state(): TransportState;
   stop(): void;
@@ -20,8 +18,7 @@ export type Scheduler = {
 
 const MS_PER_SECOND = 1000;
 const NS_PER_MS = 1000000n;
-/** A note whose moment slipped past by more than a tick is stale; firing it would bunch
- *  several notes onto the same instant. */
+/** A note more than a tick late is stale; firing it would bunch several notes onto one instant. */
 const LATE_NOTE_TOLERANCE_MS = SCHEDULER_TICK_MS * 2;
 
 const monotonicSeconds = (): number =>
@@ -75,8 +72,7 @@ export function createScheduler(options: { midi: MidiOut; mixer: Mixer }): Sched
     timers.add(onTimer);
   };
 
-  /** Commits only the next `LOOKAHEAD_SECONDS` of notes, so pausing is a matter of
-   *  freezing the playhead rather than unwinding the whole piece. */
+  /** Commits only the next `LOOKAHEAD_SECONDS`, so pausing freezes the playhead instead of unwinding the piece. */
   const pump = (): void => {
     if (!playing) return;
 
@@ -95,8 +91,7 @@ export function createScheduler(options: { midi: MidiOut; mixer: Mixer }): Sched
     }
 
     if (cursor >= notes.length && now - anchor >= duration) {
-      // Wrapping first means a listener that does nothing still gets an endless loop,
-      // and one that loads another score overwrites this state on its way through.
+      // Wrapping first means a listener that does nothing still loops, and one that loads a score overwrites this.
       anchor = now;
       cursor = 0;
       position = 0;

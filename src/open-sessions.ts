@@ -53,8 +53,7 @@ export function watchOpenSessions(registry: SessionRegistry): OpenSessionsWatche
   };
 
   poll();
-  // Polling beats fs.watch: the CLI rewrites this file atomically via rename, which
-  // leaves a watcher bound to the replaced file and silently blind.
+  // Polling beats fs.watch: the CLI rewrites this file atomically via rename, leaving a watcher silently blind.
   const timer = setInterval(poll, OPEN_SESSIONS_POLL_MS);
 
   return {

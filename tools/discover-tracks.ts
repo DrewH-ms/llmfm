@@ -1,11 +1,4 @@
-/** Dev-time only. Walks the Mutopia FTP tree, reads the RDF beside every piece, and
- *  writes the ones whose licence we may redistribute and whose scoring is an ensemble.
- *  Taking Mutopia in publication order gives mostly solo keyboard and organ chorales,
- *  which yield two voices and cannot carry an orchestra of agent sessions.
- *
- *  Run: node tools/discover-tracks.ts [--refresh]
- *  Output: tools/mutopia-candidates.json, the shortlist curate-tracks.ts is chosen from.
- *  Nothing here runs in the daemon; the daemon never makes a network request. */
+/** Dev-time only — `node tools/discover-tracks.ts [--refresh]`: crawls Mutopia for redistributable ensemble scores into tools/mutopia-candidates.json; the daemon makes no network requests. */
 
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,8 +8,7 @@ const MUTOPIA_FTP = 'https://www.mutopiaproject.org/ftp/';
 const TOOLS_DIR = join(fileURLToPath(import.meta.url), '..');
 const CANDIDATES_FILE = join(TOOLS_DIR, 'mutopia-candidates.json');
 
-/** Matches the allow-list in curate-tracks.ts, and fails closed the same way: a licence
- *  string we do not recognise is not a licence we may redistribute under. */
+/** Matches the allow-list in curate-tracks.ts and fails closed: an unrecognised licence is not one we may redistribute under. */
 const REDISTRIBUTABLE = [
   'Public Domain',
   'Creative Commons Attribution 3.0',
@@ -39,9 +31,7 @@ const ENSEMBLE_PATTERNS = [
   /\bchoir\b|\bchorus\b|SATB/i,
 ];
 
-/** Scoring that cannot be an ensemble however it is worded, checked first because
- *  "Organ" pieces are often described with the word "strings" in a stop list and a piano
- *  reduction of a concerto is still one instrument. */
+/** Checked first: "Organ" pieces often list "strings" as a stop, and a piano reduction of a concerto is still one instrument. */
 const SOLO_PATTERNS = [
   /^\s*(solo\s+)?(piano|organ|harpsichord|guitar|lute|harp|clavichord|keyboard)\s*$/i,
   /^\s*piano\s+solo\s*$/i,
@@ -87,8 +77,7 @@ const field = (document: string, name: string): string => {
   return (match?.[1] ?? '').trim();
 };
 
-/** Bounded fan-out: the archive is a few thousand directories and hammering a volunteer
- *  server to save a minute is not a trade worth making. */
+/** Bounded fan-out: hammering a volunteer server to save a minute is not a trade worth making. */
 async function mapLimited<In, Out>(
   items: In[],
   worker: (item: In) => Promise<Out>,
@@ -114,8 +103,7 @@ const isEnsemble = (scoring: string): boolean => {
   return ENSEMBLE_PATTERNS.some((pattern) => pattern.test(scoring));
 };
 
-/** Pieces sit three levels down (<Composer>/<Work>/<Piece>/), so the walk is depth
- *  limited rather than recursive: a deeper tree is a page we have misread. */
+/** Pieces sit three levels down (<Composer>/<Work>/<Piece>/), so the walk is depth limited rather than recursive. */
 async function pieceDirectories(): Promise<string[]> {
   const composers = matchAll(await text(MUTOPIA_FTP), DIRECTORY_PATTERN);
   console.log(`composers: ${composers.length}`);

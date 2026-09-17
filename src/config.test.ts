@@ -9,9 +9,7 @@ import { configPath, createConfigStore, handleFor, matchesHandle } from './confi
 const SESSION = { label: 'Rasa', sessionId: 'cb75a9e8-1234-5678-9abc-def012345678' };
 const OTHER = { label: 'Rasa', sessionId: 'a83b9096-1234-5678-9abc-def012345678' };
 
-/** Points the config at a throwaway home, so a test writes a real file rather than a
- *  stubbed one and the user's own config is never the thing under test. LLMFM_HOME is the
- *  variable that moves it: set the wrong one and this writes into the real install. */
+/** LLMFM_HOME is the variable that redirects the config; the wrong one writes into the real install. */
 function useTempHome(t: TestContext): void {
   const home = mkdtempSync(join(tmpdir(), 'llmfm-test-'));
   const previous = process.env['LLMFM_HOME'];
@@ -29,8 +27,7 @@ test('the printed handle is what the user can type back', () => {
 });
 
 test('a folder label mutes every session in that folder', () => {
-  // The point of the label form: session ids change on every restart, so a rule keyed on
-  // one would silently stop applying the next morning.
+  // Session ids change on every restart, so a rule keyed on one would stop applying.
   assert.ok(matchesHandle('Rasa', SESSION));
   assert.ok(matchesHandle('Rasa', OTHER));
 });
@@ -79,7 +76,7 @@ test('setMute is idempotent and persists the durable form', (t) => {
   store.setMute({ session, muted: true, preferLabel: true });
   assert.deepEqual(store.current().muted, ['Rasa']);
 
-  // Repeating the same call must not stack duplicate rules; a key repeat sends it twice.
+  // A key repeat sends the same call twice; it must not stack duplicate rules.
   store.setMute({ session, muted: true, preferLabel: true });
   assert.deepEqual(store.current().muted, ['Rasa']);
 
@@ -103,8 +100,7 @@ test('unmuting clears a rule the user wrote in another form', (t) => {
 test('mode and fade persist like any other setting', (t) => {
   useTempHome(t);
 
-  // They used to live only in the orchestrator, so a restart silently reverted them and
-  // the fade the user had set was never the fade they got back.
+  // They used to live only in the orchestrator, so a restart silently reverted them.
   const store = createConfigStore();
   assert.equal(store.setSetting('mode', 'alert'), true);
   assert.equal(store.setSetting('fadeSeconds', 2.5), true);
@@ -130,9 +126,7 @@ test('one bad value in a hand-edited file costs only that setting', (t) => {
   assert.deepEqual(store.current().muted, ['Rasa']);
 });
 
-/** Bluetooth receive has no gate of its own: the phone's stream is silenced only by duck
- *  mode's endpoint mute. Left alone with `audio: 'midi'` it plays on under our own score
- *  while an agent waits, which is the failure the whole product is defined against. */
+/** Bluetooth receive has no gate of its own: the phone's stream is silenced only by duck mode's endpoint mute. */
 test('turning Bluetooth receive on switches the sound source to ducking', (t) => {
   useTempHome(t);
 
@@ -167,10 +161,7 @@ test('a hand-edited file holding both Bluetooth and MIDI is repaired on load', (
   assert.equal(store.current().audio, 'duck');
 });
 
-/** The migration reaches outside the install by design, to a path a redirected home does
- *  not move. It must therefore not run at all when the home has been redirected — or a
- *  test pointed at a temp folder carries the user's real config off into it, and takes it
- *  with the temp folder when it goes. That is not hypothetical; it happened. */
+/** The migration reaches outside the install, so a redirected home must not run it — it once carried the user's real config into a temp folder that then vanished. */
 test('a redirected home never migrates the real config out of ~/.copilot', (t: TestContext) => {
   const legacyHome = mkdtempSync(join(tmpdir(), 'llmfm-legacy-'));
   const legacy = join(legacyHome, 'llmfm.config.json');
@@ -189,10 +180,7 @@ test('a redirected home never migrates the real config out of ~/.copilot', (t: T
   assert.ok(existsSync(legacy), 'the legacy config was moved out from under the user');
 });
 
-/** The file holds every tuned setting, and a truncated one parses as nothing, so the
- *  next start would come up on defaults with no error shown. Replacement by rename is
- *  what makes a kill mid-write survivable; the identity change is the evidence that the
- *  bytes never went into the live file. */
+/** Replacement by rename is what makes a kill mid-write survivable; the inode change is the evidence. */
 test('a settings write replaces the file rather than truncating it in place', (t) => {
   useTempHome(t);
 
@@ -207,8 +195,7 @@ test('a settings write replaces the file rather than truncating it in place', (t
   assert.equal(createConfigStore().current().fadeSeconds, 2.5);
 });
 
-/** A crash between write and rename leaves the temp file; the next write must reclaim it
- *  rather than fail or start a second one. */
+/** A crash between write and rename leaves the temp file; the next write must reclaim it. */
 test('a stray temp file from an interrupted write does not block the next one', (t) => {
   useTempHome(t);
 

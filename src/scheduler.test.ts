@@ -63,8 +63,7 @@ const score = (name: string, notes: ScoredNote[], duration: number): Score => ({
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Every note-on must be answered on the same channel and pitch, or the synth holds it
- *  until the daemon is restarted. */
+/** Every note-on must be answered on the same channel and pitch, or the synth holds it until restart. */
 const unmatched = (sent: Sent[]): Sent[] => {
   const held: Sent[] = [];
   for (const message of sent) {
@@ -168,8 +167,7 @@ test('an end-of-score listener that loads another score does not strand its note
 
     assert.ok(swapped, 'expected the end of the score to trigger the swap');
     assert.ok(scheduler.state().playing, 'the next score should still be running');
-    // The incoming note is meant to be sounding; only the one we swapped away from must
-    // have been let go.
+    // The incoming note is meant to be sounding; only the one swapped away from must have been let go.
     assert.deepEqual(
       unmatched(sent).filter(
         (held) => held.channel === outgoing.channel && held.note === outgoing.midi,
@@ -183,9 +181,7 @@ test('an end-of-score listener that loads another score does not strand its note
   assert.deepEqual(unmatched(sent), []);
 });
 
-/** Defence in depth behind the parse boundary: an empty note list used to return from
- *  play() without starting the tick, so the end was never reached, no listener fired, and
- *  autoplay rotation was dead for the rest of the process. */
+/** An empty note list used to return from play() without starting the tick, killing autoplay rotation for the rest of the process. */
 test('a score with no notes still runs the transport so rotation survives', async () => {
   const { midi } = recordingMidi();
   const scheduler = createScheduler({ midi, mixer: openMixer });

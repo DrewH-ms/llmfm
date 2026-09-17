@@ -7,8 +7,7 @@ export type Simulation = {
   running(): boolean;
 };
 
-/** Drives synthetic session activity so audio can be tuned without babysitting real
- *  agents, and so a demo survives losing API access. */
+/** Drives synthetic session activity so audio can be tuned without real agents. */
 export function createSimulation(registry: SessionRegistry): Simulation {
   let timer: NodeJS.Timeout | null = null;
 

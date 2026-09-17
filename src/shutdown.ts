@@ -1,9 +1,6 @@
 import { SHUTDOWN_GRACE_MS } from './constants.ts';
 
-/** When one process runs both the daemon and the dashboard, the dashboard owns every
- *  exit path — and an exit that skips the daemon's teardown leaves the user muted. The
- *  launcher registers its teardown here; the dashboard awaits it before exiting. It runs
- *  at most once, never rejects, and cannot hold the exit open indefinitely. */
+/** An exit that skips the daemon's teardown leaves the user muted; runs at most once, never rejects, cannot hold the exit open. */
 let teardown: (() => Promise<void>) | null = null;
 let running: Promise<void> | null = null;
 

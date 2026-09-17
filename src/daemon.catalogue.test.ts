@@ -24,9 +24,7 @@ test('every shipped entry carries the provenance the UI shows', () => {
   }
 });
 
-/** Recorded audio reaches the daemon as one finished stereo mix, so there is no part to
- *  hold back for a session. Offering it voices would promise a silence the format cannot
- *  produce. */
+/** Recorded audio arrives as one finished stereo mix, so there is no part to hold back for a session. */
 test('a recorded track is never offered as an ensemble', () => {
   for (const entry of trackCatalogue().filter((candidate) => candidate.format !== 'mid')) {
     assert.equal(entry.voiceCount, 0, `${entry.file} claims voices it cannot gate`);
@@ -34,8 +32,7 @@ test('a recorded track is never offered as an ensemble', () => {
   }
 });
 
-/** A licence record describes bytes, not a filename. Overwriting a curated file leaves the
- *  record behind, still asserting a licence for music it was never written against. */
+/** A licence record describes bytes: overwriting a curated file leaves it asserting a licence for music it never covered. */
 test('every shipped file still hashes to the record that licensed it', () => {
   const shipped = new Set(listTracks());
   for (const entry of trackCatalogue().filter((candidate) => shipped.has(candidate.file))) {
