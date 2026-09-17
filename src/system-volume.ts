@@ -161,6 +161,20 @@ function clearClaim(): void {
   }
 }
 
+/** Which gate a restore confirmably reopened. An endpoint restore cannot lift a session
+ *  mute and a session unmute cannot move the endpoint, so each releases only its own. */
+type RestoredGate = { kind: 'endpoint' } | { kind: 'session'; name: string };
+
+/** The claim is the last thing that can still unmute the user after a kill, so it is
+ *  released only by a restore that undid the gate it records. */
+function releaseClaim(restored: RestoredGate): void {
+  const claim = readClaim();
+  if (!claim) return;
+  const undone =
+    restored.kind === 'session' ? claim.sessionName === restored.name : claim.sessionName === null;
+  if (undone) clearClaim();
+}
+
 export function createSystemVolume(): SystemVolume {
   let proc: ChildProcessWithoutNullStreams | null = null;
   let state: SystemVolumeStatus = { ready: false, deviceId: null, ...UNGATED, error: null };
@@ -258,10 +272,11 @@ export function createSystemVolume(): SystemVolume {
     if (claim.sessionName) {
       // A session mute survives the process that set it and belongs to no device level,
       // so it is cleared whatever the endpoint has done since.
-      await gateSessions({ name: claim.sessionName, muted: false });
+      const acted = await gateSessions({ name: claim.sessionName, muted: false });
+      if (acted === null) return;
     } else if (claim.deviceId === state.deviceId && last && sameLevel(last.current, claim.held)) {
       const baseline = claim.baseline;
-      await request(`B ${toScalar(baseline.level)} ${baseline.muted ? 1 : 0}`);
+      if (!(await request(`B ${toScalar(baseline.level)} ${baseline.muted ? 1 : 0}`))) return;
     }
     clearClaim();
   };
@@ -371,7 +386,7 @@ export function createSystemVolume(): SystemVolume {
       const held = options.muted && acted > 0;
       state = { ...state, gated: held, gatedSessions: held ? acted : 0 };
       if (!options.muted) {
-        clearClaim();
+        releaseClaim({ kind: 'session', name: options.name });
         return acted;
       }
       const reading = acted > 0 ? await request('G') : null;
@@ -415,14 +430,14 @@ export function createSystemVolume(): SystemVolume {
       // the durable record outlives it and the next start puts the level back.
       if (reading) {
         state = { ...state, ...UNGATED };
-        clearClaim();
+        releaseClaim({ kind: 'endpoint' });
       }
       return reading?.current ?? null;
     },
 
     async stop(): Promise<void> {
       const restored = state.ready ? await request('R') : null;
-      if (!state.ready || restored) clearClaim();
+      if (restored) releaseClaim({ kind: 'endpoint' });
       state = { ready: false, deviceId: state.deviceId, ...UNGATED, error: state.error };
       try {
         proc?.stdin.write('Q\n');

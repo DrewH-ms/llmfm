@@ -6,7 +6,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -27,6 +27,9 @@ const AFTER_KILL_SETTLE_MS = 2000;
  *  so a player started by this suite appears under the host it was started from. */
 const PLAYER_SESSION_NAME = 'powershell';
 const SESSION_SETTLE_TIMEOUT_MS = 20000;
+/** Long enough for the module to see the child exit, short enough to fail a test rather
+ *  than hang it. */
+const BRIDGE_DEATH_TIMEOUT_MS = 5000;
 
 let home: string;
 let startedFrom: VolumeLevel;
@@ -262,6 +265,64 @@ test('gates every live session matching a name, and nothing when none does', asy
   }
 });
 
+/** Stands in for the bridge dying on its own — a COM fault, or the user ending the
+ *  PowerShell process — while the daemon carries on and later stops tidily. */
+function killBridges(): void {
+  // The query runs in a `powershell.exe` of our own whose command line also carries the
+  // script name, so it has to be told apart from the bridges it is looking for.
+  const found = execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-Command',
+      `Get-CimInstance Win32_Process -Filter "ParentProcessId=${process.pid}" | ` +
+        `Where-Object { $_.CommandLine -like '*volume-bridge.ps1*' -and $_.CommandLine -notlike '*Get-CimInstance*' } | ` +
+        'Select-Object -ExpandProperty ProcessId',
+    ],
+    { encoding: 'utf8' },
+  );
+  for (const pid of found.trim().split(/\s+/).filter(Boolean)) {
+    execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-Command', `Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue`],
+      { stdio: 'ignore' },
+    );
+  }
+}
+
+/** Nothing restored the level, so the claim is the only thing left that still can. A stop
+ *  that deletes it is the one path by which a mute becomes permanent. */
+test('keeps the claim when the bridge died before the daemon stopped', async () => {
+  const volume = createSystemVolume();
+  assert.equal((await volume.start()).ready, true);
+
+  const original = await volume.read();
+  assert.ok(original);
+  assert.ok(await volume.set({ level: nudged(original.level) }), 'set returned no level');
+  assert.ok(existsSync(claimPath()), 'ducking the endpoint wrote no claim');
+
+  killBridges();
+  const deadline = Date.now() + BRIDGE_DEATH_TIMEOUT_MS;
+  while (volume.status().ready && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(volume.status().ready, false, 'the killed bridge was never noticed');
+
+  await volume.stop();
+  assert.ok(existsSync(claimPath()), 'a stop that restored nothing threw the claim away');
+
+  const restarted = createSystemVolume();
+  assert.equal((await restarted.start()).ready, true);
+  try {
+    const recovered = await restarted.read();
+    assert.ok(recovered && Math.abs(recovered.level - original.level) <= RESTORE_TOLERANCE);
+    assert.equal(existsSync(claimPath()), false, 'the claim outlived the start that honoured it');
+    console.log(`bridge killed holding a duck, next start recovered ${recovered.level.toFixed(1)}`);
+  } finally {
+    await restarted.stop();
+  }
+});
+
 /** A per-session mute belongs to the audio service, so a hard-killed daemon leaves it
  *  behind where a hard-killed endpoint mute would at least have a level to compare. */
 test('clears a session mute left behind by a killed daemon', async () => {
@@ -292,5 +353,42 @@ test('clears a session mute left behind by a killed daemon', async () => {
     assert.equal(after.muted, level.muted, 'clearing a session claim moved the endpoint');
   } finally {
     await restarted.stop();
+  }
+});
+
+/** `duck.stop()` releases the session and then restores the endpoint. When the release
+ *  could not be confirmed, the endpoint restore that follows is not entitled to drop the
+ *  session's claim: `R` moves a level and can never unmute a session. */
+test('an endpoint restore does not release a session claim it cannot have lifted', async () => {
+  const wav = path.join(home, 'silence.wav');
+  writeSilentWav(wav);
+
+  const volume = createSystemVolume();
+  assert.equal((await volume.start()).ready, true);
+  const player = startPlayer(wav);
+
+  try {
+    const before = await countMatching(volume, PLAYER_SESSION_NAME);
+    const deadline = Date.now() + SESSION_SETTLE_TIMEOUT_MS;
+    let live = before;
+    while (live <= before && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      live = await countMatching(volume, PLAYER_SESSION_NAME);
+    }
+    assert.ok(live > before, 'the player never appeared as a live session');
+
+    const acted = await volume.setSessionMute({ name: PLAYER_SESSION_NAME, muted: true });
+    assert.ok(acted !== null && acted > 0, 'nothing was gated');
+    assert.ok(existsSync(claimPath()), 'gating a session wrote no claim');
+
+    assert.ok(await volume.restore(), 'the endpoint restore did not answer');
+    assert.ok(existsSync(claimPath()), 'an endpoint restore threw away a session claim');
+
+    assert.ok((await volume.setSessionMute({ name: PLAYER_SESSION_NAME, muted: false })) !== null);
+    assert.equal(existsSync(claimPath()), false, 'the claim outlived the unmute that honoured it');
+  } finally {
+    player.kill();
+    await volume.setSessionMute({ name: PLAYER_SESSION_NAME, muted: false });
+    await volume.stop();
   }
 });

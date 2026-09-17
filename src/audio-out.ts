@@ -143,7 +143,7 @@ export function createAudioOut(): AudioOut {
         try {
           proc = spawn(
             'powershell.exe',
-            ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', BRIDGE_SCRIPT],
+            ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', BRIDGE_SCRIPT, '-ParentPid', String(process.pid)],
             { stdio: ['pipe', 'pipe', 'pipe'] },
           );
         } catch (error) {

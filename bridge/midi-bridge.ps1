@@ -9,6 +9,11 @@
 # Protocol (one command per line):
 #   S <int>   send packed short message (status | data1<<8 | data2<<16)
 #   Q         quit
+#
+# Arguments:
+#   -ParentPid <int>    process to outlive; the synth is reset and closed when it exits
+
+param([int] $ParentPid = 0)
 
 $ErrorActionPreference = 'Stop'
 
@@ -70,9 +75,25 @@ if (-not $name) {
 [Console]::Out.WriteLine("OK $name")
 [Console]::Out.Flush()
 
+# Held open for the life of the process: HasExited on a handle we opened cannot be
+# fooled by the pid being reused.
+$owner = $null
+if ($ParentPid -ne 0) {
+    try { $owner = [System.Diagnostics.Process]::GetProcessById($ParentPid) } catch { $owner = $null }
+}
+# Bounds how long a note sounds after the process that played it is gone.
+$OWNER_POLL_MS = 200
+$stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput())
+
 try {
-    while ($true) {
-        $line = [Console]::In.ReadLine()
+    :read while ($true) {
+        # A blocking read would never notice the owner dying, and a killed owner does
+        # not reliably close the pipe, so the read has to be waitable.
+        $read = $stdin.ReadLineAsync()
+        while (-not $read.Wait($OWNER_POLL_MS)) {
+            if ($null -ne $owner -and $owner.HasExited) { break read }
+        }
+        $line = $read.Result
         if ($null -eq $line) { break }
         if ($line.Length -eq 0) { continue }
         $c = $line[0]

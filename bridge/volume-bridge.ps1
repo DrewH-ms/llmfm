@@ -10,10 +10,11 @@
 # only that stream goes quiet.
 #
 # The endpoint's level at startup is the baseline, and this process restores it
-# from its own `finally` block, including when the process that started it exits
-# without saying so. Losing stdin is not enough on its own: a dead parent does
-# not reliably close the pipe, and a blocking read then waits forever, so the
-# owner is watched by handle instead.
+# from its own `finally` block, along with any session it still holds muted,
+# including when the process that started it exits without saying so. Losing
+# stdin is not enough on its own: a dead parent does not reliably close the pipe,
+# and a blocking read then waits forever, so the owner is watched by handle
+# instead.
 #
 # This cannot cover being killed itself, and on Windows a hard kill of the owner
 # takes this process with it. The caller persists the baseline for that case.
@@ -303,6 +304,9 @@ $script:baselineMute = $false
 $script:heldLevel = 0.0
 $script:heldMute = $false
 $script:holding = $false
+# Every match we have muted and not yet unmuted. A session mute belongs to the audio
+# service rather than to this process, so it is the one thing here that outlives us.
+$script:mutedMatches = New-Object System.Collections.Generic.List[string]
 
 function Write-Line([string] $line) {
     [Console]::Out.WriteLine($line)
@@ -343,6 +347,18 @@ function Restore-Baseline() {
     } catch {
     }
     $script:holding = $false
+}
+
+# Best effort per match: an application that has gone away, or an endpoint that has, must
+# not leave the rest of the user's audio muted behind it.
+function Clear-SessionMutes() {
+    foreach ($match in @($script:mutedMatches)) {
+        try {
+            [LlmfmSystemVolume]::SetSessionMute($match, $false) | Out-Null
+        } catch {
+        }
+    }
+    $script:mutedMatches.Clear()
 }
 
 # The gate has to land on the device the user is actually listening to. A headset plugged
@@ -435,7 +451,16 @@ try {
                 if ($match.Length -eq 0) {
                     Write-Line "ERR no session match given"
                 } else {
-                    Write-Line ('A ' + [LlmfmSystemVolume]::SetSessionMute($match, ($command -eq 'M')))
+                    $muting = $command -eq 'M'
+                    $acted = [LlmfmSystemVolume]::SetSessionMute($match, $muting)
+                    if ($muting) {
+                        if ($acted -gt 0 -and -not $script:mutedMatches.Contains($match)) {
+                            $script:mutedMatches.Add($match)
+                        }
+                    } else {
+                        $script:mutedMatches.Remove($match) | Out-Null
+                    }
+                    Write-Line ('A ' + $acted)
                 }
             } elseif ($command -eq 'E') {
                 $sessions = [LlmfmSystemVolume]::ListSessions()
@@ -449,5 +474,6 @@ try {
         }
     }
 } finally {
+    try { Clear-SessionMutes } catch { }
     Restore-Baseline
 }

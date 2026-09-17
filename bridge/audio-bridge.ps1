@@ -21,6 +21,11 @@
 #   OK ready               once, at startup (or ERR <why>)
 #   <id> OK [payload]
 #   <id> ERR <message>
+#
+# Arguments:
+#   -ParentPid <int>    process to outlive; the device is closed when it exits
+
+param([int] $ParentPid = 0)
 
 $ErrorActionPreference = 'Stop'
 
@@ -131,9 +136,25 @@ function Invoke-Command-Line([string] $verb, [string] $argument) {
 
 Write-Line 'OK ready'
 
+# Held open for the life of the process: HasExited on a handle we opened cannot be
+# fooled by the pid being reused.
+$owner = $null
+if ($ParentPid -ne 0) {
+    try { $owner = [System.Diagnostics.Process]::GetProcessById($ParentPid) } catch { $owner = $null }
+}
+# Bounds how long a track outlives the process that asked for it.
+$OWNER_POLL_MS = 200
+$stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput())
+
 try {
-    while ($true) {
-        $line = [Console]::In.ReadLine()
+    :read while ($true) {
+        # A blocking read would never notice the owner dying, and a killed owner does
+        # not reliably close the pipe, so the read has to be waitable.
+        $read = $stdin.ReadLineAsync()
+        while (-not $read.Wait($OWNER_POLL_MS)) {
+            if ($null -ne $owner -and $owner.HasExited) { break read }
+        }
+        $line = $read.Result
         if ($null -eq $line) { break }
         if ($line.Length -eq 0) { continue }
 
