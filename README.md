@@ -101,6 +101,30 @@ goes back to waiting:
 Two terminals open on the same repository cannot be told apart, so folded work counts for
 both.
 
+### Bluetooth audio — playing your phone through this PC
+
+With `bluetoothReceive` on, a phone paired with this machine can stream to it over A2DP,
+and LLMFM gates *that* stream instead of playing a score. It is the nicest way to use the
+product: your own music, silenced when an agent needs you.
+
+Turning it on switches `audio` to `duck`, because only the duck gate can silence audio
+LLMFM does not own. The two settings are held in step in both directions — choosing the
+MIDI score turns Bluetooth receive back off.
+
+Received audio arrives as an ordinary playback session on the current output device, so
+LLMFM mutes **that session** rather than the whole output. Teams and your terminal bell
+keep working while the phone is silenced. If the phone's session cannot be found, nothing
+is muted and the dashboard says so, rather than silencing the endpoint and taking
+everything else down with it.
+
+> **Tested with iPhone only.** Android devices are **untested** — pairing, the A2DP sink
+> and the per-session mute may all behave differently, and the device name LLMFM matches
+> on is reported by the phone. If you try one, the dashboard's Bluetooth row and
+> `node bin/llmfm.ts status` are the place to look first.
+
+Windows must already have the phone paired; LLMFM opens the audio connection but does not
+pair devices for you.
+
 ## Sessions started before the hooks were installed
 
 Hooks are loaded once, at session start. A session opened before `install` never reports
