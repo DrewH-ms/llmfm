@@ -1,7 +1,5 @@
 import {
-  AUDIO_MODES,
   AUTOPLAY_MODES,
-  DEFAULT_AUDIO,
   DEFAULT_AUTOPLAY,
   DEFAULT_FADE_SECONDS,
   DEFAULT_GATE_POLICY,
@@ -92,14 +90,6 @@ export const SETTING_SPECS: readonly SettingSpec[] = [
   },
   {
     kind: 'choice',
-    key: 'audio',
-    title: 'Sound source',
-    help: 'Play the score, or mute and unmute the music you are already playing.',
-    choices: AUDIO_MODES,
-    labels: { midi: 'play the score', duck: 'mute what you are playing' },
-  },
-  {
-    kind: 'choice',
     key: 'silenceMode',
     title: 'On silence',
     help: "LLMFM's own music only: pause keeps your place in the score, mute keeps the transport running.",
@@ -149,7 +139,7 @@ export const SETTING_SPECS: readonly SettingSpec[] = [
     kind: 'toggle',
     key: 'bluetoothReceive',
     title: 'Bluetooth audio',
-    help: 'Take audio from a phone paired with this PC. Turning this on switches the sound source to ducking, which is what gates the phone.',
+    help: 'Take audio from a phone paired with this PC. While a phone is connected LLMFM gates that stream instead of playing its own score.',
   },
 ];
 
@@ -158,13 +148,12 @@ export const SETTING_DEFAULTS = {
   gate: DEFAULT_GATE_POLICY,
   fadeSeconds: DEFAULT_FADE_SECONDS,
   masterVolume: DEFAULT_MASTER_VOLUME,
-  audio: DEFAULT_AUDIO,
   silenceMode: DEFAULT_SILENCE_MODE,
   idleDropoutMinutes: DEFAULT_IDLE_DROPOUT_MINUTES,
   promptGap: DEFAULT_PROMPT_GAP,
   subagents: DEFAULT_SUBAGENTS,
   autoplay: DEFAULT_AUTOPLAY,
-  bluetoothReceive: true,
+  bluetoothReceive: false,
 } as const;
 
 export function specFor(key: string): SettingSpec | null {

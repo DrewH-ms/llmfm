@@ -51,10 +51,13 @@ export function createOrchestrator(options: {
   recorded?: StreamSink;
   /** Drives the system volume so the user's own music carries the signal. */
   duck?: StreamSink;
+  /** True while a phone's stream is the thing being gated, which leaves us nothing of our own to play. */
+  ducking?: () => boolean;
 }): Orchestrator {
   const { registry, mixer, scheduler, config } = options;
   const recorded = options.recorded ?? null;
   const duck = options.duck ?? null;
+  const ducking = options.ducking ?? ((): boolean => false);
 
   let score: Score | null = null;
   /** Exclusive with `score`: a mixdown has no parts, so there is no tree, assignment or per-part gate. */
@@ -207,7 +210,7 @@ export function createOrchestrator(options: {
 
   /** Ducking wins over a recorded track because in that mode the daemon plays nothing of its own. */
   const wholeStreamSink = (): StreamSink | null =>
-    config.current().audio === 'duck' ? duck : recordedTrack ? recorded : null;
+    ducking() ? duck : recordedTrack ? recorded : null;
 
   const scheduleSettle = (delayMs: number | null): void => {
     if (settleTimer) clearTimeout(settleTimer);

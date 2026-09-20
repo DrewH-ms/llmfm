@@ -212,6 +212,14 @@ const isPortInUse = (error: unknown): boolean =>
     (error as NodeJS.ErrnoException).code === 'EADDRINUSE') ||
   String(error).includes('EADDRINUSE');
 
+/** The rule the whole sound source turns on: a phone we are gating leaves us nothing of our own to play. Derived rather than configured, so a fresh install cannot start silent. */
+export function shouldDuck(options: {
+  bluetoothReceive: boolean;
+  device: { name: string } | null;
+}): boolean {
+  return options.bluetoothReceive && options.device !== null;
+}
+
 export async function startDaemon(options: { track?: string } = {}): Promise<Daemon> {
   const midi = createMidiOut();
   const mixer = createMixer(midi);
@@ -233,6 +241,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       setAudible: (gate) => recorded.setAudible(gate),
     },
     duck,
+    ducking: () => ducking,
   });
   const simulation = createSimulation(registry);
   let stopping = false;
@@ -244,8 +253,15 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   let receivingBluetooth = false;
 
   /** `silenceMode` describes LLMFM's own transport, and duck has no transport of ours. */
-  const holdOurTransport = (): boolean =>
-    config.current().audio !== 'duck' && config.current().silenceMode === 'mute';
+  const holdOurTransport = (duckActive: boolean): boolean =>
+    !duckActive && config.current().silenceMode === 'mute';
+
+  /** Derived from the sink, never configured. */
+  const wantsDuck = (): boolean =>
+    shouldDuck({
+      bluetoothReceive: config.current().bluetoothReceive,
+      device: bluetooth.status().device,
+    });
 
   const midiStatus = await midi.start();
   ensurePlaylistsDir();
@@ -277,7 +293,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       scheduler.pause();
       mixer.silenceAll();
       recorded.setMasterVolume(config.current().masterVolume);
-      recorded.setHoldTransport(holdOurTransport());
+      recorded.setHoldTransport(holdOurTransport(ducking));
       recordedTrack = true;
       trackFile = file;
       score = null;
@@ -314,12 +330,26 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       .then(async () => {
         // A switch queued before teardown must not bring a bridge back up behind it.
         if (stopping) return;
-        const wanted = config.current().audio === 'duck';
+        // The sink decides the mode now, so it has to settle before the duck state can be derived from it.
+        const wantedBluetooth = config.current().bluetoothReceive;
+        if (wantedBluetooth !== receivingBluetooth) {
+          if (wantedBluetooth) {
+            const status = await bluetooth.start();
+            if (!status.ready) console.log(`Bluetooth receive unavailable: ${status.error}`);
+            // A bridge that did not come up is not recorded as holding the sink, so the next switch tries again.
+            receivingBluetooth = status.ready;
+          } else {
+            await bluetooth.stop();
+            receivingBluetooth = false;
+          }
+        }
+
+        const wanted = wantsDuck();
         if (wanted !== ducking) {
           if (wanted) {
             scheduler.pause();
             mixer.silenceAll();
-            recorded.setHoldTransport(holdOurTransport());
+            recorded.setHoldTransport(holdOurTransport(true));
             recorded.setAudible({ audible: false, fadeSeconds: 0 });
             const status = await duck.start();
             if (!status.ready) console.log(`Duck unavailable: ${status.error}`);
@@ -328,22 +358,9 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
           } else {
             await duck.stop();
             ducking = false;
-            recorded.setHoldTransport(holdOurTransport());
+            recorded.setHoldTransport(holdOurTransport(false));
           }
           orchestrator.refresh();
-          publish();
-        }
-
-        const wantedBluetooth = config.current().bluetoothReceive;
-        if (wantedBluetooth === receivingBluetooth) return;
-        if (wantedBluetooth) {
-          const status = await bluetooth.start();
-          if (!status.ready) console.log(`Bluetooth receive unavailable: ${status.error}`);
-          // A bridge that did not come up is not recorded as holding the sink, so the next switch tries again.
-          receivingBluetooth = status.ready;
-        } else {
-          await bluetooth.stop();
-          receivingBluetooth = false;
         }
         publish();
       })
@@ -377,6 +394,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     transport: recordedTrack ? recorded.state() : scheduler.state(),
     midi: midi.status(),
     duck: volume.status(),
+    ducking,
     bluetooth: bluetooth.status(),
     sessions: orchestrator.sessionViews(),
     config: config.current(),
@@ -385,9 +403,9 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   });
 
   // A hard-kill mute is recovered inside the bridge's start, so it must run before anything else can fail and in any mode.
-  if (config.current().audio === 'duck' || existsSync(claimPath())) {
+  if (existsSync(claimPath())) {
     await duck.start();
-    if (config.current().audio !== 'duck') await duck.stop();
+    await duck.stop();
   }
 
   let api: Api;
@@ -418,6 +436,8 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
       listBluetooth: () => bluetooth.list(),
       async onConnectBluetooth({ id }) {
         const status = await bluetooth.connect({ id });
+        // The device is what decides the mode, so gaining one has to re-derive it.
+        await applyAudioMode();
         publish();
         return status.device !== null;
       },
@@ -472,7 +492,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
   const unsubscribeConfig = config.onChange(() => {
     mixer.setMasterVolume(config.current().masterVolume);
     recorded.setMasterVolume(config.current().masterVolume);
-    recorded.setHoldTransport(holdOurTransport());
+    recorded.setHoldTransport(holdOurTransport(ducking));
     void applyAudioMode();
     orchestrator.refresh();
     api.broadcast();
@@ -492,9 +512,11 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     if (stopping) return;
     const lost =
       (ducking && !volume.status().ready) || (receivingBluetooth && !bluetooth.status().ready);
-    if (!lost) return;
-    if (ducking && !volume.status().ready) ducking = false;
-    if (receivingBluetooth && !bluetooth.status().ready) receivingBluetooth = false;
+    if (lost) {
+      if (ducking && !volume.status().ready) ducking = false;
+      if (receivingBluetooth && !bluetooth.status().ready) receivingBluetooth = false;
+      // A phone leaving is not a bridge failure, so it is the derived mode rather than a latch that catches it.
+    } else if (ducking === wantsDuck()) return;
     void applyAudioMode();
     publish();
   }, BRIDGE_HEALTH_TICK_MS);

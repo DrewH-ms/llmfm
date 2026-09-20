@@ -232,7 +232,8 @@ test('duck mode answers to the gate alone, whatever "on silence" says', () => {
         registry,
         mixer,
         scheduler,
-        config: fakeConfig({ audio: 'duck', gate: 'any', silenceMode }),
+        config: fakeConfig({ gate: 'any', silenceMode }),
+        ducking: () => true,
         duck: { setAudible: ({ audible }) => void gates.push(audible) },
       });
       built.push(orchestrator);
@@ -248,10 +249,11 @@ test('duck mode answers to the gate alone, whatever "on silence" says', () => {
 
 /** The daemon can switch between the two mid-track, and only ever one of them holds the gate. */
 test('ducking takes the gate from a recorded track, and gives it back', () => {
-  const config = fakeConfig({ audio: 'midi', gate: 'any' });
+  const config = fakeConfig({ gate: 'any' });
   const recordedGates: boolean[] = [];
   const duckGates: boolean[] = [];
   let working = true;
+  let ducking = false;
   const registry = {
     list: () => [session({ sessionId: 'a', working })],
   } as unknown as SessionRegistry;
@@ -260,6 +262,7 @@ test('ducking takes the gate from a recorded track, and gives it back', () => {
     mixer: fakeMixer(),
     scheduler: fakeScheduler(),
     config,
+    ducking: () => ducking,
     recorded: { setAudible: ({ audible }) => void recordedGates.push(audible) },
     duck: { setAudible: ({ audible }) => void duckGates.push(audible) },
   });
@@ -269,13 +272,13 @@ test('ducking takes the gate from a recorded track, and gives it back', () => {
   assert.deepEqual(recordedGates, [true], 'the recorded track holds the gate in midi mode');
   assert.deepEqual(duckGates, [], 'the duck was driven while it was not the mode');
 
-  config.setSetting('audio', 'duck');
+  ducking = true;
   working = false;
   orchestrator.refresh();
   assert.deepEqual(duckGates, [false], 'the duck did not take the gate');
   assert.deepEqual(recordedGates, [true], 'the recorded sink was driven while ducking');
 
-  config.setSetting('audio', 'midi');
+  ducking = false;
   orchestrator.refresh();
   assert.deepEqual(recordedGates, [true, false], 'the recorded track never got the gate back');
   assert.deepEqual(duckGates, [false], 'the duck was still driven after the switch back');
@@ -404,7 +407,8 @@ test('resume brings the music back on its own clock', (t) => {
     registry: { list: () => [blocked] } as unknown as SessionRegistry,
     mixer: fakeMixer(),
     scheduler: fakeScheduler(),
-    config: fakeConfig({ audio: 'duck', gate: 'any', promptGap: 'resume' }),
+    config: fakeConfig({ gate: 'any', promptGap: 'resume' }),
+    ducking: () => true,
     duck: { setAudible: ({ audible }) => void gates.push(audible) },
   });
   built.push(orchestrator);

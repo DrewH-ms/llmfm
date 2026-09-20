@@ -7,7 +7,6 @@ import {
   HANDLE_ID_LENGTH,
 } from './constants.ts';
 import type {
-  AudioMode,
   AutoplayMode,
   GateMode,
   GatePolicy,
@@ -31,13 +30,11 @@ export type LlmfmConfig = {
   /** Whether an instrument sounds while its agent works, or only when it needs you. */
   mode: GateMode;
   fadeSeconds: number;
-  /** Whether the daemon plays its own score or rides audio it does not own. */
-  audio: AudioMode;
   silenceMode: SilenceMode;
   masterVolume: number;
   idleDropoutMinutes: number;
   autoplay: AutoplayMode;
-  /** Never true unless `audio` is `duck` — see `coupleBluetoothToDuck`; the device itself lives in the bridge's claim file. */
+  /** Gating the phone replaces playing our own score; the device itself lives in the bridge's claim file. */
   bluetoothReceive: boolean;
   /** Valid values are whatever playlist folders exist now, so it is validated against disk, not a fixed list. */
   playlist: string;
@@ -75,16 +72,6 @@ function migrateLegacyConfig(): void {
   } catch {
     /* A config that will not move is not worth failing startup over. */
   }
-}
-
-/** `{ audio: 'midi', bluetoothReceive: true }` would play the phone ungated under our score; `changed` names the key the user just moved, so the other yields. */
-function coupleBluetoothToDuck(
-  config: LlmfmConfig,
-  changed: 'audio' | 'bluetoothReceive' | null,
-): LlmfmConfig {
-  if (!config.bluetoothReceive || config.audio === 'duck') return config;
-  if (changed === 'audio') return { ...config, bluetoothReceive: false };
-  return { ...config, audio: 'duck' };
 }
 
 function shortId(sessionId: string): string {
@@ -134,10 +121,7 @@ function parseConfig(raw: string): LlmfmConfig {
     const coerced = coerceSetting(key, record[key]);
     if (coerced !== null) settings[key] = coerced;
   }
-  return coupleBluetoothToDuck(
-    { ...(settings as Omit<LlmfmConfig, 'muted' | 'playlist'>), muted, playlist },
-    null,
-  );
+  return { ...(settings as Omit<LlmfmConfig, 'muted' | 'playlist'>), muted, playlist };
 }
 
 export function createConfigStore(): ConfigStore {
@@ -210,8 +194,7 @@ export function createConfigStore(): ConfigStore {
       const coerced = coerceSetting(key, value);
       if (coerced === null) return false;
       if (config[key as keyof LlmfmConfig] === coerced) return true;
-      const changed = key === 'audio' || key === 'bluetoothReceive' ? key : null;
-      write(coupleBluetoothToDuck({ ...config, [key]: coerced }, changed));
+      write({ ...config, [key]: coerced });
       return true;
     },
     setPlaylist(name: string): void {

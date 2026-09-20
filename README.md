@@ -134,9 +134,9 @@ With `bluetoothReceive` on, a phone paired with this machine can stream to it ov
 and LLMFM gates *that* stream instead of playing a score. It is the nicest way to use the
 product: your own music, silenced when an agent needs you.
 
-Turning it on switches `audio` to `duck`, because only the duck gate can silence audio
-LLMFM does not own. The two settings are held in step in both directions — choosing the
-MIDI score turns Bluetooth receive back off.
+Turning it on is all there is to it: while a phone is connected LLMFM gates that stream
+instead of playing a score, because only the duck gate can silence audio LLMFM does not
+own. Turn Bluetooth audio off, or disconnect the phone, and the score comes back.
 
 Received audio arrives as an ordinary playback session on the current output device, so
 LLMFM mutes **that session** rather than the whole output. Teams and your terminal bell
@@ -216,18 +216,19 @@ gate, so a recording is gated as a whole — it plays while any agent that is no
 working. `format` is reported per track so a client can explain that rather than
 pretending a recording can be split.
 
-Set **Sound source** to `duck` and LLMFM stops playing anything of its own. Instead it
-rides whatever you are already playing — a browser, a media player, anything the machine
-is mixing — by muting and unmuting the Windows output endpoint: your audio while the gate
-is open, silence while an agent needs you. There is no pausing another application's
-stream, and nothing about it is inspected: no app-specific code, no API, no network.
+Connect a phone under **Bluetooth audio** and LLMFM stops playing anything of its own.
+Instead it rides what that phone is playing by muting and unmuting its stream: your audio
+while the gate is open, silence while an agent needs you. Where the phone's stream cannot
+be named it falls back to the Windows output endpoint, which gates whatever the machine is
+mixing. There is no pausing another application's stream, and nothing about it is
+inspected: no app-specific code, no API, no network.
 
 It is the mute flag rather than a level of zero, deliberately. Windows draws a muted
 speaker in the tray, so on the one occasion we fail to put it back you can see why your
 machine is silent and fix it in a click — where a level of zero reads as broken hardware or
 a dropped connection. Unmuting also returns your level exactly.
 
-The endpoint is borrowed, never taken. It is unmuted when you switch **Sound source** away,
+The endpoint is borrowed, never taken. It is unmuted when you turn **Bluetooth audio** off,
 when the daemon shuts down, and — because the bridge watches the daemon by handle — when
 the daemon dies without saying so. A hard kill that takes the bridge with it is covered by
 a claim file the next start reads. A mute or a level you change yourself becomes the new

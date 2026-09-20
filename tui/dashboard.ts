@@ -395,6 +395,7 @@ function parseDaemonState(text: string): DaemonState | null {
     transport,
     midi,
     duck: parseDuck(payload['duck']),
+    ducking: payload['ducking'] === true,
     bluetooth: parseBluetooth(payload['bluetooth']),
     sessions,
     config,
@@ -613,13 +614,14 @@ function settingLine(options: {
 function masterVolumeLine(options: {
   spec: SettingSpec;
   config: LlmfmConfig;
+  ducking: boolean;
   selected: boolean;
 }): Segment[] {
-  const { spec, config, selected } = options;
+  const { spec, config, ducking, selected } = options;
   const raw = settingValue(config, spec.key);
   const max = spec.kind === 'number' ? spec.max : 1;
   const level = typeof raw === 'number' ? raw : max;
-  const inert = config.audio === 'duck';
+  const inert = ducking;
   return [
     cursorSegment(selected),
     { text: ' ', style: STYLE_NONE },
@@ -877,14 +879,19 @@ function rowLine(options: {
     return trackLine({ track: row.track, playing: row.track.file === state.track, selected, width });
   }
   if (row.spec.key === MASTER_VOLUME_KEY) {
-    return masterVolumeLine({ spec: row.spec, config: state.config, selected });
+    return masterVolumeLine({
+      spec: row.spec,
+      config: state.config,
+      ducking: state.ducking,
+      selected,
+    });
   }
   return settingLine({ spec: row.spec, config: state.config, selected, width });
 }
 
 /** A volume bridge that never came up is the whole feature quietly doing nothing. */
 function sourceSegments(state: DaemonState): Segment[] {
-  if (state.config.audio === 'duck') {
+  if (state.ducking) {
     return [
       { text: 'DUCK  ', style: STYLE_DIM },
       {
@@ -1257,7 +1264,7 @@ async function choosePlaylist(name: string): Promise<void> {
 
 function cycleSetting(spec: SettingSpec, direction: 1 | -1): void {
   if (!snapshot) return;
-  if (spec.key === MASTER_VOLUME_KEY && snapshot.state.config.audio === 'duck') {
+  if (spec.key === MASTER_VOLUME_KEY && snapshot.state.ducking) {
     notice = MASTER_VOLUME_INERT_NOTICE;
     paint();
     return;

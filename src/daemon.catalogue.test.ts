@@ -1,7 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { trackCatalogue, listTracks, playableTracks, resolveTrack } from './daemon.ts';
+import { trackCatalogue, listTracks, playableTracks, resolveTrack, shouldDuck } from './daemon.ts';
 import { DEFAULT_TRACK } from './constants.ts';
+
+const PHONE = { name: 'Pixel' };
+
+/** v0.9.0 shipped ducking as a default, so every fresh install was silent until the user found a setting. */
+test('nothing to gate means we play our own score', () => {
+  assert.equal(shouldDuck({ bluetoothReceive: false, device: null }), false);
+  assert.equal(shouldDuck({ bluetoothReceive: true, device: null }), false);
+  assert.equal(shouldDuck({ bluetoothReceive: false, device: PHONE }), false);
+});
+
+/** The claim outlives the toggle on purpose, so the toggle alone has to be a way back to the score. */
+test('only a phone we are both receiving and connected to takes the score away', () => {
+  assert.equal(shouldDuck({ bluetoothReceive: true, device: PHONE }), true);
+});
 
 const MAX_HOLD_MUSIC_VOICES = 2;
 

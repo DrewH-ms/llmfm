@@ -89,6 +89,8 @@ export type DaemonState = {
   midi: MidiStatus;
   /** The volume bridge duck mode rides. Published whatever the mode, so a bridge that never came up is visible. */
   duck: import('./system-volume.ts').SystemVolumeStatus;
+  /** Derived, not configured: true only while a connected phone's stream is what we gate. */
+  ducking: boolean;
   /** Published whatever the setting, so an A2DP sink that never came up is visible rather than silently absent. */
   bluetooth: import('./bluetooth-receive.ts').BluetoothStatus;
   sessions: SessionView[];

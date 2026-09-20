@@ -95,11 +95,6 @@ export const SILENCE_MODES = ['pause', 'mute'] as const;
 export type SilenceMode = (typeof SILENCE_MODES)[number];
 export const DEFAULT_SILENCE_MODE: SilenceMode = 'mute';
 
-/** `midi` plays our own score, `duck` gates audio we do not own; exclusive, since a score over someone else's music says nothing. */
-export const AUDIO_MODES = ['midi', 'duck'] as const;
-export type AudioMode = (typeof AUDIO_MODES)[number];
-export const DEFAULT_AUDIO: AudioMode = 'duck';
-
 /** `None` is nothing connected, distinct from the `Closed` a connection reports once opened and lost. */
 export const BLUETOOTH_STATES = ['None', 'Closed', 'Opened'] as const;
 export type BluetoothState = (typeof BLUETOOTH_STATES)[number];
