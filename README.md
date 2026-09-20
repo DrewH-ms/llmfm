@@ -7,21 +7,35 @@ when one needs you. Sound means "still going". Silence means "you're up".
 Nothing is downloaded, nothing leaves the machine, and if the daemon is not running the
 CLI behaves exactly as normal.
 
+## Requirements
+
+- Windows with the Microsoft GS Wavetable Synth (present by default)
+- [Node 24+](https://nodejs.org/) — TypeScript runs directly, so there is no build step
+
 ## How to install
 
+Download `llmfm.zip` from [the latest release](https://github.com/DrewH-ms/llmfm/releases/latest),
+extract it somewhere you intend to keep, and double-click **`llmfm.cmd`**. It installs the
+Copilot CLI hooks on first run and then opens the dashboard.
+
+From a terminal, or from a clone, it is three commands:
+
 ```powershell
-npm install
-node bin/llmfm.ts install   # install the Copilot CLI hooks
+git clone https://github.com/DrewH-ms/llmfm.git
+cd llmfm
+npm install                  # the release zip ships these, so skip it there
+node bin/llmfm.ts install    # install the Copilot CLI hooks
 node bin/llmfm.ts            # start the daemon and open the dashboard
 ```
 
 Then **open a new Copilot CLI session** — hooks load once at session start, so a terminal
 that was already open will not report to the daemon.
 
-## Requirements
-
-- Windows with the Microsoft GS Wavetable Synth (present by default)
-- Node 24+ (runs TypeScript directly; there is no build step)
+**Keep the folder where it is.** Installing writes the full path of `hooks/notify.js` into
+`~/.copilot/hooks/llmfm.json`, so this folder is the installed program rather than a
+scratch checkout. If you move it, run `node bin/llmfm.ts install` again from the new
+location. Your playlists and settings live in the folder too, so copy them across when you
+upgrade.
 
 ## Running it
 
