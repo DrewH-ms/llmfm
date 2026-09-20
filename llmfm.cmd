@@ -46,9 +46,6 @@ if not exist "%HOOKHOME%\hooks\llmfm.json" (
   node bin\llmfm.ts install
   if errorlevel 1 goto fail
   echo.
-  echo Hooks installed. Open a new Copilot CLI session to be heard: sessions load hooks
-  echo once at start, so terminals that are already open will not report.
-  echo.
 )
 
 node bin\llmfm.ts %*
