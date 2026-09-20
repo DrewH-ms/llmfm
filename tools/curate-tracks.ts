@@ -14,6 +14,7 @@ const PROJECT_ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 const TRACKS_DIR = join(PROJECT_ROOT, 'playlists', 'bundled');
 const TRACKS_INDEX = join(TRACKS_DIR, 'tracks.json');
 const ATTRIBUTION_FILE = join(TRACKS_DIR, 'ATTRIBUTION.md');
+const RECORDED_AUDIO_HEADING = '## Recorded audio';
 /** Keeps curated files out of the daemon's default-track pick, which is the first file in the directory. */
 const CURATED_PREFIX = 'mutopia-';
 
@@ -40,6 +41,7 @@ const COMPOSER_NAMES = new Map<string, string>([
   ['GriegE', 'Edvard Grieg'],
   ['HaydnFJ', 'Franz Joseph Haydn'],
   ['Mendelssohn-BartholdyF', 'Felix Mendelssohn Bartholdy'],
+  ['TchaikovskyPI', 'Pyotr Ilyich Tchaikovsky'],
 ]);
 
 /** Every entry was measured to carry real dynamics: the signal is one part fading against the others. */
@@ -64,6 +66,12 @@ const CURATED = [
   { file: 'haydn-quartet-op76-4.mid', piece: 'HaydnFJ/O76/op76-n4' },
   { file: 'bach-violin-concerto-e-major.mid', piece: 'BachJS/BWV1042/concerto-in-e-major' },
   { file: 'bach-brandenburg5-3.mid', piece: 'BachJS/BWV1050/brand5-3' },
+  { file: 'bach-cantata-bwv36b.mid', piece: 'BachJS/BWV36b/bwv0036b' },
+  { file: 'mendelssohn-psalm42.mid', piece: 'Mendelssohn-BartholdyF/O42/wie_der_hirsch_schreit' },
+  { file: 'mozart-magic-flute-overture.mid', piece: 'MozartWA/KV620/magicflute-00-overture' },
+  { file: 'mozart-magic-flute-queen-of-the-night.mid', piece: 'MozartWA/KV620/magicflute-14-aria' },
+  { file: 'mozart-symphony18.mid', piece: 'MozartWA/KV130/k130' },
+  { file: 'tchaikovsky-violin-concerto.mid', piece: 'TchaikovskyPI/O35/tchai_op35' },
 ] as const;
 
 type CuratedTrack = {
@@ -167,13 +175,23 @@ function screen(path: string): string | null {
   return null;
 }
 
+/** Regenerates only the Mutopia half; anything from the recorded-audio heading on is hand-written and preserved. */
 function writeAttribution(tracks: CuratedTrack[]): void {
+  const existing = existsSync(ATTRIBUTION_FILE) ? readFileSync(ATTRIBUTION_FILE, 'utf8') : '';
+  const tailAt = existing.indexOf(RECORDED_AUDIO_HEADING);
   const lines = [
     '# Music credits',
     '',
-    `Every file in this directory was obtained from ${MUTOPIA_ATTRIBUTION} and is`,
-    'redistributed under the licence its publisher states for that file. Typesetting and',
-    'sequencing are the work of the Mutopia contributors named below.',
+    'Each file in this directory is redistributed under the licence its publisher states for',
+    `that file. The MIDI sequences come from ${MUTOPIA_ATTRIBUTION}, where`,
+    ...(tailAt === -1
+      ? ['typesetting and sequencing are the work of the contributors named below.']
+      : [
+          'typesetting and sequencing are the work of the contributors named below. The',
+          'recorded audio comes from Musopen (musopen.org) and is credited separately below.',
+        ]),
+    '',
+    '## MIDI sequences — The Mutopia Project',
     '',
     '| File | Work | Composer | Licence | Typeset by | Source |',
     '| --- | --- | --- | --- | --- | --- |',
@@ -185,7 +203,8 @@ function writeAttribution(tracks: CuratedTrack[]): void {
     'the same licence.',
     '',
   ];
-  writeFileSync(ATTRIBUTION_FILE, lines.join('\n'), 'utf8');
+  const tail = tailAt === -1 ? '' : `\n${existing.slice(tailAt)}`;
+  writeFileSync(ATTRIBUTION_FILE, `${lines.join('\n')}${tail}`, 'utf8');
 }
 
 async function curate(track: (typeof CURATED)[number], refresh: boolean): Promise<CuratedTrack> {
