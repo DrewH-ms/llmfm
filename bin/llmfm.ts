@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, appendFileSync } from 'node:fs';
 import { startDaemon, listTracks } from '../src/daemon.ts';
-import { installHooks, uninstallHooks, installedHookPath } from '../src/install.ts';
+import { installHooks, uninstallHooks, installedHookPath, hooksPointHere } from '../src/install.ts';
 import { DAEMON_URL, HOOK_REQUEST_TIMEOUT_MS } from '../src/constants.ts';
 import { logPath } from '../src/paths.ts';
 import { onShutdown, runShutdown } from '../src/shutdown.ts';
@@ -18,7 +18,12 @@ const USAGE = `LLMFM — radio for your coding agents
 
 async function reportStatus(): Promise<void> {
   const hookPath = installedHookPath();
-  console.log(`Hooks: ${existsSync(hookPath) ? `installed at ${hookPath}` : 'not installed'}`);
+  if (!existsSync(hookPath)) console.log('Hooks: not installed');
+  else if (hooksPointHere()) console.log(`Hooks: installed at ${hookPath}`);
+  else {
+    console.log(`Hooks: installed at ${hookPath}, but pointing at another copy of LLMFM.`);
+    console.log('Run `node bin/llmfm.ts install` here, then open a NEW Copilot CLI session.');
+  }
   try {
     const response = await fetch(`${DAEMON_URL}/state`);
     console.log(`Daemon: running at ${DAEMON_URL}`);
@@ -96,10 +101,13 @@ switch (command) {
     exitThrough(() => daemon.stop());
     break;
   }
-  case 'install':
+  case 'install': {
+    // The launcher runs this on every start, so a config already pointing here must stay quiet.
+    if (argument === '--if-stale' && hooksPointHere()) break;
     console.log(`Installed hooks -> ${installHooks()}`);
     console.log('Open a NEW Copilot CLI session: hooks load only at session start.');
     break;
+  }
   case 'uninstall': {
     const removed = uninstallHooks();
     console.log(removed ? `Removed ${removed}` : 'Nothing to remove.');

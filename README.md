@@ -31,11 +31,13 @@ node bin/llmfm.ts            # start the daemon and open the dashboard
 Then **open a new Copilot CLI session** — hooks load once at session start, so a terminal
 that was already open will not report to the daemon.
 
-**Keep the folder where it is.** Installing writes the full path of `hooks/notify.js` into
-`~/.copilot/hooks/llmfm.json`, so this folder is the installed program rather than a
-scratch checkout. If you move it, run `node bin/llmfm.ts install` again from the new
-location. Your playlists and settings live in the folder too, so copy them across when you
-upgrade.
+**The folder is the installed program.** Installing writes the full path of `hooks/notify.js`
+into `~/.copilot/hooks/llmfm.json`, and that file stays on the machine even if you delete
+the folder it names. Launching through `llmfm.cmd` repairs it whenever it points somewhere
+else, so moving the folder or re-downloading the release costs nothing; if you start LLMFM
+some other way, run `node bin/llmfm.ts install` from the new location. `node bin/llmfm.ts
+status` says which copy the hooks currently point at. Your playlists and settings live in
+the folder too, so copy them across when you upgrade.
 
 ## Running it
 

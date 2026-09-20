@@ -39,14 +39,9 @@ if not exist "node_modules\@tonejs\midi\" (
   )
 )
 
-set "HOOKHOME=%COPILOT_HOME%"
-if not defined HOOKHOME set "HOOKHOME=%USERPROFILE%\.copilot"
-if not exist "%HOOKHOME%\hooks\llmfm.json" (
-  echo Installing the Copilot CLI hooks, once only...
-  node bin\llmfm.ts install
-  if errorlevel 1 goto fail
-  echo.
-)
+REM Checked every run, not just the first: the config survives deleting the folder it points at.
+node bin\llmfm.ts install --if-stale
+if errorlevel 1 goto fail
 
 node bin\llmfm.ts %*
 if errorlevel 1 goto fail

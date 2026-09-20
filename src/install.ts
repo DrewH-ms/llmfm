@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -18,9 +18,24 @@ export function installedHookPath(): string {
   return join(copilotHooksDir(), HOOK_CONFIG_NAME);
 }
 
+function hookScriptPath(): string {
+  return join(PROJECT_ROOT, 'hooks', 'notify.js');
+}
+
+/** The installed config names an absolute script path, so a copy that was moved, renamed or re-downloaded leaves one pointing at a folder that is gone. Its hooks then fail silently, and every session reads as idle forever. */
+export function hooksPointHere(): boolean {
+  let raw: string;
+  try {
+    raw = readFileSync(installedHookPath(), 'utf8');
+  } catch {
+    return false;
+  }
+  return raw.includes(JSON.stringify(hookScriptPath()));
+}
+
 /** Generated from `HOOK_EVENTS`: a hand-edited config drifts silently, and the symptom is a part that never un-mutes. */
 export function installHooks(): string {
-  const scriptPath = join(PROJECT_ROOT, 'hooks', 'notify.js');
+  const scriptPath = hookScriptPath();
   const hooks = Object.fromEntries(
     HOOK_EVENTS.map((event) => [
       event,
