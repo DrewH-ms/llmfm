@@ -235,6 +235,28 @@ test('the transport pausing after the fade notifies clients', (t) => {
   assert.ok(settled > 0, 'the pause must be announced, or the client never learns of it');
 });
 
+/** A recorded track pauses inside its own player once the fade reaches silence, so nothing in the gate path announces the stop. This is the mp3 half of the same bug. */
+test('a recorded track going silent notifies clients', (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  const gates: boolean[] = [];
+  let settled = 0;
+  const orchestrator = createOrchestrator({
+    registry: { list: () => [session({ sessionId: 'a', working: false })] } as unknown as SessionRegistry,
+    mixer: fakeMixer(),
+    scheduler: fakeScheduler(),
+    config: fakeConfig({ gate: 'any', silenceMode: 'pause', fadeSeconds: 1 }),
+    recorded: { setAudible: ({ audible }) => void gates.push(audible) },
+    onSettled: () => void (settled += 1),
+  });
+  built.push(orchestrator);
+  orchestrator.bindRecorded();
+
+  assert.equal(gates.at(-1), false, 'an idle agent must close the gate');
+  t.mock.timers.tick(1000 + SETTLE_MARGIN_MS * 2 + 1);
+
+  assert.ok(settled > 0, 'the player pauses on its own timer, so the stop must still be announced');
+});
+
 test('silence mode mute keeps the transport running through the quiet', () => {
   const { scheduler, mixer } = harness(
     [session({ sessionId: 'a', working: false })],

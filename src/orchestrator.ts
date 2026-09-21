@@ -229,11 +229,15 @@ export function createOrchestrator(options: {
     const stream = wholeStreamSink();
     if (stream) {
       const sessions = gatingSessions();
-      stream.setAudible({
-        audible: mixAudible(sessions),
-        fadeSeconds: config.current().fadeSeconds,
-      });
-      scheduleSettle(soonestRecheck(sessions));
+      const audible = mixAudible(sessions);
+      const fade = config.current().fadeSeconds;
+      stream.setAudible({ audible, fadeSeconds: fade });
+      // A recorded track pauses on its own fade timer, so without a recheck that change reaches no client.
+      const soonest = soonestRecheck(sessions);
+      const wait = audible ? null : fade * MS_PER_SECOND + SETTLE_MARGIN_MS;
+      scheduleSettle(
+        soonest === null ? wait : wait === null ? soonest : Math.min(soonest, wait),
+      );
       return;
     }
     if (!score) return;
