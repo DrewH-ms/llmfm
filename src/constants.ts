@@ -93,7 +93,7 @@ export const DEFAULT_GATE_POLICY: GatePolicy = 'any';
 /** `mute` costs the resume-mid-phrase effect but is the only option once another app owns the audio, since we cannot pause its stream. */
 export const SILENCE_MODES = ['pause', 'mute'] as const;
 export type SilenceMode = (typeof SILENCE_MODES)[number];
-export const DEFAULT_SILENCE_MODE: SilenceMode = 'mute';
+export const DEFAULT_SILENCE_MODE: SilenceMode = 'pause';
 
 /** `None` is nothing connected, distinct from the `Closed` a connection reports once opened and lost. */
 export const BLUETOOTH_STATES = ['None', 'Closed', 'Opened'] as const;

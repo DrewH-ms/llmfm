@@ -69,8 +69,8 @@ export function createMixer(midi: MidiOut): Mixer {
       parts.clear();
 
       for (const part of score.parts) {
-        // Unassigned parts are the backing texture and start audible.
-        const mix: PartMix = { channel: part.channel, audible: true, level: 1, fade: null };
+        // Bound silent: the gate has not been consulted yet, and starting at full level is a burst of music on every track change.
+        const mix: PartMix = { channel: part.channel, audible: false, level: 0, fade: null };
         parts.set(part.partId, mix);
         if (!part.percussion) programChange(midi, { channel: part.channel, program: part.program });
         sendLevel(mix);
@@ -82,26 +82,27 @@ export function createMixer(midi: MidiOut): Mixer {
       if (!mix) return;
 
       const target = options.audible ? 1 : 0;
-      if (mix.audible === options.audible && mix.fade === null && mix.level === target) return;
+      // The gate is recomputed on every refresh, so repeat calls are routine. Restarting a fade already heading here is what stops it ever arriving.
+      if (mix.audible === options.audible && (mix.fade !== null || mix.level === target)) return;
 
       cancelFade(mix);
       mix.audible = options.audible;
 
-      const steps = Math.max(1, Math.round(options.fadeSeconds * FADE_STEP_HZ));
+      const durationMs = Math.max(1, options.fadeSeconds * MS_PER_SECOND);
       const from = mix.level;
-      let step = 0;
+      const startedAt = Date.now();
 
       mix.fade = setInterval(
         () => {
-          step += 1;
-          mix.level = from + (target - from) * (step / steps);
+          // Driven by the clock rather than a step count: timer drift stretched a 3s fade to nearly 4s, outliving the settle that waits on it.
+          const progress = Math.min(1, (Date.now() - startedAt) / durationMs);
+          mix.level = from + (target - from) * progress;
           sendLevel(mix);
-          if (step < steps) return;
-          mix.level = target;
+          if (progress < 1) return;
           cancelFade(mix);
           if (target === 0) silenceChannel(midi, mix.channel);
         },
-        (options.fadeSeconds * MS_PER_SECOND) / steps,
+        MS_PER_SECOND / FADE_STEP_HZ,
       );
     },
 

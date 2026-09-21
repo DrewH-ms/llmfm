@@ -49,6 +49,10 @@ test('a part still fading out keeps the transport running', async () => {
     parts: [{ partId: 'p1', name: 'Flute', program: 73, channel: 0, percussion: false, notes: [] }],
   } as never);
 
+  // Parts bind silent, so the fade-out under test needs something to fade from.
+  mixer.setPartAudible({ partId: 'p1', audible: true, fadeSeconds: 0.05 });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+
   assert.ok(mixer.anyAudible());
   mixer.setPartAudible({ partId: 'p1', audible: false, fadeSeconds: 0.2 });
 
@@ -61,6 +65,52 @@ test('a part still fading out keeps the transport running', async () => {
 
   assert.equal(mixer.anyAudible(), false, 'never settled, so the transport never pauses');
   assert.equal(mixer.isPartAudible('p1'), false);
+  mixer.stop();
+});
+
+/** The orchestrator recomputes the gate on every refresh, so the same instruction arrives repeatedly mid-fade. Restarting the fade each time left the level approaching zero without ever reaching it, and a transport waiting on silence never paused. */
+test('a repeated gate call does not restart a fade already under way', async () => {
+  const midi: MidiOut = {
+    start: async () => ({ ok: true, device: 'test' }) as never,
+    send: () => {},
+    status: () => ({ ok: true, device: 'test' }) as never,
+    stop: () => {},
+  };
+  const mixer = createMixer(midi);
+  mixer.bindScore({
+    parts: [{ partId: 'p1', name: 'Flute', program: 73, channel: 0, percussion: false, notes: [] }],
+  } as never);
+
+  mixer.setPartAudible({ partId: 'p1', audible: true, fadeSeconds: 0.05 });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+
+  const start = Date.now();
+  mixer.setPartAudible({ partId: 'p1', audible: false, fadeSeconds: 0.3 });
+  for (let repeat = 0; repeat < 3; repeat += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    mixer.setPartAudible({ partId: 'p1', audible: false, fadeSeconds: 0.3 });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
+  assert.equal(mixer.anyAudible(), false, `never reached silence after ${Date.now() - start}ms`);
+  mixer.stop();
+});
+
+/** Binding at full level made every track change, and every start, a burst of music before the gate was consulted. */
+test('a track binds silent and waits to be let in', () => {
+  const midi: MidiOut = {
+    start: async () => ({ ok: true, device: 'test' }) as never,
+    send: () => {},
+    status: () => ({ ok: true, device: 'test' }) as never,
+    stop: () => {},
+  };
+  const mixer = createMixer(midi);
+  mixer.bindScore({
+    parts: [{ partId: 'p1', name: 'Flute', program: 73, channel: 0, percussion: false, notes: [] }],
+  } as never);
+
+  assert.equal(mixer.anyAudible(), false, 'a freshly bound track must not sound before the gate is read');
+  assert.equal(mixer.anyGateOpen(), false);
   mixer.stop();
 });
 
