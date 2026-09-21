@@ -242,6 +242,7 @@ export async function startDaemon(options: { track?: string } = {}): Promise<Dae
     },
     duck,
     ducking: () => ducking,
+    onSettled: () => publish(),
   });
   const simulation = createSimulation(registry);
   let stopping = false;

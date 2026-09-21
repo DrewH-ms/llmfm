@@ -209,6 +209,32 @@ test('the transport runs while anything sounds and pauses when nothing does', ()
   assert.ok(stopped.scheduler.calls.at(-1) === 'pause', 'nothing audible must pause the transport');
 });
 
+/** The fade outlives the gate, so the pause lands on a timer rather than on the event that silenced the music. A client told nothing keeps extrapolating a transport that already stopped. */
+test('the transport pausing after the fade notifies clients', (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  let audible = true;
+  const mixer = { ...fakeMixer(), anyAudible: () => audible, anyGateOpen: () => false };
+  const scheduler = fakeScheduler();
+  let settled = 0;
+  const orchestrator = createOrchestrator({
+    registry: { list: () => [session({ sessionId: 'a', working: false })] } as unknown as SessionRegistry,
+    mixer,
+    scheduler,
+    config: fakeConfig({ gate: 'any', silenceMode: 'pause', fadeSeconds: 1 }),
+    onSettled: () => void (settled += 1),
+  });
+  built.push(orchestrator);
+  orchestrator.bindScore(score());
+
+  assert.equal(scheduler.calls.at(-1), 'play', 'the fade tail must keep the transport running');
+
+  audible = false;
+  t.mock.timers.tick(1000 + SETTLE_MARGIN_MS * 2 + 1);
+
+  assert.equal(scheduler.calls.at(-1), 'pause', 'the settle must pause once the fade reaches silence');
+  assert.ok(settled > 0, 'the pause must be announced, or the client never learns of it');
+});
+
 test('silence mode mute keeps the transport running through the quiet', () => {
   const { scheduler, mixer } = harness(
     [session({ sessionId: 'a', working: false })],

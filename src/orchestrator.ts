@@ -53,11 +53,14 @@ export function createOrchestrator(options: {
   duck?: StreamSink;
   /** True while a phone's stream is the thing being gated, which leaves us nothing of our own to play. */
   ducking?: () => boolean;
+  /** The transport pauses on a timer, long after the event that silenced it, so that change has no other way to reach a client. */
+  onSettled?: () => void;
 }): Orchestrator {
   const { registry, mixer, scheduler, config } = options;
   const recorded = options.recorded ?? null;
   const duck = options.duck ?? null;
   const ducking = options.ducking ?? ((): boolean => false);
+  const onSettled = options.onSettled ?? ((): void => {});
 
   let score: Score | null = null;
   /** Exclusive with `score`: a mixdown has no parts, so there is no tree, assignment or per-part gate. */
@@ -216,7 +219,10 @@ export function createOrchestrator(options: {
     if (settleTimer) clearTimeout(settleTimer);
     settleTimer = null;
     if (delayMs === null) return;
-    settleTimer = setTimeout(refresh, delayMs + SETTLE_MARGIN_MS);
+    settleTimer = setTimeout(() => {
+      refresh();
+      onSettled();
+    }, delayMs + SETTLE_MARGIN_MS);
   };
 
   const refresh = (): void => {
